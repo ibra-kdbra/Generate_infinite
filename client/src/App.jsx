@@ -1,17 +1,15 @@
-import REACT from "react"
-import Home from "./pages/Home";
-import Customizer from "./pages/Customizer";
-import Canvas from "./canvas/index"
+import Canvas from './canvas';
+import Customizer from './pages/Customizer';
+import Home from './pages/Home';
 
-const App =()=>{
-  return(
-      <div>
-        <Home/>
-        <Canvas/>
-        <Customizer/>
-      </div>
-    
+function App() {
+  return (
+    <main className="app transition-all ease-in">
+      <Home />
+      <Canvas />
+      <Customizer />
+    </main>
   )
 }
 
-export default App;
+export default App
