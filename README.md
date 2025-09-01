@@ -42,6 +42,7 @@ Ensure you have [Node.js](https://nodejs.org/) installed on your machine (which 
 ## The Journey to TypeScript
 
 This project was originally written in JavaScript and has been meticulously converted to TypeScript. This refactoring effort significantly improved the project's architecture, code quality, and developer experience.
+Refer to this [project-tree](./project_tree.md)
 
 ### 1. Project Setup & Typing
 The initial phase involved integrating TypeScript into the existing build process.
