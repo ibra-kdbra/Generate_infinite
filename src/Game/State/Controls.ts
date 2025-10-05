@@ -22,6 +22,8 @@ export default class Controls {
         deltaTemp: { x: number; y: number }
         delta: { x: number; y: number }
     }
+    showKeyboardButton: HTMLButtonElement | null
+    keyboardInput: HTMLInputElement | null
 
     constructor() {
         this.game = Game.getInstance()
@@ -41,8 +43,12 @@ export default class Controls {
             delta: { x: 0, y: 0 }
         }
 
+        this.showKeyboardButton = document.querySelector('.show-keyboard')
+        this.keyboardInput = document.querySelector('.keyboard-input')
+
         this.setKeys()
         this.setPointer()
+        this.setMobile()
 
         this.events.on('debugDown', () => {
             if (location.hash === '#debug')
@@ -115,8 +121,8 @@ export default class Controls {
             return this.keys.map.find((mapItem) => mapItem.codes.includes(key))
         }
 
-        // Event
-        window.addEventListener('keydown', (event) => {
+        // Handlers
+        const keyDownHandler = (event: KeyboardEvent) => {
             const mapItem = this.keys.findPerCode(event.code)
 
             if (mapItem) {
@@ -124,9 +130,9 @@ export default class Controls {
                 this.events.emit(`${mapItem.name}Down`)
                 this.keys.down[mapItem.name] = true
             }
-        })
+        }
 
-        window.addEventListener('keyup', (event) => {
+        const keyUpHandler = (event: KeyboardEvent) => {
             const mapItem = this.keys.findPerCode(event.code)
 
             if (mapItem) {
@@ -134,7 +140,16 @@ export default class Controls {
                 this.events.emit(`${mapItem.name}Up`)
                 this.keys.down[mapItem.name] = false
             }
-        })
+        }
+
+        // Events
+        window.addEventListener('keydown', keyDownHandler)
+        window.addEventListener('keyup', keyUpHandler)
+
+        if (this.keyboardInput) {
+            this.keyboardInput.addEventListener('keydown', keyDownHandler)
+            this.keyboardInput.addEventListener('keyup', keyUpHandler)
+        }
     }
 
     setPointer() {
@@ -162,5 +177,13 @@ export default class Controls {
 
         this.pointer.deltaTemp.x = 0
         this.pointer.deltaTemp.y = 0
+    }
+
+    setMobile() {
+        if (this.showKeyboardButton && this.keyboardInput) {
+            this.showKeyboardButton.addEventListener('click', () => {
+                this.keyboardInput!.focus()
+            })
+        }
     }
 }
