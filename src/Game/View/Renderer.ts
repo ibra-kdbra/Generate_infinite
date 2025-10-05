@@ -1,5 +1,3 @@
-// 📁sources/Game/View/Renderer.ts
-
 import * as THREE from 'three'
 import Game from '../Game'
 import View from './View'
@@ -42,11 +40,12 @@ export default class Renderer {
 
         this.instance = new THREE.WebGLRenderer({
             alpha: false,
-            antialias: true
+            antialias: true,
+            powerPreference: 'high-performance'
         })
 
-        this.instance.sortObjects = false
-        this.instance.domElement.style.position = 'absolute'
+        this.instance.outputColorSpace = THREE.SRGBColorSpace
+        this.instance.toneMapping = THREE.ACESFilmicToneMapping
         this.instance.domElement.style.top = '0'
         this.instance.domElement.style.left = '0'
         this.instance.domElement.style.width = '100%'
