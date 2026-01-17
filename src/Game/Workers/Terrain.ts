@@ -1,20 +1,18 @@
-import SimplexNoise from './SimplexNoise'
+import { createNoise2D } from './SimplexNoise'
 import { vec3 } from 'gl-matrix'
-
-let elevationRandom: SimplexNoise | null = null
 
 const linearStep = (edgeMin: number, edgeMax: number, value: number) => {
     return Math.max(0.0, Math.min(1.0, (value - edgeMin) / (edgeMax - edgeMin)))
 }
 
-const getElevation = (x: number, y: number, lacunarity: number, persistence: number, iterations: number, baseFrequency: number, baseAmplitude: number, power: number, elevationOffset: number, iterationsOffsets: [number, number][]) => {
+const getElevation = (noise2D: (x: number, y: number) => number, x: number, y: number, lacunarity: number, persistence: number, iterations: number, baseFrequency: number, baseAmplitude: number, power: number, elevationOffset: number, iterationsOffsets: [number, number][]) => {
     let elevation = 0
     let frequency = baseFrequency
     let amplitude = 1
     let normalisation = 0
 
     for (let i = 0; i < iterations; i++) {
-        const noise = elevationRandom!.noise2D(x * frequency + iterationsOffsets[i][0], y * frequency + iterationsOffsets[i][1])
+        const noise = noise2D(x * frequency + iterationsOffsets[i][0], y * frequency + iterationsOffsets[i][1])
         elevation += noise * amplitude
 
         normalisation += amplitude
@@ -47,8 +45,24 @@ onmessage = function (event) {
     const iterationsOffsets = event.data.iterationsOffsets
 
     const segments = subdivisions + 1
-    elevationRandom = new SimplexNoise(seed)
-    const grassRandom = new SimplexNoise(seed)
+    
+    // Alea-like seed based random for Simplex
+    // Since we don't have Alea here, we can use a simple hash or just use seedrandom if it was available.
+    // But SimplexNoise uses buildPermutationTable(random).
+    // The previous version used 'alea(seed)'.
+    // I will use a simple pseudo-random generator based on the seed string.
+    const createRandom = (seed: string) => {
+        let h = 0;
+        for (let i = 0; i < seed.length; i++) h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+        return () => {
+            h = Math.imul(h ^ h >>> 16, 0x85ebca6b);
+            h = Math.imul(h ^ h >>> 13, 0xc2b2ae35);
+            return ((h ^= h >>> 16) >>> 0) / 4294967296;
+        };
+    };
+    
+    const elevationNoise2D = createNoise2D(createRandom(seed));
+    const grassNoise2D = createNoise2D(createRandom(seed + 'grass'));
 
     /**
      * Elevation
@@ -61,7 +75,7 @@ onmessage = function (event) {
 
         for (let iZ = 0; iZ < segments + 1; iZ++) {
             const z = baseZ + (iZ / subdivisions - 0.5) * size
-            const elevation = getElevation(x, z, lacunarity, persistence, iterations, baseFrequency, baseAmplitude, power, elevationOffset, iterationsOffsets)
+            const elevation = getElevation(elevationNoise2D, x, z, lacunarity, persistence, iterations, baseFrequency, baseAmplitude, power, elevationOffset, iterationsOffsets)
 
             const i = iZ * (segments + 1) + iX
             overflowElevations[i] = elevation
@@ -371,23 +385,27 @@ onmessage = function (event) {
 
             // Grass
             let grass = 0;
-            if (position[1] > 0) {
-                const grassFrequency = 0.05
-                let grassNoise = grassRandom.noise2D(position[0] * grassFrequency + iterationsOffsets[0][0], position[2] * grassFrequency + iterationsOffsets[0][0])
-                grassNoise = linearStep(- 0.5, 0, grassNoise);
+            // Removed position[1] > 0 check to allow grass in deep valleys
+            const grassFrequency = 0.015; // Lower frequency for larger, more natural patches
+            let grassNoise = grassNoise2D(position[0] * grassFrequency + iterationsOffsets[0][0], position[2] * grassFrequency + iterationsOffsets[0][0]);
+            
+            // Lower thresholds significantly to ensure dense, almost full coverage
+            grassNoise = linearStep(- 1.1, - 0.7, grassNoise);
 
-                const upward = Math.max(0, normal[1])
-                const grassUpward = linearStep(0.9, 1, upward);
+            const upward = Math.max(0, normal[1]);
+            // Relax slope tolerance drastically to cover hills uniformly (up to ~75 degrees)
+            const grassUpward = linearStep(0.25, 1.0, upward);
 
-                grass = grassNoise * grassUpward
-            }
+            grass = grassNoise * grassUpward;
 
             // Final texture
             const iTextureStride = (iZ * segments + iX) * 4
-            texture[iTextureStride] = normals[iNormalStride]
-            texture[iTextureStride + 1] = normals[iNormalStride + 1]
-            texture[iTextureStride + 2] = normals[iNormalStride + 2]
-            texture[iTextureStride + 3] = position[1]
+            texture[iTextureStride] = normal[0];
+            texture[iTextureStride + 1] = normal[1];
+            texture[iTextureStride + 2] = grass; // Grass Density in Blue
+            texture[iTextureStride + 3] = position[1]; // Elevation in Alpha
+
+            // Normal.z will be reconstructed in the shader: sqrt(1.0 - x*x - y*y)
         }
     }
 

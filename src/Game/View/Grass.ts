@@ -41,8 +41,8 @@ export default class Grass {
         this.count = this.details * this.details
         this.fragmentSize = this.size / this.details
         this.bladeWidthRatio = 1.5
-        this.bladeHeightRatio = 4
-        this.bladeHeightRandomness = 0.5
+        this.bladeHeightRatio = 6
+        this.bladeHeightRandomness = 0.7
         this.positionRandomness = 0.5
         this.noiseTexture = this.noises.create(128, 128) as THREE.DataTexture
 

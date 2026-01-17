@@ -67,18 +67,18 @@ export default class Terrain {
                 THREE.UVMapping,
                 THREE.ClampToEdgeWrapping,
                 THREE.ClampToEdgeWrapping,
-                THREE.LinearFilter,
-                THREE.LinearFilter
+                THREE.NearestFilter,
+                THREE.NearestFilter
             )
             this.texture.flipY = false
             this.texture.needsUpdate = true
 
-            // // Material
-            // this.material = this.terrains.material.clone()
-            // this.material.uniforms.uTexture.value = this.texture
+            // Material
+            this.material = (this.terrains.material as THREE.ShaderMaterial).clone()
+            this.material.uniforms.uTexture.value = this.texture
 
             // Create mesh
-            this.mesh = new THREE.Mesh(this.geometry, this.terrains.material)
+            this.mesh = new THREE.Mesh(this.geometry, this.material)
             // this.mesh = new THREE.Mesh(this.geometry, new THREE.MeshNormalMaterial())
             this.scene.add(this.mesh)
 

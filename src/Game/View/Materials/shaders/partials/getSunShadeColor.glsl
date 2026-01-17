@@ -1,5 +1,6 @@
 vec3 getSunShadeColor(vec3 baseColor, float sunShade)
 {
-    vec3 shadeColor = baseColor * vec3(0.0, 0.5, 0.7);
+    // Warmer and lighter shadow to match stylized grass look
+    vec3 shadeColor = baseColor * vec3(0.6, 0.7, 0.6);
     return mix(baseColor, shadeColor, sunShade);
 }

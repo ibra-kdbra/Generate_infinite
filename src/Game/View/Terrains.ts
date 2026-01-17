@@ -51,13 +51,17 @@ export default class Terrains {
         this.material = new TerrainMaterial()
         this.material.uniforms.uPlayerPosition.value = new THREE.Vector3()
         this.material.uniforms.uGradientTexture.value = this.gradient.texture
-        this.material.uniforms.uLightnessSmoothness.value = 0.25
+        // Increase smoothness to soften far terrain
+        this.material.uniforms.uLightnessSmoothness.value = 0.5
         this.material.uniforms.uFresnelOffset.value = 0
         this.material.uniforms.uFresnelScale.value = 0.5
         this.material.uniforms.uFresnelPower.value = 2
         this.material.uniforms.uSunPosition.value = new THREE.Vector3(- 0.5, - 0.5, - 0.5)
         this.material.uniforms.uFogTexture.value = this.sky.customRender.texture
         this.material.uniforms.uGrassDistance.value = this.state.chunks.minSize
+        this.material.uniforms.uTextureSize.value = this.state.terrains.segments
+        this.material.uniforms.uElevationMin.value = - 220
+        this.material.uniforms.uElevationMax.value = 220
     }
 
     setDebug() {

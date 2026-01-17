@@ -17,7 +17,10 @@ export default class TerrainMaterial extends THREE.ShaderMaterial {
                 uSunPosition: { value: null },
                 uFogTexture: { value: null },
                 uGrassDistance: { value: null },
-                uTexture: { value: null }
+                uTexture: { value: null },
+                uTextureSize: { value: null },
+                uElevationMin: { value: null },
+                uElevationMax: { value: null }
             },
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
