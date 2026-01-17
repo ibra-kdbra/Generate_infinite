@@ -51,7 +51,8 @@ export default class Terrains {
         this.material = new TerrainMaterial()
         this.material.uniforms.uPlayerPosition.value = new THREE.Vector3()
         this.material.uniforms.uGradientTexture.value = this.gradient.texture
-        this.material.uniforms.uLightnessSmoothness.value = 0.25
+        // Increase smoothness to soften far terrain
+        this.material.uniforms.uLightnessSmoothness.value = 0.5
         this.material.uniforms.uFresnelOffset.value = 0
         this.material.uniforms.uFresnelScale.value = 0.5
         this.material.uniforms.uFresnelPower.value = 2

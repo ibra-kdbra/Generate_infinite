@@ -32,7 +32,8 @@ export default class Terrains {
     terrains: Map<string, Terrain>
     events: EventEmitter
     iterationsOffsets: [number, number][]
-    worker!: Worker
+    workers: Worker[]
+    workerIndex: number
 
     constructor() {
         this.game = Game.getInstance()
@@ -64,21 +65,27 @@ export default class Terrains {
         for (let i = 0; i < this.maxIterations; i++)
             this.iterationsOffsets.push([(this.random() - 0.5) * 200000, (this.random() - 0.5) * 200000])
 
+        this.workers = []
+        this.workerIndex = 0
         this.setWorkers()
         this.setDebug()
     }
 
     setWorkers() {
-        this.worker = new TerrainWorker()
+        const workersCount = Math.max(1, (navigator.hardwareConcurrency || 4) - 1)
 
-        this.worker.onmessage = (event) => {
-            // console.timeEnd(`terrains: worker (${event.data.id})`)
+        for (let i = 0; i < workersCount; i++) {
+            const worker = new TerrainWorker()
 
-            const terrain = this.terrains.get(event.data.id)
+            worker.onmessage = (event) => {
+                const terrain = this.terrains.get(event.data.id)
 
-            if (terrain) {
-                terrain.create(event.data)
+                if (terrain) {
+                    terrain.create(event.data)
+                }
             }
+
+            this.workers.push(worker)
         }
     }
 
@@ -109,7 +116,11 @@ export default class Terrains {
 
         // Post to worker
         // console.time(`terrains: worker (${terrain.id})`)
-        this.worker.postMessage({
+        const worker = this.workers[this.workerIndex++]
+        if (this.workerIndex >= this.workers.length)
+            this.workerIndex = 0
+
+        worker.postMessage({
             id: terrain.id,
             x,
             z,
@@ -146,7 +157,12 @@ export default class Terrains {
 
             // console.time(`terrains: worker (${terrain.id})`)
             const iterations = this.getIterationsForPrecision(terrain.precision)
-            this.worker.postMessage({
+
+            const worker = this.workers[this.workerIndex++]
+            if (this.workerIndex >= this.workers.length)
+                this.workerIndex = 0
+
+            worker.postMessage({
                 id: terrain.id,
                 size: terrain.size,
                 x: terrain.x,
