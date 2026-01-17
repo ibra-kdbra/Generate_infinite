@@ -58,6 +58,9 @@ export default class Terrains {
         this.material.uniforms.uSunPosition.value = new THREE.Vector3(- 0.5, - 0.5, - 0.5)
         this.material.uniforms.uFogTexture.value = this.sky.customRender.texture
         this.material.uniforms.uGrassDistance.value = this.state.chunks.minSize
+        this.material.uniforms.uTextureSize.value = this.state.terrains.segments
+        this.material.uniforms.uElevationMin.value = - 220
+        this.material.uniforms.uElevationMax.value = 220
     }
 
     setDebug() {
