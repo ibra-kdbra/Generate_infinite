@@ -17,6 +17,7 @@ varying float vHazeAmount;
 varying float vSunVisibility;
 #include ../partials/getTerrainLight.glsl
 #include ../partials/toLinear.glsl
+#include ../partials/getSunShadow.glsl
 #endif
 
 float dither(vec2 pixel) { return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715)))); }
@@ -35,7 +36,19 @@ vec3 perturb(vec3 normal, vec3 position, vec2 uv, vec3 mapped)
 
 void main()
 {
-    #ifndef BAKE
+    #ifdef SHADOW
+        // depth only (Shadows.ts): the near trees cast up to the middle of the hand-over band,
+        // the billboards beyond it
+        if (vDistance > (uFade.x + uFade.y) * 0.5)
+            discard;
+        #ifdef LEAVES
+            if (texture2D(uMap, vUv).a < 0.5)
+                discard;
+        #endif
+        gl_FragColor = vec4(1.0);
+        return;
+    #endif
+    #if !defined(BAKE)
         // dithered hand-over to the billboard version farther away
         if (dither(gl_FragCoord.xy) < smoothstep(uFade.x, uFade.y, vDistance))
             discard;
@@ -60,12 +73,14 @@ void main()
     #else
         vec3 sunDirection = normalize(uSunPosition);
         albedo = toLinear(albedo);
-        vec3 lit = albedo * getTerrainLight(normal, sunDirection, vSunVisibility);
+        // in the leaves' shade (and the crown's own: dark inside, lit at the edges)
+        float sunVisibility = vSunVisibility * getSunShadow(vWorldPosition, normal, sunDirection);
+        vec3 lit = albedo * getTerrainLight(normal, sunDirection, sunVisibility);
         #ifdef LEAVES
-            // sunlight through the leaves
+            // sunlight through the leaves (lit leaves glow, shaded ones less so)
             vec3 toEye = normalize(cameraPosition - vWorldPosition);
             float back = pow(clamp(dot(- toEye, sunDirection), 0.0, 1.0), 4.0);
-            lit += albedo * getSunLight(sunDirection) * vec3(1.0, 1.0, 0.6) * back * uTranslucency * 0.7 * vSunVisibility;
+            lit += albedo * getSunLight(sunDirection) * vec3(1.0, 1.0, 0.6) * back * uTranslucency * 0.7 * mix(0.25, 1.0, sunVisibility) * vSunVisibility;
         #endif
         lit = mix(lit, vHaze, vHazeAmount);
         gl_FragColor = vec4(lit, 1.0);

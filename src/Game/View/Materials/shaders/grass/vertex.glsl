@@ -40,6 +40,7 @@ varying float vSunVisibility;
 #include ../partials/getGrassColor.glsl
 #include ../partials/getClouds.glsl
 #include ../partials/getTreeShade.glsl
+#include ../partials/getSunShadow.glsl
 
 uniform vec3 uSunPosition;
 
@@ -164,6 +165,9 @@ void main()
     float petal = floor(random.z * 4.0);
     vec3 petalColor = petal < 1.0 ? vec3(0.78, 0.78, 0.74) : petal < 2.0 ? vec3(0.82, 0.66, 0.16) : petal < 3.0 ? vec3(0.42, 0.30, 0.62) : vec3(0.76, 0.40, 0.54);
     vFlower = vec4(petalColor, flower);
-    vSunVisibility = (1.0 - getCloudShadow(vec3(root.x, ground, root.y), normalize(uSunPosition))) * (1.0 - canopy);
+    vec3 sun = normalize(uSunPosition);
+    float viewDepth = - (viewMatrix * vec4(world, 1.0)).z;
+    float canopyShadow = canopy * (uShadowSplits.w > 0.5 ? smoothstep(uShadowSplits.y * 0.8, uShadowSplits.y, viewDepth) : 1.0);
+    vSunVisibility = (1.0 - getCloudShadow(vec3(root.x, ground, root.y), sun)) * (1.0 - canopyShadow) * getSunShadowFast(world, groundNormal, sun);
     vColorBase *= 1.0 - canopy * 0.3;     // less sky light under the canopy
 }

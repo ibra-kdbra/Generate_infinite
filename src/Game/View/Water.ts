@@ -5,6 +5,7 @@ import State from '../State/State'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
 import PlayerState from '../State/Player'
 import { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
+import { SHADOW_UNIFORMS } from './Shadows'
 
 const RIPPLE_COUNT = 24
 import vertexShader from './Materials/shaders/water/vertex.glsl'
@@ -42,6 +43,8 @@ export default class Water {
         }
         for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
             uniforms[name] = this.view.sky.uniforms[name]
+        for (const name of SHADOW_UNIFORMS)
+            uniforms[name] = this.view.shadows.uniforms[name]
 
         this.material = new THREE.ShaderMaterial({
             defines: { RIPPLE_COUNT },

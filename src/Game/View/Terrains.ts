@@ -7,6 +7,7 @@ import Terrain from './Terrain'
 import TerrainMaterial from './Materials/TerrainMaterial'
 import Viewport from '../State/Viewport'
 import Sky, { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
+import { SHADOW_UNIFORMS } from './Shadows'
 import TerrainState from '../State/Terrain'
 import reliefShader from './Materials/shaders/relief/fragment.glsl'
 import { loadTerrainTextures } from './TerrainTextures'
@@ -77,6 +78,8 @@ export default class Terrains {
         // the atmosphere's light and the cloud shadows
         for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
             this.material.uniforms[name] = this.sky.uniforms[name]
+        for (const name of SHADOW_UNIFORMS)
+            this.material.uniforms[name] = this.view.shadows.uniforms[name]
         // aerial haze colours from the per-frame sky texture
         this.material.uniforms.uSkyLut.value = this.view.skyLut.texture
     }

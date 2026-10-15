@@ -7,6 +7,8 @@ import State from '../State/State'
 import PlayerState from '../State/Player'
 import Settings, { CharacterName } from '../Settings'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
+import { SHADOW_UNIFORMS } from './Shadows'
+import sunShadowShader from './Materials/shaders/partials/getSunShadow.glsl'
 
 const LOCOMOTION = ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop'] as const
 const ONE_SHOTS = ['Jump_Start', 'Jump_Land', 'Roll']
@@ -41,6 +43,7 @@ export default class Player {
     shadow!: THREE.Mesh
     hemisphere!: THREE.HemisphereLight
     sun!: THREE.DirectionalLight
+    private depthMaterial = new THREE.MeshDepthMaterial()      // the character's shadow
 
     private loader = new GLTFLoader()
     private clips: Record<string, THREE.AnimationClip> = {}
@@ -118,6 +121,7 @@ export default class Player {
             mesh.frustumCulled = false     // skinned bounds don't follow the animation
             const material = mesh.material as THREE.MeshStandardMaterial
             material.onBeforeCompile = (shader) => this.addUnderwaterTint(shader)
+            this.view.shadows.addCaster(mesh, this.depthMaterial)
         })
         this.group.add(model)
         this.model = model
@@ -248,13 +252,20 @@ export default class Player {
      */
     private addUnderwaterTint(shader: THREE.WebGLProgramParametersWithUniforms) {
         shader.uniforms.uWaterLevel = { value: WATER_LEVEL }
+        for (const name of SHADOW_UNIFORMS)
+            shader.uniforms[name] = this.view.shadows.uniforms[name]
+        shader.uniforms.uSunDirection = this.view.sky.uniforms.uSunPosition
         shader.uniforms.uWetLine = this.wetUniforms.uWetLine
         shader.uniforms.uWetness = this.wetUniforms.uWetness
         shader.vertexShader = shader.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec3 vWaterWorldPosition;')
             .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWaterWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;')
         shader.fragmentShader = shader.fragmentShader
-            .replace('#include <common>', '#include <common>\nuniform float uWaterLevel;\nuniform float uWetLine;\nuniform float uWetness;\nvarying vec3 vWaterWorldPosition;')
+            .replace('#include <common>', '#include <common>\nuniform float uWaterLevel;\nuniform float uWetLine;\nuniform float uWetness;\nuniform vec3 uSunDirection;\nvarying vec3 vWaterWorldPosition;\n' + sunShadowShader)
+            // the world's sun shadows (trees, rocks, the terrain) fall on the character too
+            .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
+                'getDirectionalLightInfo( directionalLight, directLight );',
+                'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= getSunShadow( vWaterWorldPosition, inverseTransformDirection( geometryNormal, viewMatrix ), normalize( uSunDirection ) );'))
             .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
                 // wet: darker (water fills the weave and pores) and glossy, soft at the wet line
                 float wet = uWetness * (1.0 - smoothstep(uWetLine - 0.06, uWetLine + 0.02, vWaterWorldPosition.y));
@@ -449,6 +460,7 @@ export default class Player {
         const shrink = Math.max(0.35, 1 - height / 6)
         const underwater = 1 - THREE.MathUtils.smoothstep(WATER_LEVEL - groundY, 0.1, 0.6)
         this.shadow.scale.setScalar(shrink)
-        ;(this.shadow.material as THREE.ShaderMaterial).uniforms.uOpacity.value = 0.45 * shrink * underwater
+        // a soft contact shadow under the feet (fainter when the sun casts real shadows)
+        ;(this.shadow.material as THREE.ShaderMaterial).uniforms.uOpacity.value = (this.view.shadows.enabled ? 0.22 : 0.45) * shrink * underwater
     }
 }

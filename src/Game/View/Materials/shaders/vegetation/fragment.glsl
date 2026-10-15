@@ -19,9 +19,14 @@ varying float vSunVisibility;
 
 #include ../partials/getTerrainLight.glsl
 #include ../partials/toLinear.glsl
+#include ../partials/getSunShadow.glsl
 
 void main()
 {
+    #ifdef SHADOW
+        gl_FragColor = vec4(1.0);       // depth only (Shadows.ts)
+        return;
+    #endif
     vec3 normal = normalize(vNormal);
     vec3 sunDirection = normalize(uSunPosition);
     vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
@@ -49,11 +54,12 @@ void main()
     albedo = mix(albedo, uBark, vShape.y);
 
     albedo = toLinear(albedo);
-    vec3 lit = albedo * vShape.x * getTerrainLight(normal, sunDirection, vSunVisibility);
+    float sunVisibility = vSunVisibility * getSunShadow(vWorldPosition, normal, sunDirection);
+    vec3 lit = albedo * vShape.x * getTerrainLight(normal, sunDirection, sunVisibility);
 
     // sunlight through the leaves when looking toward the sun
     float back = pow(clamp(dot(- viewDirection, sunDirection), 0.0, 1.0), 4.0) * uTranslucency * (1.0 - vShape.y);
-    lit += albedo * getSunLight(sunDirection) * vec3(1.0, 1.0, 0.55) * back * 0.4 * vSunVisibility;
+    lit += albedo * getSunLight(sunDirection) * vec3(1.0, 1.0, 0.55) * back * 0.4 * sunVisibility;
 
     lit = mix(lit, vHaze, vHazeAmount);
     gl_FragColor = vec4(lit, 1.0);

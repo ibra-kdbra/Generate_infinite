@@ -78,7 +78,8 @@ export default class Terrain {
 
             // Create mesh
             this.mesh = new THREE.Mesh(this.geometry, this.material)
-            // this.mesh = new THREE.Mesh(this.geometry, new THREE.MeshNormalMaterial())
+            const shadows = View.getInstance().shadows
+            shadows.addCaster(this.mesh, shadows.depthMaterial, true)
             this.scene.add(this.mesh)
 
             this.created = true

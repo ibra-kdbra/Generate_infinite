@@ -7,6 +7,7 @@ import GrassMaterial from './Materials/GrassMaterial'
 import GrassTrail from './GrassTrail'
 import Settings, { GrassStyle, Quality } from '../Settings'
 import { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
+import { SHADOW_UNIFORMS } from './Shadows'
 
 type Style = {
     height: [number, number]     // blade height range (m)
@@ -158,6 +159,8 @@ export default class Grass {
         uniforms.uTrailSize.value = this.trail.size
         for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
             uniforms[name] = this.view.sky.uniforms[name]
+        for (const name of SHADOW_UNIFORMS)
+            uniforms[name] = this.view.shadows.uniforms[name]
         this.material.side = THREE.DoubleSide
     }
 

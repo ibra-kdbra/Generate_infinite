@@ -5,6 +5,7 @@ uniform vec3 uSunPosition;
 uniform float uRadius[VARIANTS];     // half width of each variant (tree height = 1)
 uniform float uTime;
 uniform sampler2D uNoiseTexture;
+uniform vec3 uViewPosition;
 
 attribute vec4 aInstance;            // x, y, z, scale
 attribute vec2 aInstanceExtra;       // rotation, variant
@@ -49,8 +50,11 @@ void main()
     vUv = vec2(position.x * 0.5 + 0.5, position.y);
     vVariant = variant;
     vRotation = rotation;
-    vDistance = distance(cameraPosition.xz, base.xz);
+    // (in the shadow pass the card faces the sun and shows the tree as seen from it)
+    vDistance = distance(uViewPosition.xz, base.xz);
     vWorldPosition = world;
-    vHazeAmount = getAerialHaze(world, vHaze);
-    vSunVisibility = 1.0 - getCloudShadow(world, normalize(uSunPosition));
+    #ifndef SHADOW
+        vHazeAmount = getAerialHaze(world, vHaze);
+        vSunVisibility = 1.0 - getCloudShadow(world, normalize(uSunPosition));
+    #endif
 }

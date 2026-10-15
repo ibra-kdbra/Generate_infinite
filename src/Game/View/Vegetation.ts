@@ -4,6 +4,7 @@ import View from './View'
 import State from '../State/State'
 import { PLANT, PlantKind } from '../State/Vegetation'
 import { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
+import Shadows, { SHADOW_UNIFORMS } from './Shadows'
 import { rock } from './VegetationModels'
 import vertexShader from './Materials/shaders/vegetation/vertex.glsl'
 import fragmentShader from './Materials/shaders/vegetation/fragment.glsl'
@@ -52,6 +53,8 @@ export default class Vegetation {
         }
         for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
             this.uniforms[name] = this.view.sky.uniforms[name]
+        for (const name of SHADOW_UNIFORMS)
+            this.uniforms[name] = this.view.shadows.uniforms[name]
 
         for (const kind of [PLANT.ROCK] as PlantKind[]) {
             const look = LOOKS[kind]!
@@ -74,6 +77,7 @@ export default class Vegetation {
                 }
             })
             this.materials.set(kind, material)
+            const shadowMaterial = Shadows.shadowVariant(material)
             for (const detail of ['near', 'far'] as const) {
                 const geometry = MODELS[kind]!(detail)
                 const capacity = 256
@@ -84,6 +88,7 @@ export default class Vegetation {
                 geometry.instanceCount = 0
                 const mesh = new THREE.Mesh(geometry, material)
                 mesh.frustumCulled = false
+                this.view.shadows.addCaster(mesh, shadowMaterial)
                 this.scene.add(mesh)
                 this.layers.set(`${kind}:${detail}`, { mesh, geometry, instance, extra })
             }

@@ -5,6 +5,7 @@ import State from '../State/State'
 import Settings, { Quality } from '../Settings'
 import { PLANT, PlantKind } from '../State/Vegetation'
 import { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
+import Shadows, { SHADOW_UNIFORMS } from './Shadows'
 import { Tree } from '../Vendor/ezTree/tree.js'
 import oakMedium from '../Vendor/ezTree/presets/oak_medium.json'
 import oakLarge from '../Vendor/ezTree/presets/oak_large.json'
@@ -97,6 +98,8 @@ export default class Trees {
         }
         for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
             this.uniforms[name] = this.view.sky.uniforms[name]
+        for (const name of SHADOW_UNIFORMS)
+            this.uniforms[name] = this.view.shadows.uniforms[name]
 
         this.applyQuality()
         this.settings.events.on('change:quality', () => this.applyQuality())
@@ -222,6 +225,7 @@ export default class Trees {
             this.attach(mesh.geometry, instances)
             mesh.geometry.instanceCount = 0
             mesh.frustumCulled = false
+            this.view.shadows.addCaster(mesh, Shadows.shadowVariant(mesh.material))
         }
         return { species, radius: crownRadius, bark, leaves, instances }
     }
@@ -328,6 +332,7 @@ export default class Trees {
         })
         const mesh = new THREE.Mesh(quad, material)
         mesh.frustumCulled = false
+        this.view.shadows.addCaster(mesh, Shadows.shadowVariant(material))
         this.impostor = { mesh, instances }
     }
 

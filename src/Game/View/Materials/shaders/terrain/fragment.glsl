@@ -35,6 +35,7 @@ varying float vCloudShadow;
 #include ../partials/getGrassColor.glsl
 #include ../partials/getTerrainLight.glsl
 #include ../partials/getTreeShade.glsl
+#include ../partials/getSunShadow.glsl
 #include ../partials/toLinear.glsl
 
 vec3 noise3(vec2 uv) { return texture2D(uNoiseTexture, uv).rgb - 0.5; }
@@ -208,7 +209,9 @@ void main()
     }
 
     // ── lighting ──
-    float sunVisibility = (1.0 - vCloudShadow) * (1.0 - treeShade);
+    // shadow maps near by; beyond them, the soft blobs under distant trees
+    float treeShadow = treeShade * (uShadowSplits.w > 0.5 ? smoothstep(uShadowSplits.y * 0.8, uShadowSplits.y, vDepth) : 1.0);
+    float sunVisibility = (1.0 - vCloudShadow) * (1.0 - treeShadow) * getSunShadow(vWorldPosition, normal, sunDirection);
     vec3 albedo = toLinear(color);
     vec3 lit = albedo * getTerrainLight(detailNormal, sunDirection, sunVisibility) * (1.0 - cavity) * (1.0 - treeShade * 0.3);
     // glint on snow and wet sand

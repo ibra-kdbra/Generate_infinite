@@ -15,6 +15,7 @@ varying vec3 vWorldPosition;
 #include ../partials/getClouds.glsl
 #include ../partials/toLinear.glsl
 #include ../partials/getTerrainLight.glsl
+#include ../partials/getSunShadow.glsl
 
 void main()
 {
@@ -60,7 +61,8 @@ void main()
     // the sun's reflection: a tight, very bright core (it blooms) and a softer sheen around it
     float glitter = pow(sunAlignment, 900.0) * 60.0 + pow(sunAlignment, 60.0) * 0.6;
 
-    vec3 reflection = sky * fresnel + getSunLight(sunDirection) * glitter * max(0.0, 1.0 - getCloudShadow(vWorldPosition, sunDirection) * 1.5);
+    float sunVisible = max(0.0, 1.0 - getCloudShadow(vWorldPosition, sunDirection) * 1.5) * getSunShadowFast(vWorldPosition, vec3(0.0, 1.0, 0.0), sunDirection);
+    vec3 reflection = sky * fresnel + getSunLight(sunDirection) * glitter * sunVisible;
     foam = clamp(foam * 0.5, 0.0, 0.6);
     reflection = mix(reflection, vec3(0.7, 0.78, 0.82) * getTerrainLight(vec3(0.0, 1.0, 0.0), sunDirection, 1.0) * 0.6, foam);
     fresnel = max(fresnel, foam);

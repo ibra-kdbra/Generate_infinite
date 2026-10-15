@@ -17,6 +17,7 @@ varying float vSunVisibility;
 
 #include ../partials/getTerrainLight.glsl
 #include ../partials/toLinear.glsl
+#include ../partials/getSunShadow.glsl
 
 float dither(vec2 pixel) { return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715)))); }
 
@@ -27,8 +28,13 @@ vec2 atlasUv(float frame)
 
 void main()
 {
-    if (dither(gl_FragCoord.xy) > smoothstep(uFade.x, uFade.y, vDistance))
-        discard;
+    #ifdef SHADOW
+        if (vDistance < (uFade.x + uFade.y) * 0.5)
+            discard;
+    #else
+        if (dither(gl_FragCoord.xy) > smoothstep(uFade.x, uFade.y, vDistance))
+            discard;
+    #endif
 
     // blend the two nearest baked views
     float frameA = floor(vFrame);
@@ -38,16 +44,21 @@ void main()
     vec4 albedo = mix(albedoA, albedoB, t);
     if (albedo.a < 0.5)
         discard;
+    #ifdef SHADOW
+        gl_FragColor = vec4(1.0);
+        return;
+    #endif
     vec3 normal = normalize(mix(texture2D(uNormalAtlas, atlasUv(frameA)).xyz, texture2D(uNormalAtlas, atlasUv(frameA + 1.0)).xyz, t) * 2.0 - 1.0);
     float c = cos(vRotation), s = sin(vRotation);
     normal.xz = mat2(c, - s, s, c) * normal.xz;
 
     vec3 sunDirection = normalize(uSunPosition);
     vec3 color = toLinear(albedo.rgb);       // the atlas holds display colours
-    vec3 lit = color * getTerrainLight(normal, sunDirection, vSunVisibility);
+    float sunVisibility = vSunVisibility * getSunShadowFast(vWorldPosition, normal, sunDirection);
+    vec3 lit = color * getTerrainLight(normal, sunDirection, sunVisibility);
     vec3 toEye = normalize(cameraPosition - vWorldPosition);
     float back = pow(clamp(dot(- toEye, sunDirection), 0.0, 1.0), 4.0);
-    lit += color * getSunLight(sunDirection) * vec3(1.0, 1.0, 0.6) * back * uTranslucency * 0.7 * vSunVisibility;
+    lit += color * getSunLight(sunDirection) * vec3(1.0, 1.0, 0.6) * back * uTranslucency * 0.7 * sunVisibility;
     lit = mix(lit, vHaze, vHazeAmount);
     gl_FragColor = vec4(lit, 1.0);
 }

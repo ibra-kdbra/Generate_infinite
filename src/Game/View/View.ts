@@ -15,6 +15,7 @@ import TreeShade from './TreeShade'
 import Trees from './Trees'
 import Splashes from './Splashes'
 import GroundWetness from './GroundWetness'
+import Shadows from './Shadows'
 
 import * as THREE from 'three'
 
@@ -33,6 +34,7 @@ export default class View {
     trees!: Trees
     splashes!: Splashes
     groundWetness!: GroundWetness
+    shadows!: Shadows
     terrains!: Terrains
     chunks!: Chunks
     player!: Player
@@ -54,6 +56,7 @@ export default class View {
         // ✅ CORRECT ORDER: Create dependencies first.
         this.camera = new Camera()
         this.renderer = new Renderer() // Now the Renderer can safely access the camera.
+        this.shadows = new Shadows()       // before the materials that receive the shadows
 
         this.noises = new Noises()
         this.sky = new Sky()
@@ -100,6 +103,7 @@ export default class View {
         this.terrains.material.uniforms.uWetMap.value = this.groundWetness.texture
         this.treeShade.update()
         this.camera.update()
+        this.shadows.update()
         this.renderer.update()
     }
 

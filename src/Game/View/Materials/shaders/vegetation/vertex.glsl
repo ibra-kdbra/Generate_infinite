@@ -52,6 +52,8 @@ void main()
     vWorldPosition = world;
     vShape = aShape;
     vTint = tint;
-    vHazeAmount = getAerialHaze(world, vHaze);
-    vSunVisibility = 1.0 - getCloudShadow(world, normalize(uSunPosition));
+    #ifndef SHADOW
+        vHazeAmount = getAerialHaze(world, vHaze);
+        vSunVisibility = 1.0 - getCloudShadow(world, normalize(uSunPosition));
+    #endif
 }

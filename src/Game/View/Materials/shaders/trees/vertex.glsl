@@ -6,6 +6,7 @@ uniform float uTime;
 uniform vec3 uSunPosition;
 uniform sampler2D uNoiseTexture;
 uniform float uSway;
+uniform vec3 uViewPosition;     // the view's camera (in the shadow pass cameraPosition is the light's)
 
 attribute vec4 aInstance;        // x, y, z, scale (height in metres)
 attribute vec2 aInstanceExtra;   // rotation, unused
@@ -58,8 +59,8 @@ void main()
     vUv = uv;
     vNormal = normalize(n);
     vWorldPosition = world;
-    vDistance = distance(cameraPosition.xz, aInstance.xz);
-    #ifndef BAKE
+    vDistance = distance(uViewPosition.xz, aInstance.xz);
+    #if !defined(BAKE) && !defined(SHADOW)
         vHazeAmount = getAerialHaze(world, vHaze);
         vSunVisibility = 1.0 - getCloudShadow(world, normalize(uSunPosition));
     #endif
