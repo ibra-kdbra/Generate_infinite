@@ -135,7 +135,7 @@ export default class Vegetation {
                 const scale = 0.35 + Math.pow(a, 2.2) * 2.6
                 plants.push({
                     kind: PLANT.ROCK, x, y: e - scale * 0.35, z, scale,
-                    rotation: b * Math.PI * 2, tint: c, collision: scale > 0.55 ? scale * 0.8 : 0
+                    rotation: b * Math.PI * 2, tint: c, collision: scale > 0.55 ? scale * 0.6 : 0
                 })
             }
         }
@@ -208,7 +208,7 @@ export default class Vegetation {
     /** How tall a plant's solid part is: a trunk up to where the crown starts, a boulder's top. */
     private solidTop(plant: Plant) {
         if (plant.kind === PLANT.ROCK)
-            return plant.y + plant.scale * 1.3
+            return plant.y + plant.scale * 1.05      // the scanned boulders: under ~1 m tall per metre across
         return plant.y + plant.scale * (plant.kind === PLANT.CONIFER ? 0.35 : 0.45)
     }
 

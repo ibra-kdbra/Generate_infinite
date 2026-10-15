@@ -19,16 +19,16 @@ type Style = {
 // Grass styles from the settings menu. `dryness` also tints the terrain under and beyond
 // the field (View/Terrains.ts) so the ground keeps matching the blades.
 export const GRASS_STYLE_PARAMETERS: Record<GrassStyle, Style> = {
-    meadow: { height: [0.28, 0.7], density: 14, dryness: 0, flowers: 0 },
-    wild: { height: [0.45, 1.15], density: 16, dryness: 0.12, flowers: 0.01 },
-    flowers: { height: [0.3, 0.75], density: 14, dryness: 0, flowers: 0.06 },
-    steppe: { height: [0.2, 0.5], density: 9, dryness: 0.85, flowers: 0 },
+    meadow: { height: [0.28, 0.7], density: 60, dryness: 0, flowers: 0 },
+    wild: { height: [0.45, 1.15], density: 64, dryness: 0.12, flowers: 0.01 },
+    flowers: { height: [0.3, 0.75], density: 60, dryness: 0, flowers: 0.06 },
+    steppe: { height: [0.2, 0.5], density: 40, dryness: 0.85, flowers: 0 },
     none: { height: [0, 0], density: 0, dryness: 0, flowers: 0 }
 }
 
 // How much grass the quality setting draws
 const QUALITY: Record<Quality, { radius: number, density: number }> = {
-    low: { radius: 20, density: 0.45 },
+    low: { radius: 20, density: 0.35 },
     medium: { radius: 26, density: 0.7 },
     high: { radius: 32, density: 1 },
     ultra: { radius: 32, density: 1.4 }
@@ -174,9 +174,10 @@ export default class Grass {
         uniforms.uHeightRange.value = new THREE.Vector2(...this.style.height)
         uniforms.uGrassDryness.value = this.style.dryness
         uniforms.uFlowers.value = this.style.flowers
-        // blade width keeps the field's coverage about the same at any density
+        // many thin blades (a few centimetres wide, like real grass); fewer, wider ones at low
+        // quality keep the field's coverage about the same
         const density = this.style.density * quality.density
-        uniforms.uBladeWidth.value = 0.13 * Math.sqrt(14 / Math.max(density, 1))
+        uniforms.uBladeWidth.value = THREE.MathUtils.clamp(0.045 * Math.sqrt(60 / Math.max(density, 1)), 0.035, 0.09)
         const count = Math.round(density * this.patchSize * this.patchSize)
         if (count > 0)
             this.setGeometries(count)

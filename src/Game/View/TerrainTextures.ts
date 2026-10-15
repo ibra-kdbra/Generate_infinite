@@ -5,8 +5,8 @@ import * as THREE from 'three'
  * texture arrays (colour, OpenGL normal maps), one layer per material:
  */
 export const GROUND_LAYERS = [
-    'rocky_terrain_02',      // 0 grassy ground
-    'forrest_ground_01',     // 1 soil
+    'forrest_ground_01',     // 0 grassy ground (grass, twigs, dry leaves)
+    'rocky_terrain_02',      // 1 soil on slopes (stony)
     'cliff_side',            // 2 rock
     'coast_sand_01',         // 3 sand
     'snow_02',               // 4 snow

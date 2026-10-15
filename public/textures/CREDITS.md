@@ -6,3 +6,8 @@
   `trees/bark_birch_*`: [TextureCan](https://www.texturecan.com) (CC0); `trees/leaves_*`: from
   [EZ-Tree](https://github.com/dgreenheck/ez-tree) by Daniel Greenheck (MIT). Resized to 512 px,
   WebP.
+
+## Rocks and ferns (public/models/nature, public/textures/nature)
+
+Photo-scanned models by Poly Haven (https://polyhaven.com), CC0: namaqualand_boulder_02,
+rock_moss_set_01, rock_moss_set_02, fern_02. Simplified and repacked by tools/nature/build.mjs.

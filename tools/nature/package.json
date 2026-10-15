@@ -1,0 +1,9 @@
+{
+  "name": "nature-build",
+  "private": true,
+  "type": "module",
+  "description": "Builds the rocks and ferns from Poly Haven's CC0 scans (tools/nature/build.mjs)",
+  "dependencies": {
+    "@gltf-transform/core": "^4.2.1"
+  }
+}

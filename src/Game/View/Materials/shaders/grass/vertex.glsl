@@ -154,8 +154,12 @@ void main()
     // Colour: the terrain's grass colour at this spot; per-blade variation averages to 1 so
     // the field reads as the same green as the ground beyond it
     vec3 base = getGrassColor(dry, ground);
-    base *= 0.88 + random.w * 0.24;
+    base *= 0.8 + random.w * 0.4;
     base *= mix(vec3(1.0), vec3(1.06, 1.0, 0.86), random.y * random.y);   // a few warmer blades
+    // some blades drying out (more on dry ground), and tips bleached by the sun
+    float withered = smoothstep(0.82, 1.0, fract(random.w * 7.31 + random.x * 3.7) + dry * 0.15);
+    base = mix(base, base * vec3(1.35, 1.18, 0.6), withered * 0.7);
+    base = mix(base, base * vec3(1.15, 1.1, 0.72), h * h * 0.4);
     vColorBase = base;
     vGroundNormal = groundNormal;
     vHeight = h;
