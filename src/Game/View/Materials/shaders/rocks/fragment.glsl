@@ -19,17 +19,7 @@ varying float vSunVisibility;
 #include ../partials/toLinear.glsl
 #include ../partials/getSunShadow.glsl
 
-// Normal map without stored tangents (cotangent frame from screen derivatives)
-vec3 perturb(vec3 normal, vec3 position, vec2 uv, vec3 mapped)
-{
-    vec3 dp1 = dFdx(position), dp2 = dFdy(position);
-    vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
-    vec3 dp2perp = cross(dp2, normal), dp1perp = cross(normal, dp1);
-    vec3 t = dp2perp * duv1.x + dp1perp * duv2.x;
-    vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
-    float invmax = inversesqrt(max(dot(t, t), dot(b, b)));
-    return normalize(mat3(t * invmax, b * invmax, normal) * mapped);
-}
+#include ../partials/perturbNormal.glsl
 
 void main()
 {

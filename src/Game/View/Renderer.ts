@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, SMAAPreset, BlendFunction } from 'postprocessing'
+import { EffectComposer, RenderPass, EffectPass, ShaderPass, BloomEffect, SMAAEffect, SMAAPreset, BlendFunction } from 'postprocessing'
 import { N8AOPostPass } from 'n8ao'
 import Game from '../Game'
 import View from './View'
@@ -109,6 +109,23 @@ export default class Renderer {
         this.composer = new EffectComposer(this.instance, { frameBufferType: THREE.HalfFloatType, stencilBuffer: false })
         this.renderPass = new RenderPass(this.scene, camera)
         this.composer.addPass(this.renderPass)
+        // NaN / infinity guard: one invalid pixel (a shader dividing by zero on some GPU) would
+        // otherwise spread over the whole frame through the bloom's blur and black it out
+        this.composer.addPass(new ShaderPass(new THREE.ShaderMaterial({
+            uniforms: { inputBuffer: { value: null } },
+            vertexShader: 'varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 1.0, 1.0); }',
+            fragmentShader: `
+                uniform sampler2D inputBuffer;
+                varying vec2 vUv;
+                void main()
+                {
+                    vec4 color = texture2D(inputBuffer, vUv);
+                    bool invalid = any(isnan(color)) || any(isinf(color)) || any(notEqual(color, color));
+                    gl_FragColor = invalid ? vec4(0.0, 0.0, 0.0, 1.0) : min(color, vec4(4000.0));
+                }`,
+            depthTest: false,
+            depthWrite: false
+        })))
 
         const width = this.viewport.width!, height = this.viewport.height!
         this.aoPass = new N8AOPostPass(this.scene, camera, width, height)

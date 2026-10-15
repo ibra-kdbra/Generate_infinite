@@ -140,12 +140,16 @@ export default class Shadows {
 
     /** A copy of a ShaderMaterial for the shadow pass (adds SHADOW; writes depth only). */
     static shadowVariant(material: THREE.ShaderMaterial, defines: Record<string, string> = {}) {
-        const variant = material.clone()
-        variant.uniforms = material.uniforms        // shared, not copied
-        variant.defines = { ...material.defines, SHADOW: '', ...defines }
-        variant.colorWrite = false
-        variant.side = material.side === THREE.FrontSide ? THREE.FrontSide : THREE.DoubleSide
-        return variant
+        // built, not cloned: the uniforms are shared by reference (clone() would copy them
+        // and can't copy render-target textures)
+        return new THREE.ShaderMaterial({
+            vertexShader: material.vertexShader,
+            fragmentShader: material.fragmentShader,
+            uniforms: material.uniforms,
+            defines: { ...material.defines, SHADOW: '', ...defines },
+            side: material.side === THREE.FrontSide ? THREE.FrontSide : THREE.DoubleSide,
+            colorWrite: false
+        })
     }
 
     /** Fits a cascade's light camera around a slice of the view, snapped to its texels. */
