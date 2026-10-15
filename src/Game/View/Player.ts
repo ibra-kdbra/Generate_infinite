@@ -120,6 +120,7 @@ export default class Player {
                 return
             mesh.frustumCulled = false     // skinned bounds don't follow the animation
             const material = mesh.material as THREE.MeshStandardMaterial
+            material.metalness = Math.min(material.metalness, 0.4)     // no reflections to show: bare metal reads black and glints
             material.onBeforeCompile = (shader) => this.addUnderwaterTint(shader)
             this.view.shadows.addCaster(mesh, this.depthMaterial)
         })
@@ -267,6 +268,9 @@ export default class Player {
                 'getDirectionalLightInfo( directionalLight, directLight );',
                 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= getSunShadow( vWaterWorldPosition, inverseTransformDirection( geometryNormal, viewMatrix ), normalize( uSunDirection ) );'))
             .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+                // the kit's skin and cloth are glossier than real skin and fabric: a waxy sheen
+                // in strong sun
+                roughnessFactor = max(roughnessFactor, 0.82);
                 // wet: darker (water fills the weave and pores) and glossy, soft at the wet line
                 float wet = uWetness * (1.0 - smoothstep(uWetLine - 0.06, uWetLine + 0.02, vWaterWorldPosition.y));
                 diffuseColor.rgb *= mix(1.0, 0.55, wet);
@@ -441,7 +445,8 @@ export default class Player {
         this.sun.color.setRGB(source[0] / strength, source[1] / strength, source[2] / strength, THREE.LinearSRGBColorSpace)
         this.sun.intensity = Math.PI * strength
         this.hemisphere.color.setRGB(...atmosphere.sky, THREE.LinearSRGBColorSpace)
-        this.hemisphere.groundColor.setRGB(...atmosphere.ground, THREE.LinearSRGBColorSpace)
+        // light bounced from the ground: mostly blocked by the grass and the body itself
+        this.hemisphere.groundColor.setRGB(atmosphere.ground[0] * 0.45, atmosphere.ground[1] * 0.45, atmosphere.ground[2] * 0.45, THREE.LinearSRGBColorSpace)
 
         if (this.mixer && this.model && this.gaits.length)
             this.updateAnimation(dt)
