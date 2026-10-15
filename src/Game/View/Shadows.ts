@@ -4,14 +4,16 @@ import View from './View'
 import State from '../State/State'
 import Settings, { Quality } from '../Settings'
 
-// Shadow map sizes and where each cascade ends (view depth, m), by quality. Cascade 0: the
-// character, trees and rocks close by; 1: trees and the land around; 2: only the terrain,
-// far out, for the mountains' shadows.
-const CASCADES: Record<Quality, { sizes: [number, number, number], splits: [number, number, number] } | null> = {
+// Shadow map sizes, where each cascade ends (view depth, m) and how often each is redrawn
+// (every n frames), by quality. Cascade 0: the character, trees and rocks close by; 1: trees
+// and the land around (in a forest, redrawing every tree's leaves is the expensive part);
+// 2: only the terrain, far out, for the mountains' shadows.
+type Preset = { sizes: [number, number, number], splits: [number, number, number], intervals: [number, number, number] }
+const CASCADES: Record<Quality, Preset | null> = {
     low: null,
-    medium: { sizes: [1536, 1536, 1024], splits: [24, 120, 2200] },
-    high: { sizes: [2048, 2048, 2048], splits: [30, 150, 2600] },
-    ultra: { sizes: [3072, 2048, 2048], splits: [34, 180, 3000] }
+    medium: { sizes: [1024, 1024, 1024], splits: [22, 100, 2200], intervals: [1, 2, 4] },
+    high: { sizes: [2048, 1536, 1536], splits: [30, 150, 2600], intervals: [1, 2, 4] },
+    ultra: { sizes: [3072, 2048, 2048], splits: [34, 180, 3000], intervals: [1, 1, 3] }
 }
 
 /** Layer the shadow casters are on (as well as the default one). */
@@ -101,7 +103,7 @@ export default class Shadows {
                 matrix: this.uniforms[`uShadowMatrix${i}`].value,
                 size,
                 terrainOnly: i === 2,
-                interval: i === 2 ? 3 : 1
+                interval: preset.intervals[i]
             })
             this.uniforms[`uShadowMap${i}`].value = target.depthTexture
         }
@@ -228,7 +230,8 @@ export default class Shadows {
         this.view.scene.background = null
         this.frame++
         this.cascades.forEach((cascade, i) => {
-            if (this.frame % cascade.interval !== 0 && this.frame > 3)
+            // staggered so the cascades that skip frames don't all render on the same one
+            if ((this.frame + i) % cascade.interval !== 0 && this.frame > 3)
                 return
             const texel = this.fit(cascade, ranges[i][0], ranges[i][1], sun, extras[i])
             texels.setComponent(i, texel)

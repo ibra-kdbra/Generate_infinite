@@ -228,6 +228,7 @@ export default class Debug {
             if (view.trees.impostor) view.trees.impostor.mesh.visible = on
         })
         this.toggleControl(layers, 'Boulders', () => true, (on) => { for (const layer of view.vegetation.layers.values()) layer.mesh.visible = on })
+        this.toggleControl(layers, 'Ferns', () => true, (on) => view.ferns.setVisible(on))
         this.toggleControl(layers, 'Water', () => view.water.mesh.visible, (on) => { view.water.mesh.visible = on })
         this.toggleControl(layers, 'Character', () => view.player.group.visible, (on) => { view.player.group.visible = on })
         this.toggleControl(layers, 'Terrain wireframe', () => view.terrains.material.wireframe, (on) => {

@@ -55,6 +55,31 @@ const defaults: Values = {
     dayLength: '20'
 }
 
+/**
+ * A starting quality for this graphics card: integrated chips (Intel) get low, dedicated
+ * NVIDIA and AMD cards high, anything else medium. (Firefox reports a representative model
+ * per vendor, so only the vendor and family are reliable.)
+ */
+function suggestedQuality(): Quality {
+    try {
+        const canvas = document.createElement('canvas')
+        const gl = canvas.getContext('webgl2', { powerPreference: 'high-performance' })
+        if (!gl)
+            return 'low'
+        const info = gl.getExtension('WEBGL_debug_renderer_info')
+        const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+        gl.getExtension('WEBGL_lose_context')?.loseContext()
+        if (/nvidia|geforce|quadro|rtx/i.test(name)) return 'high'
+        if (/radeon.*(rx|pro)|amd.*rx/i.test(name)) return 'high'
+        if (/iris\s*xe|apple m\d/i.test(name)) return 'medium'
+        if (/intel|uhd|hd graphics|mesa|llvmpipe|swiftshader/i.test(name)) return 'low'
+        return 'medium'
+    }
+    catch {
+        return 'medium'
+    }
+}
+
 export default class Settings {
     static instance: Settings
 
@@ -68,7 +93,9 @@ export default class Settings {
     values: Values
 
     private constructor() {
-        this.values = { ...defaults, ...this.load() }
+        const stored = this.load()
+        // first visit: a quality to suit the graphics card (changeable in the menu)
+        this.values = { ...defaults, quality: stored.quality ?? suggestedQuality(), ...stored }
     }
 
     get<K extends keyof Values>(key: K): Values[K] {
