@@ -37,51 +37,60 @@ varying float vCloudShadow;
 #include ../partials/getTreeShade.glsl
 #include ../partials/getSunShadow.glsl
 #include ../partials/toLinear.glsl
+#include ../partials/getSkyLut.glsl
 
 vec3 noise3(vec2 uv) { return texture2D(uNoiseTexture, uv).rgb - 0.5; }
 
 // A ground texture at two scales, blended by the large-scale variation so its repeat
-// doesn't show; returned relative to the layer's average colour (1 = average)
-vec3 groundDetail(vec2 uv, float layer, float largeScale)
+// doesn't show: rgb relative to the layer's average colour (1 = average), a = ambient
+// occlusion (stored as 0.5 + 0.5 × AO, TerrainTextures.ts)
+vec4 groundDetail(vec2 uv, float layer, float largeScale)
 {
-    vec3 a = texture(uGroundAlbedo, vec3(uv, layer)).rgb;
+    vec4 a = texture(uGroundAlbedo, vec3(uv, layer));
     if (uGroundDetail.z > 0.5)
-        a = mix(a, texture(uGroundAlbedo, vec3(uv * 0.27 + vec2(0.37, 0.71), layer)).rgb, largeScale);
-    return a / uGroundMeans[int(layer)];
+        a = mix(a, texture(uGroundAlbedo, vec3(uv * 0.27 + vec2(0.37, 0.71), layer)), largeScale);
+    return vec4(a.rgb / uGroundMeans[int(layer)], a.a * 2.0 - 1.0);
 }
 
-vec2 groundBump(vec2 uv, float layer)
+// xy: the normal map's tilt; z: roughness
+vec3 groundBump(vec2 uv, float layer)
 {
-    return texture(uGroundNormal, vec3(uv, layer)).xy * 2.0 - 1.0;
+    vec3 n = texture(uGroundNormal, vec3(uv, layer)).xyz;
+    return vec3(n.xy * 2.0 - 1.0, n.z);
 }
 
 // Triplanar: the texture projected along x, y and z, blended by how the surface faces, so
-// cliffs aren't smeared. Returns detail (relative colour) and the world-space bump.
-vec3 triplanarDetail(vec3 position, vec3 normal, float scale, float layer, out vec3 bump)
+// cliffs aren't smeared. Returns detail (relative colour, occlusion), the world-space bump
+// and the roughness.
+vec4 triplanarDetail(vec3 position, vec3 normal, float scale, float layer, out vec3 bump, out float roughness)
 {
     vec3 w = pow(abs(normal), vec3(4.0));
     w /= w.x + w.y + w.z;
-    vec3 detail = vec3(0.0);
+    vec4 detail = vec4(0.0);
     bump = vec3(0.0);
+    roughness = 0.0;
     if (w.x > 0.02) {
         vec2 uv = position.zy / scale;
-        detail += texture(uGroundAlbedo, vec3(uv, layer)).rgb * w.x;
-        vec2 b = groundBump(uv, layer);
+        detail += texture(uGroundAlbedo, vec3(uv, layer)) * w.x;
+        vec3 b = groundBump(uv, layer);
         bump += vec3(0.0, b.y, b.x) * w.x;
+        roughness += b.z * w.x;
     }
     if (w.y > 0.02) {
         vec2 uv = position.xz / scale;
-        detail += texture(uGroundAlbedo, vec3(uv, layer)).rgb * w.y;
-        vec2 b = groundBump(uv, layer);
+        detail += texture(uGroundAlbedo, vec3(uv, layer)) * w.y;
+        vec3 b = groundBump(uv, layer);
         bump += vec3(b.x, 0.0, b.y) * w.y;
+        roughness += b.z * w.y;
     }
     if (w.z > 0.02) {
         vec2 uv = position.xy / scale;
-        detail += texture(uGroundAlbedo, vec3(uv, layer)).rgb * w.z;
-        vec2 b = groundBump(uv, layer);
+        detail += texture(uGroundAlbedo, vec3(uv, layer)) * w.z;
+        vec3 b = groundBump(uv, layer);
         bump += vec3(b.x, b.y, 0.0) * w.z;
+        roughness += b.z * w.z;
     }
-    return detail / uGroundMeans[int(layer)];
+    return vec4(detail.rgb / uGroundMeans[int(layer)], detail.a * 2.0 - 1.0);
 }
 
 void main()
@@ -129,29 +138,40 @@ void main()
     float largeScale = smoothstep(- 0.3, 0.3, breakup) * 0.55;
     float treeShade = getTreeShade(p);
     vec3 bump = vec3(0.0);       // world-space tilt of the normal from the textures
+    float occlusion = 1.0;       // the textures' ambient occlusion (crevices between pebbles)
+    float roughness = 0.95;
 
     // ── layers ──
     vec3 color = getGrassColor(getGrassDryness(p), elevation) * (1.0 + speck * 0.16);
     float grassWeight = (1.0 - soilMask) * (1.0 - rockMask) * (1.0 - snowMask) * (1.0 - shoreMask);
     if (textured > 0.0) {
-        color *= mix(vec3(1.0), groundDetail(p / 5.0, 0.0, largeScale), 0.8 * textured);
-        vec2 b = groundBump(p / 5.0, 0.0);
+        vec4 detail = groundDetail(p / 5.0, 0.0, largeScale);
+        color *= mix(vec3(1.0), detail.rgb, 0.8 * textured);
+        vec3 b = groundBump(p / 5.0, 0.0);
         bump += vec3(b.x, 0.0, b.y) * 0.55 * grassWeight;
+        occlusion = mix(1.0, detail.a, grassWeight);
+        roughness = mix(roughness, b.z, grassWeight);
         // leaf litter under the canopy
         float floorMask = smoothstep(0.12, 0.5, treeShade) * (1.0 - rockMask);
         if (floorMask > 0.0) {
-            vec3 litter = vec3(0.25, 0.22, 0.13) * groundDetail(p / 3.5, 5.0, largeScale);
+            vec4 litterDetail = groundDetail(p / 3.5, 5.0, largeScale);
+            vec3 litter = vec3(0.25, 0.22, 0.13) * litterDetail.rgb;
             color = mix(color, litter, floorMask * 0.65 * textured);
-            vec2 f = groundBump(p / 3.5, 5.0);
+            vec3 f = groundBump(p / 3.5, 5.0);
             bump += vec3(f.x, 0.0, f.y) * 0.6 * floorMask;
+            occlusion = mix(occlusion, litterDetail.a, floorMask * 0.65);
+            roughness = mix(roughness, f.z, floorMask * 0.65);
         }
     }
     if (soilMask > 0.0) {
         vec3 soil = mix(vec3(0.25, 0.21, 0.16), vec3(0.34, 0.29, 0.22), smoothstep(- 0.3, 0.3, speck));
         if (textured > 0.0) {
-            soil *= mix(vec3(1.0), groundDetail(p / 4.0, 1.0, largeScale), 0.85 * textured);
-            vec2 b = groundBump(p / 4.0, 1.0);
+            vec4 detail = groundDetail(p / 4.0, 1.0, largeScale);
+            soil *= mix(vec3(1.0), detail.rgb, 0.85 * textured);
+            vec3 b = groundBump(p / 4.0, 1.0);
             bump += vec3(b.x, 0.0, b.y) * 0.8 * soilMask * (1.0 - rockMask);
+            occlusion = mix(occlusion, detail.a, soilMask);
+            roughness = mix(roughness, b.z, soilMask);
         }
         color = mix(color, soil, soilMask);
     }
@@ -166,28 +186,37 @@ void main()
         if (textured > 0.0) {
             // the cliff texture's structure, toned to grey stone, projected three ways
             vec3 rockBump;
-            vec3 detail = triplanarDetail(vWorldPosition, normal, 7.0, 2.0, rockBump);
-            float luma = dot(detail, vec3(0.3, 0.59, 0.11));
-            rock *= mix(vec3(1.0), mix(vec3(luma), detail, 0.3), 0.9 * textured);
+            float rockRoughness;
+            vec4 detail = triplanarDetail(vWorldPosition, normal, 7.0, 2.0, rockBump, rockRoughness);
+            float luma = dot(detail.rgb, vec3(0.3, 0.59, 0.11));
+            rock *= mix(vec3(1.0), mix(vec3(luma), detail.rgb, 0.3), 0.9 * textured);
             bump += rockBump * 1.3 * rockMask;
+            occlusion = mix(occlusion, detail.a, rockMask);
+            roughness = mix(roughness, rockRoughness, rockMask);
         }
         color = mix(color, rock, rockMask);
     }
     if (snowMask > 0.0) {
         vec3 snow = vec3(0.90, 0.92, 0.96);
         if (textured > 0.0) {
-            snow *= mix(vec3(1.0), groundDetail(p / 6.0, 4.0, largeScale), 0.6 * textured);
-            vec2 b = groundBump(p / 6.0, 4.0);
+            vec4 detail = groundDetail(p / 6.0, 4.0, largeScale);
+            snow *= mix(vec3(1.0), detail.rgb, 0.6 * textured);
+            vec3 b = groundBump(p / 6.0, 4.0);
             bump += vec3(b.x, 0.0, b.y) * 0.5 * snowMask;
+            occlusion = mix(occlusion, mix(1.0, detail.a, 0.5), snowMask);
+            roughness = mix(roughness, b.z, snowMask);
         }
         color = mix(color, snow, snowMask);
     }
     if (shoreMask > 0.0) {
         vec3 sand = mix(vec3(0.38, 0.35, 0.28), vec3(0.47, 0.43, 0.34), smoothstep(- 0.3, 0.3, speck));
         if (textured > 0.0) {
-            sand *= mix(vec3(1.0), groundDetail(p / 4.0, 3.0, largeScale), 0.85 * textured);
-            vec2 b = groundBump(p / 4.0, 3.0);
+            vec4 detail = groundDetail(p / 4.0, 3.0, largeScale);
+            sand *= mix(vec3(1.0), detail.rgb, 0.85 * textured);
+            vec3 b = groundBump(p / 4.0, 3.0);
             bump += vec3(b.x, 0.0, b.y) * 0.7 * shoreMask;
+            occlusion = mix(occlusion, detail.a, shoreMask);
+            roughness = mix(roughness, b.z, shoreMask);
         }
         color = mix(color, sand, shoreMask);
     }
@@ -213,11 +242,31 @@ void main()
     float treeShadow = treeShade * (uShadowSplits.w > 0.5 ? smoothstep(uShadowSplits.y * 0.8, uShadowSplits.y, vDepth) : 1.0);
     float sunVisibility = (1.0 - vCloudShadow) * (1.0 - treeShadow) * getSunShadow(vWorldPosition, normal, sunDirection);
     vec3 albedo = toLinear(color);
-    vec3 lit = albedo * getTerrainLight(detailNormal, sunDirection, sunVisibility) * (1.0 - cavity) * (1.0 - treeShade * 0.3);
-    // glint on snow and wet sand
-    if (snowMask + wet > 0.0) {
-        float glint = pow(max(dot(reflect(viewDirection, detailNormal), sunDirection), 0.0), 24.0);
-        lit += getSunLight(sunDirection) * glint * (snowMask * 0.12 + wet * 0.2) * sunVisibility;
+    occlusion = mix(1.0, occlusion, textured);
+    vec3 lit = albedo * getTerrainLight(detailNormal, sunDirection, sunVisibility) * (1.0 - cavity) * (1.0 - treeShade * 0.3) * mix(1.0, occlusion, 0.8);
+
+    // sun highlight (GGX): faint on dry ground, bright where it's wet (water fills the pores)
+    // and on rock and snow
+    roughness = mix(mix(roughness, 0.95, 1.0 - textured), 0.12, wet);
+    vec3 toEye = - viewDirection;
+    vec3 halfway = normalize(sunDirection + toEye);
+    float nl = max(dot(detailNormal, sunDirection), 0.0);
+    if (nl > 0.0 && sunVisibility > 0.0) {
+        float nv = max(dot(detailNormal, toEye), 1e-3);
+        float nh = max(dot(detailNormal, halfway), 0.0);
+        float a = roughness * roughness;
+        float a2 = a * a;
+        float d = a2 / (3.14159265 * pow(nh * nh * (a2 - 1.0) + 1.0, 2.0));
+        float k = a * 0.5;
+        float g = nl / (nl * (1.0 - k) + k) * nv / (nv * (1.0 - k) + k);
+        float fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(halfway, toEye), 0.0), 5.0);
+        float strength = mix(0.35, 1.0, max(wet, max(rockMask, snowMask))) * occlusion;
+        lit += uSunLight * 3.14159265 * d * g * fresnel / (4.0 * nv) * sunVisibility * strength;
+    }
+    // wet ground mirrors the sky a little
+    if (wet > 0.0) {
+        float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(detailNormal, toEye), 0.0), 5.0);
+        lit += getSkyLut(reflect(viewDirection, detailNormal) + vec3(0.0, 0.05, 0.0)) * fresnel * wet * 0.4;
     }
 
     // ── under water: light absorbed along the water column (the surface adds reflections) ──

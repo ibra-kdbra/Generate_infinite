@@ -62,7 +62,8 @@ export default class Terrains {
         const applyDetail = (quality: Quality) => this.material.uniforms.uGroundDetail.value.set(...GROUND_DETAIL[quality])
         applyDetail(settings.get('quality'))
         settings.events.on('change:quality', applyDetail)
-        loadTerrainTextures(Math.min(8, this.view.renderer.instance.capabilities.getMaxAnisotropy()))
+        const textureSize = ['high', 'ultra'].includes(settings.get('quality')) ? 2048 : 1024     // applies after a reload
+        loadTerrainTextures(Math.min(8, this.view.renderer.instance.capabilities.getMaxAnisotropy()), textureSize)
             .then(({ albedo, normal, means }) => {
                 const uniforms = this.material.uniforms
                 uniforms.uGroundAlbedo.value = albedo
