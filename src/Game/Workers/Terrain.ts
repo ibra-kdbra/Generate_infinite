@@ -1,3 +1,4 @@
+import seedrandom from 'seedrandom'
 import { createNoise2D } from './SimplexNoise'
 import { createNoiseWithDerivatives, getElevation, WATER_LEVEL, defaultTerrainShape } from './TerrainShape'
 import { vec3 } from 'gl-matrix'
@@ -12,6 +13,7 @@ onmessage = function (event) {
     const baseX = event.data.x
     const baseZ = event.data.z
     const seed = event.data.seed
+    const forestSeed = event.data.forestSeed as string
     const subdivisions = event.data.subdivisions
     const iterations = event.data.iterations
     const iterationsOffsets = event.data.iterationsOffsets
@@ -377,6 +379,28 @@ onmessage = function (event) {
         }
     }
 
+    /**
+     * Forest canopy: how much of the ground the tree crowns cover, from the very rules
+     * State/Vegetation places its trees with (same noise, same seeds). The terrain shows it
+     * as distant forest beyond where trees are drawn.
+     */
+    const forestNoise = createNoise2D(seedrandom(forestSeed + 'forest'))
+    const detailNoise = createNoise2D(seedrandom(forestSeed + 'detail'))
+    const smooth = (a: number, b: number, x: number) => {
+        const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+        return t * t * (3 - 2 * t)
+    }
+    const vertexCount = positions.length / 3
+    const forest = new Float32Array(vertexCount)
+    for (let i = 0; i < vertexCount; i++) {
+        const x = positions[i * 3], e = positions[i * 3 + 1], z = positions[i * 3 + 2]
+        const n = forestNoise(x * 0.0016, z * 0.0016) * 0.75 + detailNoise(x * 0.007, z * 0.007) * 0.25
+        const treeLine = 1 - smooth(165, 215, e + detailNoise(x * 0.01, z * 0.01) * 25)
+        const flatEnough = 1 - smooth(0.28, 0.42, 1 - Math.max(0, normals[i * 3 + 1]))
+        const shore = smooth(0.6, 2.5, e - WATER_LEVEL)
+        forest[i] = smooth(0.0, 0.35, n) * treeLine * flatEnough * shore
+    }
+
     // Post
     postMessage({
         id: id,
@@ -384,6 +408,7 @@ onmessage = function (event) {
         normals: normals,
         indices: indices,
         texture: texture,
-        uv: uv
+        uv: uv,
+        forest: forest
     })
 }

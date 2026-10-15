@@ -173,6 +173,7 @@ export default class Terrains {
             x: terrain.x,
             z: terrain.z,
             seed: this.seed,
+            forestSeed: this.game.seed + 'vegetation',     // State/Vegetation's forest map
             subdivisions: this.subdivisionsFor(terrain.size),
             iterations: iterations,
             iterationsOffsets: this.iterationsOffsets,

@@ -9,6 +9,9 @@ varying float vDepth;
 varying vec3 vHaze;
 varying float vHazeAmount;
 varying float vCloudShadow;
+varying float vForest;
+
+attribute float aForest;         // tree crown cover (Workers/Terrain.ts)
 
 #include ../partials/getSkyLut.glsl
 #include ../partials/getAerialFog.glsl
@@ -28,6 +31,7 @@ void main()
     // r, g = horizontal normal (x, z); up is rebuilt (always >= 0 on a heightmap)
     vNormal = vec3(terrainData.r, sqrt(max(0.0, 1.0 - terrainData.r * terrainData.r - terrainData.g * terrainData.g)), terrainData.g);
     vGrassDensity = terrainData.b;
+    vForest = aForest;
     vWorldPosition = modelPosition.xyz;
     vDepth = - viewPosition.z;
 

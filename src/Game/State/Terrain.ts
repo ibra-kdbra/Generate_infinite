@@ -17,6 +17,7 @@ export default class Terrain {
     indices!: Uint32Array
     texture!: Uint8Array
     uv!: Float32Array
+    forest!: Float32Array        // tree crown cover per vertex (distant forests)
 
     constructor(terrains: Terrains, id: string, size: number, x: number, z: number, precision: number) {
         this.terrains = terrains
@@ -33,7 +34,8 @@ export default class Terrain {
         this.events = new EventEmitter()
     }
 
-    create(data: { positions: Float32Array; normals: Float32Array; indices: Uint32Array; texture: Uint8Array; uv: Float32Array }) {
+    create(data: { positions: Float32Array; normals: Float32Array; indices: Uint32Array; texture: Uint8Array; uv: Float32Array; forest: Float32Array }) {
+        this.forest = data.forest
         this.positions = data.positions
         this.normals = data.normals
         this.indices = data.indices

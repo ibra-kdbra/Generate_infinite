@@ -44,7 +44,8 @@ const SWAY: Record<PlantKind, number> = { [PLANT.CONIFER]: 0.012, [PLANT.BROADLE
 const NEAR: Record<Quality, number> = { low: 28, medium: 50, high: 80, ultra: 125 }
 const BAND = 10
 const VIEWS = 8
-const CELL = 256
+// billboard atlas cell (pixels per baked view), by quality when the trees are built
+const CELLS: Record<Quality, number> = { low: 192, medium: 256, high: 384, ultra: 448 }
 
 type Instances = { instance: THREE.InstancedBufferAttribute, extra: THREE.InstancedBufferAttribute }
 type Variant = {
@@ -117,7 +118,7 @@ export default class Trees {
         if (!texture) {
             texture = this.loader.load(`/textures/trees/${name}.webp`)
             texture.wrapS = texture.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping
-            texture.anisotropy = 4
+            texture.anisotropy = 8
             this.textures.set(name, texture)
         }
         return texture
@@ -260,6 +261,7 @@ export default class Trees {
     /** Render every variant from eight directions into the billboard atlases. */
     private bakeImpostors() {
         const renderer = this.view.renderer.instance
+        const CELL = CELLS[this.settings.get('quality')]
         const width = CELL * VIEWS, height = CELL * this.variants.length
         const options = { minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true }
         const albedo = new THREE.WebGLRenderTarget(width, height, options)

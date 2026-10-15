@@ -15,6 +15,7 @@ export default class TerrainMaterial extends THREE.ShaderMaterial {
                 uWaterLevel: { value: 0 },
                 uGrassDryness: { value: 0 },
                 uSkyLut: { value: null },
+                uForestFade: { value: new THREE.Vector2(400, 480) },
                 uReliefTexture: { value: null },
                 uTreeShade: { value: null },
                 uWetMap: { value: null },

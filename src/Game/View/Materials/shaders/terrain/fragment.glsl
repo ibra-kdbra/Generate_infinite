@@ -21,6 +21,7 @@ uniform float uGroundReady;
 uniform sampler2D uWetMap;          // wet footprints and drips near the player (GroundWetness.ts)
 uniform vec2 uWetOrigin;
 uniform float uWetSize;
+uniform vec2 uForestFade;          // trees are drawn up to here around the player; beyond, the canopy colour
 uniform vec3 uGroundDetail;        // fade start, fade end (m), 1 = second texture scale against tiling
 
 varying vec3 vWorldPosition;
@@ -30,6 +31,7 @@ varying float vDepth;
 varying vec3 vHaze;
 varying float vHazeAmount;
 varying float vCloudShadow;
+varying float vForest;
 
 #include ../partials/getGrassAttenuation.glsl
 #include ../partials/getGrassColor.glsl
@@ -222,6 +224,17 @@ void main()
     }
     color *= mix(1.0, 0.55, wet);
 
+    // ── distant forests: past where trees are drawn, the crowns' colour, clumped ──
+    float canopy = vForest * smoothstep(uForestFade.x, uForestFade.y, distance(vWorldPosition.xz, uPlayerPosition.xz));
+    if (canopy > 0.0) {
+        float crowns = noise3(p * 0.045).r + noise3(p * 0.13).g * 0.6;
+        float cover = smoothstep(0.15, 0.55, canopy + crowns * 0.35);
+        vec3 leaves = mix(vec3(0.10, 0.15, 0.07), vec3(0.19, 0.25, 0.11), smoothstep(- 0.35, 0.35, crowns));
+        leaves = mix(leaves, vec3(0.09, 0.13, 0.09), smoothstep(60.0, 150.0, elevation) * 0.6);     // conifers higher up
+        color = mix(color, leaves, cover);
+        canopy = cover;
+    }
+
     // Under the grass field the ground is shaded by the blades (fades exactly as they do)
     float grassAttenuation = getGrassAttenuation(p) * (1.0 - rockMask) * (1.0 - snowMask) * vGrassDensity;
     color *= mix(1.0, 0.72, grassAttenuation);
@@ -244,6 +257,7 @@ void main()
     vec3 albedo = toLinear(color);
     occlusion = mix(1.0, occlusion, textured);
     vec3 lit = albedo * getTerrainLight(detailNormal, sunDirection, sunVisibility) * (1.0 - cavity) * (1.0 - treeShade * 0.3) * mix(1.0, occlusion, 0.8);
+    lit *= 1.0 - canopy * 0.3;     // crowns shade each other
 
     // sun highlight (GGX): faint on dry ground, bright where it's wet (water fills the pores)
     // and on rock and snow

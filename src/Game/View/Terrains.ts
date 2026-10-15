@@ -93,6 +93,9 @@ export default class Terrains {
 
         this.material.uniforms.uPlayerPosition.value.set(playerPosition[0], playerPosition[1], playerPosition[2])
         this.material.uniforms.uSunPosition.value.set(sunState.position.x, sunState.position.y, sunState.position.z)
+        // the trees' billboards reach to the vegetation radius; the canopy colour takes over there
+        const radius = this.state.vegetation.radius
+        this.material.uniforms.uForestFade.value.set(radius * 0.8, radius * 0.97)
     }
 
     /**
