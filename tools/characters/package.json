@@ -1,0 +1,11 @@
+{
+  "name": "generate-infinite-characters",
+  "private": true,
+  "type": "module",
+  "description": "Builds public/models/characters from Quaternius' CC0 character packs (see build.mjs)",
+  "dependencies": {
+    "@gltf-transform/core": "^4.2.0",
+    "@gltf-transform/extensions": "^4.2.0",
+    "@gltf-transform/functions": "^4.2.0"
+  }
+}

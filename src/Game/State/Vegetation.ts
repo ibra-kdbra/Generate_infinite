@@ -1,0 +1,261 @@
+import seedrandom from 'seedrandom'
+
+import Game from '../Game'
+import State from './State'
+import Settings, { Quality } from '../Settings'
+import { createNoise2D, NoiseFunction2D } from '../Workers/SimplexNoise'
+import { WATER_LEVEL } from '../Workers/TerrainShape'
+import { vec3 } from 'gl-matrix'
+
+export const PLANT = { CONIFER: 0, BROADLEAF: 1, BUSH: 2, ROCK: 3 } as const
+export type PlantKind = typeof PLANT[keyof typeof PLANT]
+
+export type Plant = {
+    kind: PlantKind
+    x: number
+    y: number
+    z: number
+    scale: number        // trees: height (m); rocks: radius (m)
+    rotation: number
+    tint: number         // 0..1 colour variation
+    collision: number    // radius the player can't enter (0 = walk through)
+}
+
+type Cell = { ix: number, iz: number, plants: Plant[], chunkSize: number }
+
+// How far around the player the world is populated
+const RADIUS: Record<Quality, number> = { low: 300, medium: 480, high: 640, ultra: 820 }
+
+const smoothstep = (a: number, b: number, v: number) => {
+    const t = Math.min(1, Math.max(0, (v - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+}
+
+/**
+ * Trees, bushes and rocks, placed deterministically per 32 m cell of the infinite world
+ * (the same seed always grows the same forest) from noise and the terrain under them:
+ * forests in broad patches, conifers taking over with altitude and on slopes, broadleaf
+ * trees in the lowlands, a tree line around 200 m, nothing in the water or on cliffs;
+ * boulders on slopes and toward the mountains, the odd one in a meadow. Cells are filled
+ * as the terrain under them is generated and dropped behind the player; heights are
+ * re-read when the terrain there gets more detailed. Trunks and big rocks collide.
+ */
+export default class Vegetation {
+    game: Game
+    state: State
+    cellSize = 32
+    radius = RADIUS.medium
+    cells = new Map<string, Cell>()
+    version = 0                    // changes whenever the set of plants changes
+
+    private seed: string
+    private forestNoise: NoiseFunction2D
+    private detailNoise: NoiseFunction2D
+    private timer = 0
+
+    constructor() {
+        this.game = Game.getInstance()
+        this.state = State.getInstance()
+        this.seed = this.game.seed + 'vegetation'
+        this.forestNoise = createNoise2D(seedrandom(this.seed + 'forest'))
+        this.detailNoise = createNoise2D(seedrandom(this.seed + 'detail'))
+
+        const settings = Settings.getInstance()
+        this.radius = RADIUS[settings.get('quality')]
+        settings.events.on('change:quality', (quality: Quality) => {
+            this.radius = RADIUS[quality]
+            this.timer = 0
+        })
+    }
+
+    private elevation(x: number, z: number) {
+        const e = this.state.chunks.getElevationForPosition(x, z)
+        return typeof e === 'number' && !Number.isNaN(e) ? e : undefined
+    }
+
+    private chunkSizeAt(x: number, z: number) {
+        const chunk = this.state.chunks.getDeepestChunkForPosition(x, z)
+        return chunk ? chunk.size : Infinity
+    }
+
+    /** 0..1: how much this spot is forest (broad patches with ragged edges). */
+    forestAt(x: number, z: number) {
+        const n = this.forestNoise(x * 0.0016, z * 0.0016) * 0.75 + this.detailNoise(x * 0.007, z * 0.007) * 0.25
+        return smoothstep(0.0, 0.35, n)
+    }
+
+    private generate(ix: number, iz: number): Plant[] | null {
+        const size = this.cellSize
+        const random = seedrandom(`${this.seed}:${ix}:${iz}`)
+        const plants: Plant[] = []
+
+        for (let i = 0; i < 22; i++) {
+            const x = (ix + random()) * size
+            const z = (iz + random()) * size
+            const roll = random(), pick = random(), a = random(), b = random(), c = random()
+
+            const e = this.elevation(x, z)
+            if (e === undefined)
+                return null                  // terrain not there yet: try again later
+            const ex = this.elevation(x + 1.5, z) ?? e
+            const ez = this.elevation(x, z + 1.5) ?? e
+            const slope = 1 - 1.5 / Math.hypot(ex - e, 1.5, ez - e)     // 0 flat .. 1 vertical
+            const height = e - WATER_LEVEL
+            if (height < 0.4)
+                continue                     // water and the waterline
+
+            const forest = this.forestAt(x, z)
+            const treeLine = 1 - smoothstep(165, 215, e + this.detailNoise(x * 0.01, z * 0.01) * 25)
+            const flatEnough = 1 - smoothstep(0.28, 0.42, slope)
+            const shore = smoothstep(0.6, 2.5, height)
+
+            // trees: dense in forests, a few lone ones in the open
+            const tree = (forest * 0.62 + 0.012) * treeLine * flatEnough * shore
+            if (roll < tree) {
+                const coniferous = smoothstep(35, 120, e + this.detailNoise(x * 0.004, z * 0.004) * 45) * 0.8 + slope * 0.6
+                const conifer = pick < coniferous
+                const scale = conifer ? 9 + a * 11 : 8 + a * 8
+                plants.push({
+                    kind: conifer ? PLANT.CONIFER : PLANT.BROADLEAF, x, y: e - 0.15, z, scale,
+                    rotation: b * Math.PI * 2, tint: c, collision: conifer ? scale * 0.028 : scale * 0.035
+                })
+                continue
+            }
+
+            // bushes: forest edges and meadows
+            const bush = (smoothstep(0.05, 0.4, forest) * (1 - smoothstep(0.6, 0.9, forest)) * 0.25 + 0.02) * treeLine * flatEnough * shore
+            if (roll < tree + bush) {
+                plants.push({ kind: PLANT.BUSH, x, y: e - 0.1, z, scale: 0.8 + a * 1.2, rotation: b * Math.PI * 2, tint: c, collision: 0 })
+                continue
+            }
+
+            // rocks: slopes and mountains, the odd boulder in a meadow
+            const rock = 0.012 + smoothstep(0.18, 0.5, slope) * 0.22 + smoothstep(120, 220, e) * 0.08
+            if (roll < tree + bush + rock && slope < 0.75) {
+                const scale = 0.35 + Math.pow(a, 2.2) * 2.6
+                plants.push({
+                    kind: PLANT.ROCK, x, y: e - scale * 0.35, z, scale,
+                    rotation: b * Math.PI * 2, tint: c, collision: scale > 0.55 ? scale * 0.8 : 0
+                })
+            }
+        }
+        return plants
+    }
+
+    update() {
+        this.timer -= this.state.time.delta
+        if (this.timer > 0)
+            return
+        this.timer = 0.2
+
+        const p = this.state.player.position.current
+        const size = this.cellSize
+        const reach = Math.ceil(this.radius / size)
+        const cx = Math.floor(p[0] / size), cz = Math.floor(p[2] / size)
+        let changed = false
+
+        // drop cells left behind
+        for (const [key, cell] of this.cells) {
+            const dx = (cell.ix + 0.5) * size - p[0], dz = (cell.iz + 0.5) * size - p[2]
+            if (Math.hypot(dx, dz) > this.radius + size * 2) {
+                this.cells.delete(key)
+                changed = true
+            }
+        }
+
+        // fill new cells, nearest first, a budget per update
+        let budget = 90
+        for (let ring = 0; ring <= reach && budget > 0; ring++) {
+            for (let ix = cx - ring; ix <= cx + ring && budget > 0; ix++) {
+                for (let iz = cz - ring; iz <= cz + ring && budget > 0; iz++) {
+                    if (Math.max(Math.abs(ix - cx), Math.abs(iz - cz)) !== ring)
+                        continue
+                    const centerX = (ix + 0.5) * size, centerZ = (iz + 0.5) * size
+                    const distance = Math.hypot(centerX - p[0], centerZ - p[2])
+                    if (distance > this.radius)
+                        continue
+                    const key = `${ix}:${iz}`
+                    const cell = this.cells.get(key)
+                    const chunkSize = this.chunkSizeAt(centerX, centerZ)
+                    if (cell) {
+                        // the terrain got more detailed here: re-read the heights
+                        if (chunkSize < cell.chunkSize && distance < 260) {
+                            for (const plant of cell.plants) {
+                                const e = this.elevation(plant.x, plant.z)
+                                if (e !== undefined)
+                                    plant.y = plant.kind === PLANT.ROCK ? e - plant.scale * 0.35 : e - 0.15
+                            }
+                            cell.chunkSize = chunkSize
+                            changed = true
+                            budget -= 2
+                        }
+                        continue
+                    }
+                    budget -= 6
+                    const plants = this.generate(ix, iz)
+                    if (plants) {
+                        this.cells.set(key, { ix, iz, plants, chunkSize })
+                        changed = true
+                    }
+                }
+            }
+        }
+
+        if (changed)
+            this.version++
+    }
+
+    /** How tall a plant's solid part is: a trunk up to where the crown starts, a boulder's top. */
+    private solidTop(plant: Plant) {
+        if (plant.kind === PLANT.ROCK)
+            return plant.y + plant.scale * 1.3
+        return plant.y + plant.scale * (plant.kind === PLANT.CONIFER ? 0.35 : 0.45)
+    }
+
+    /**
+     * Push a point out of the trunks and boulders around it (the player's and the cameras'
+     * collision). Returns whether anything was hit.
+     */
+    resolveCollision(position: vec3, radius: number) {
+        const size = this.cellSize
+        const cx = Math.floor(position[0] / size), cz = Math.floor(position[2] / size)
+        let hit = false
+        for (let ix = cx - 1; ix <= cx + 1; ix++) {
+            for (let iz = cz - 1; iz <= cz + 1; iz++) {
+                const cell = this.cells.get(`${ix}:${iz}`)
+                if (!cell)
+                    continue
+                for (const plant of cell.plants) {
+                    if (plant.collision <= 0 || position[1] > this.solidTop(plant) + radius)
+                        continue
+                    const dx = position[0] - plant.x, dz = position[2] - plant.z
+                    const distance = Math.hypot(dx, dz)
+                    const minimum = plant.collision + radius
+                    if (distance < minimum && distance > 1e-4) {
+                        position[0] = plant.x + dx / distance * minimum
+                        position[2] = plant.z + dz / distance * minimum
+                        hit = true
+                    }
+                }
+            }
+        }
+        return hit
+    }
+
+    /** Whether a point is inside a trunk or a boulder (camera line-of-sight checks). */
+    isSolid(x: number, y: number, z: number, radius: number) {
+        const size = this.cellSize
+        const cx = Math.floor(x / size), cz = Math.floor(z / size)
+        for (let ix = cx - 1; ix <= cx + 1; ix++) {
+            for (let iz = cz - 1; iz <= cz + 1; iz++) {
+                const cell = this.cells.get(`${ix}:${iz}`)
+                if (!cell)
+                    continue
+                for (const plant of cell.plants)
+                    if (plant.collision > 0 && y < this.solidTop(plant) + radius && Math.hypot(x - plant.x, z - plant.z) < plant.collision + radius)
+                        return true
+            }
+        }
+        return false
+    }
+}
