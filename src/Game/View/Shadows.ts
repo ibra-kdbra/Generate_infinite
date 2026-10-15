@@ -87,10 +87,16 @@ export default class Shadows {
         this.enabled = preset !== null
         this.uniforms.uShadowSplits.value.w = this.enabled ? 1 : 0
         if (!preset) {
-            // samplers still need a depth texture bound
+            // the samplers still need a depth texture, set up for comparison: one that's never
+            // been rendered to isn't, and WebGL refuses to draw anything sampling it
             const dummy = this.createTarget(1)
+            const renderer = this.view.renderer.instance
+            renderer.setRenderTarget(dummy)
+            renderer.clear(false, true, false)
+            renderer.setRenderTarget(null)
             for (let i = 0; i < 3; i++)
                 this.uniforms[`uShadowMap${i}`].value = dummy.depthTexture
+            this.cascades.push({ target: dummy, camera: new THREE.OrthographicCamera(), matrix: new THREE.Matrix4(), size: 1, terrainOnly: false, interval: 1 })     // disposed with the rest
             return
         }
         this.splits = preset.splits
@@ -214,7 +220,7 @@ export default class Shadows {
 
     update() {
         this.uniforms.uViewPosition.value.copy(this.view.camera.instance.position)
-        if (!this.enabled)
+        if (!this.enabled || !this.cascades.length)
             return
         const sunState = this.state.sun.position
         const sun = new THREE.Vector3(sunState.x, sunState.y, sunState.z).normalize()

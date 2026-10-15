@@ -136,7 +136,9 @@ void main()
         wet = max(wet, texture2D(uWetMap, wetUv).r);
 
     // ── photo-scanned detail close up ──
-    float textured = uGroundReady * (1.0 - smoothstep(uGroundDetail.x, uGroundDetail.y, vDepth));
+    // (low quality has no texture detail: (0, 0), where smoothstep is undefined; a NaN here
+    // would spread over the whole frame through the bloom)
+    float textured = uGroundDetail.y > uGroundDetail.x ? uGroundReady * (1.0 - smoothstep(uGroundDetail.x, uGroundDetail.y, vDepth)) : 0.0;
     float largeScale = smoothstep(- 0.3, 0.3, breakup) * 0.55;
     float treeShade = getTreeShade(p);
     vec3 bump = vec3(0.0);       // world-space tilt of the normal from the textures

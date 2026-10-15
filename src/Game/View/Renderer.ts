@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, SMAAPreset } from 'postprocessing'
+import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, SMAAPreset, BlendFunction } from 'postprocessing'
 import { N8AOPostPass } from 'n8ao'
 import Game from '../Game'
 import View from './View'
@@ -139,7 +139,8 @@ export default class Renderer {
             this.aoPass.setQualityMode(post.ao)
             this.aoPass.configuration.halfRes = post.aoHalfRes
         }
-        this.bloom.blendMode.opacity.value = post.bloom ? 1 : 0
+        // skipped entirely when off (not just faded out: that would still run it)
+        this.bloom.blendMode.blendFunction = post.bloom ? BlendFunction.ADD : BlendFunction.SKIP
         this.smaaPass.enabled = post.smaa !== null
         if (post.smaa !== null)
             this.smaa.applyPreset(post.smaa)
