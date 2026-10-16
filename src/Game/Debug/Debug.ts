@@ -211,12 +211,14 @@ export default class Debug {
         live.appendChild(this.graph)
         this.setStat = ui.readouts(live, [
             ['fps', 'Frame rate'], ['ms', 'Frame time (average / worst)'], ['resolution', 'Render resolution'],
-            ['calls', 'Draw calls'], ['triangles', 'Triangles'], ['world', 'Chunks · grass patches'], ['plants', 'Trees near · mid · far · plants']
+            ['calls', 'Draw calls'], ['triangles', 'Triangles'], ['world', 'Chunks · grass patches'], ['plants', 'Trees near · mid · far · plants'], ['hidden', 'Trees hidden behind hills']
         ])
 
         const options = ui.group(page, 'Performance')
         ui.toggle(options, 'Adaptive resolution', () => settings.get('resolution') === 'auto', (on) => settings.set('resolution', on ? 'auto' : 'full'), 'Lower the resolution while frames run slow')
-        // more switches join here (texture compression, culling, anti-aliasing, threads)
+        ui.toggle(options, 'Hide trees behind hills', () => settings.get('hideHidden'), (on) => settings.set('hideHidden', on), 'Skip drawing what the terrain hides from the camera')
+        ui.toggle(options, 'Compressed ground textures', () => settings.get('textureCompression'), (on) => settings.set('textureCompression', on), 'A quarter of the graphics memory; applies after a reload')
+        // more switches join here
         const holder = document.createElement('div')
         holder.className = 'ctl-body'
         holder.dataset.performance = ''
@@ -292,6 +294,7 @@ export default class Debug {
         for (const cell of state.vegetation.cells.values())
             plants += cell.plants.length
         set('plants', `${view.trees.counts.near} · ${view.trees.counts.mid} · ${view.trees.counts.far} · ${plants.toLocaleString()}`)
+        set('hidden', view.horizon.enabled ? view.trees.counts.hidden.toLocaleString() : 'off')
 
         // frame-time graph: lines at 60 and 30 fps, taller = slower
         const context = this.graph.getContext('2d')!

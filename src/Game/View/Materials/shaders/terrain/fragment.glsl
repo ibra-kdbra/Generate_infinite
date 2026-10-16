@@ -55,11 +55,11 @@ vec4 groundDetail(vec2 uv, float layer, float largeScale)
     return vec4(a.rgb / uGroundMeans[int(layer)], a.a * 2.0 - 1.0);
 }
 
-// xy: the normal map's tilt; z: roughness
+// xy: the normal map's tilt; z: roughness (packed: x in alpha, y in green, roughness in red)
 vec3 groundBump(vec2 uv, float layer)
 {
-    vec3 n = texture(uGroundNormal, vec3(uv, layer)).xyz;
-    return vec3(n.xy * 2.0 - 1.0, n.z);
+    vec4 n = texture(uGroundNormal, vec3(uv, layer));
+    return vec3(vec2(n.a, n.g) * 2.0 - 1.0, n.r);
 }
 
 // Triplanar: the texture projected along x, y and z, blended by how the surface faces, so

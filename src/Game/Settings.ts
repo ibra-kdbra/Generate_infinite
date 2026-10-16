@@ -65,6 +65,8 @@ type Values = {
     resolution: Resolution
     weather: Weather
     volume: number
+    textureCompression: boolean
+    hideHidden: boolean
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -76,7 +78,9 @@ const defaults: Values = {
     dayLength: '20',
     resolution: 'auto',
     weather: 'auto',
-    volume: 0.6
+    volume: 0.6,
+    textureCompression: true,
+    hideHidden: true
 }
 
 /**
@@ -145,6 +149,8 @@ export default class Settings {
             if (stored.dayLength in DAY_LENGTHS) valid.dayLength = stored.dayLength
             if (stored.resolution in RESOLUTIONS) valid.resolution = stored.resolution
             if (stored.weather in WEATHERS) valid.weather = stored.weather
+            if (typeof stored.textureCompression === 'boolean') valid.textureCompression = stored.textureCompression
+            if (typeof stored.hideHidden === 'boolean') valid.hideHidden = stored.hideHidden
             if (typeof stored.volume === 'number' && stored.volume >= 0 && stored.volume <= 1) valid.volume = stored.volume
             return valid
         }

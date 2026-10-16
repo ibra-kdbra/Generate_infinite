@@ -109,7 +109,8 @@ export default class Trees {
     near = NEAR.medium
     uniforms: Record<string, THREE.IUniform>
     impostor!: { mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>, instances: Instances }
-    counts = { near: 0, mid: 0, far: 0 }
+    counts = { near: 0, mid: 0, far: 0, hidden: 0 }
+    private horizonVersion = - 1
     windStrength = 1                     // gusts in storms (Weather.ts)
 
     private loader = new THREE.TextureLoader()
@@ -474,6 +475,8 @@ export default class Trees {
         const mid: number[][] = this.variants.map(() => [])
         const far: number[] = []
         const fullEnd = this.fullEnd
+        const horizon = this.view.horizon
+        let hidden = 0
         for (const cell of this.state.vegetation.cells.values()) {
             for (const plant of cell.plants) {
                 const options = byKind.get(plant.kind)
@@ -481,6 +484,11 @@ export default class Trees {
                     continue
                 const index = options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))]
                 const distance = Math.hypot(plant.x - p[0], plant.z - p[2])
+                // behind a hill: not drawn at all
+                if (distance > 30 && !horizon.visible(plant.x, plant.y + plant.scale, plant.z)) {
+                    hidden++
+                    continue
+                }
                 if (distance < fullEnd)
                     near[index].push(plant.x, plant.y, plant.z, plant.scale, plant.rotation)
                 else if (distance < this.near + BAND)
@@ -527,7 +535,9 @@ export default class Trees {
         this.impostor.mesh.geometry.instanceCount = farCount
         this.counts.far = farCount
 
+        this.counts.hidden = hidden
         this.version = this.state.vegetation.version
+        this.horizonVersion = horizon.version
         this.builtAt.set(p[0], p[2])
     }
 
@@ -621,7 +631,7 @@ export default class Trees {
             return
         this.updateFelled(Math.min(this.state.time.delta, 0.05))
         const p = this.state.player.position.current
-        if (this.version !== this.state.vegetation.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 6)
+        if (this.version !== this.state.vegetation.version || this.horizonVersion !== this.view.horizon.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 6)
             this.rebuild()
         const sun = this.state.sun.position
         this.uniforms.uTime.value = this.state.time.elapsed

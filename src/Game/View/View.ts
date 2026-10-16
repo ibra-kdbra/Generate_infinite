@@ -22,6 +22,7 @@ import Particles from './Particles'
 import Weather from './Weather'
 import Birds from './Birds'
 import Audio from './Audio'
+import Horizon from './Horizon'
 
 import * as THREE from 'three'
 
@@ -47,6 +48,7 @@ export default class View {
     weather!: Weather
     birds!: Birds
     audio!: Audio
+    horizon!: Horizon
     terrains!: Terrains
     chunks!: Chunks
     player!: Player
@@ -79,6 +81,7 @@ export default class View {
         this.player = new Player()
         this.grass = new Grass()
         this.vegetation = new Vegetation()
+        this.horizon = new Horizon()
         this.trees = new Trees()
         this.ferns = new Ferns()
         this.splashes = new Splashes()
@@ -117,6 +120,7 @@ export default class View {
         this.tools.place()            // the tool in the posed hand
         this.grass.update()
         this.vegetation.update()
+        this.horizon.update()
         this.trees.update()
         this.ferns.update()
         this.splashes.update()

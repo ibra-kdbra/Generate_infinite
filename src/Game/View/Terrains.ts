@@ -29,6 +29,7 @@ export default class Terrains {
     viewport: Viewport
     sky: Sky
     material!: TerrainMaterial
+    texturesCompressed = false
 
     constructor() {
         this.game = Game.getInstance()
@@ -63,8 +64,14 @@ export default class Terrains {
         applyDetail(settings.get('quality'))
         settings.events.on('change:quality', applyDetail)
         const textureSize = ['high', 'ultra'].includes(settings.get('quality')) ? 2048 : 1024     // applies after a reload
-        loadTerrainTextures(Math.min(8, this.view.renderer.instance.capabilities.getMaxAnisotropy()), textureSize)
-            .then(({ albedo, normal, means }) => {
+        const renderer = this.view.renderer.instance
+        const compress = settings.get('textureCompression') && renderer.extensions.has('WEBGL_compressed_texture_s3tc')
+        const started = performance.now()
+        loadTerrainTextures(Math.min(8, renderer.capabilities.getMaxAnisotropy()), textureSize, compress)
+            .then(({ albedo, normal, means, compressed }) => {
+                this.texturesCompressed = compressed
+                if (import.meta.env.DEV)
+                    console.info(`[terrain] ground textures ${compressed ? 'compressed (BC3)' : 'uncompressed'} in ${Math.round(performance.now() - started)} ms`)
                 const uniforms = this.material.uniforms
                 uniforms.uGroundAlbedo.value = albedo
                 uniforms.uGroundNormal.value = normal

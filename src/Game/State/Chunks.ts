@@ -277,12 +277,12 @@ export default class Chunks {
     }
 
     getElevationForPosition(x: number, z: number) {
-        const currentChunk = this.getDeepestChunkForPosition(x, z)
-
-        if (!currentChunk || !currentChunk.terrain)
+        let chunk: Chunk | null | false | undefined = this.getDeepestChunkForPosition(x, z)
+        // a chunk just split has no terrain yet: its parent's (coarser) is still there
+        while (chunk && !(chunk.terrain && chunk.terrain.ready))
+            chunk = chunk.parent
+        if (!chunk)
             return false
-
-        const elevation = currentChunk.terrain.getElevationForPosition(x, z)
-        return elevation
+        return chunk.terrain.getElevationForPosition(x, z)
     }
 }
