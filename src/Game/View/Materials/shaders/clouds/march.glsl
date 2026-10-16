@@ -22,6 +22,8 @@ uniform float uSteps;                   // 0: a single flat layer (low quality)
 uniform float uLightSteps;
 uniform float uFrame;
 uniform float uCloudTime;
+uniform vec2 uMarchOffset;              // the pixel of each 2 x 2 block marched this frame
+uniform vec2 uFullResolution;           // the clouds' (resolved) resolution
 
 varying vec2 vUv;
 
@@ -136,7 +138,10 @@ float lightDepth(vec3 world, vec3 local, vec3 light)
 
 void main()
 {
-    vec4 farPoint = uInverseViewProjection * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+    // this texel stands for one pixel of a 2 x 2 block of the full cloud picture
+    vec2 pixel = floor(gl_FragCoord.xy) * 2.0 + uMarchOffset + 0.5;
+    vec2 uv = pixel / uFullResolution;
+    vec4 farPoint = uInverseViewProjection * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
     vec3 direction = normalize(farPoint.xyz / farPoint.w);
     vec3 sun = normalize(uSunPosition);
     // by night the moon lights the clouds, from the other side
@@ -189,7 +194,7 @@ void main()
     }
     else {
         float stepLength = (tEnd - tStart) / uSteps;
-        float t = tStart + stepLength * jitter(gl_FragCoord.xy, uFrame);
+        float t = tStart + stepLength * jitter(pixel, uFrame);
         vec3 ground = vec3(uCameraPosition.x, 0.0, uCameraPosition.z);
         int empty = 0;
         for (int i = 0; i < 192; i++) {

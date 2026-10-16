@@ -1,13 +1,13 @@
 import Game from '../Game'
-import Settings, { DAY_LENGTHS, DayLength } from '../Settings'
+import Settings, { DAY_LENGTHS, WEATHERS, DayLength, Weather } from '../Settings'
 import Camera from '../State/Camera'
 import DayCycle from '../State/DayCycle'
 import { TerrainShape } from '../Workers/TerrainShape'
-
-type Slider = { label: string, min: number, max: number, step: number, get: () => number, set: (value: number) => void, format?: (value: number) => string, onRelease?: boolean }
+import Ui from '../Ui'
+import { Tab } from '../Menu'
 
 const SHAPE_LABELS: Record<keyof TerrainShape, [string, number, number, number]> = {
-    regionFrequency: ['Region size (freq)', 0.0001, 0.002, 0.00001],
+    regionFrequency: ['Region size (frequency)', 0.0001, 0.002, 0.00001],
     warpFrequency: ['Warp frequency', 0, 0.005, 0.0001],
     warpAmount: ['Warp amount (m)', 0, 300, 1],
     hillFrequency: ['Hill frequency', 0.0005, 0.02, 0.0001],
@@ -22,11 +22,16 @@ const SHAPE_LABELS: Record<keyof TerrainShape, [string, number, number, number]>
     lakeDepth: ['Lake depth (m)', 0.5, 40, 0.5]
 }
 
+const percent = (v: number) => `${Math.round(v * 100)} %`
+const clock = (h: number) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor(h * 60) % 60).padStart(2, '0')}`
+const compass = (degrees: number) => ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'][Math.round(((degrees % 360) + 360) % 360 / 45) % 8]
+
 /**
- * Developer panel (B): live performance with a frame-time graph, time of day, world seed and
- * terrain shape, clouds, rendering (exposure, look, AO, bloom), layer toggles, camera and
- * player tuning. Opens and closes without
- * reloading; every control works on the running game.
+ * The menu's tuning pages (they used to be a separate developer panel): Sky (time of day,
+ * weather, clouds and wind, the night sky), World (seed and terrain shape), Visuals (exposure,
+ * the film look, ambient occlusion, bloom, layers), Player (camera and movement) and Stats
+ * (live performance with a frame-time graph, and the performance options). B opens Stats.
+ * Every control works on the running game without reloading.
  */
 export default class Debug {
     static instance: Debug
@@ -36,200 +41,130 @@ export default class Debug {
     }
 
     game: Game
-    element: HTMLElement
-    open = false
-    private readouts = new Map<string, HTMLElement>()
+    private ui = new Ui()
     private graph!: HTMLCanvasElement
     private frameTimes: number[] = []
     private last = performance.now()
     private readoutTimer = 0
-    private sliders: { input: HTMLInputElement, value: HTMLElement, slider: Slider }[] = []
+    private setStat!: (key: string, text: string) => void
 
     constructor(game: Game) {
         Debug.instance = this
         this.game = game
+        const menu = game.menu
 
-        this.element = document.createElement('div')
-        this.element.className = 'dev-panel'
-        this.element.hidden = true
-        this.element.setAttribute('role', 'dialog')
-        this.element.setAttribute('aria-label', 'Developer panel')
-        this.element.innerHTML = `<header><div><p class="drawer-eyebrow">Tuning</p><h2>Developer</h2></div>`
-            + `<button class="icon-button is-quiet" data-close aria-label="Close" title="Close (B)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>`
-        this.element.querySelector('[data-close]')!.addEventListener('click', () => this.toggle())
-        document.querySelector('.ui')!.appendChild(this.element)
+        this.buildSky(menu.panel('sky'))
+        this.buildWorld(menu.panel('world'))
+        this.buildVisuals(menu.panel('visuals'))
+        this.buildPlayer(menu.panel('player'))
+        this.buildStats(menu.panel('stats'))
 
-        this.build()
-        game.state.controls.events.on('debugDown', () => this.toggle())
+        menu.events.on('show', () => this.ui.refresh())
+        game.state.controls.events.on('debugDown', () => menu.toggle('stats'))
         if (location.hash === '#debug')
-            this.toggle()
+            menu.show('stats')
     }
 
+    /** Kept for older callers: opens the Stats page. */
     toggle() {
-        this.open = !this.open
-        this.element.hidden = !this.open
-        if (this.open)
-            this.refresh()
+        this.game.menu.toggle('stats')
     }
 
-    // ── building blocks ──
+    // ── pages ──
 
-    private section(title: string, collapsed = false) {
-        const details = document.createElement('details')
-        details.open = !collapsed
-        details.innerHTML = `<summary>${title}</summary>`
-        const body = document.createElement('div')
-        body.className = 'dev-body'
-        details.appendChild(body)
-        this.element.appendChild(details)
-        return body
-    }
-
-    private readout(parent: HTMLElement, key: string, label: string) {
-        const row = document.createElement('div')
-        row.className = 'dev-row'
-        row.innerHTML = `<span>${label}</span><output></output>`
-        parent.appendChild(row)
-        this.readouts.set(key, row.querySelector('output')!)
-    }
-
-    private slider(parent: HTMLElement, slider: Slider) {
-        const row = document.createElement('label')
-        row.className = 'dev-slider'
-        row.innerHTML = `<span>${slider.label}</span><output></output><input type="range" min="${slider.min}" max="${slider.max}" step="${slider.step}">`
-        const input = row.querySelector('input')!
-        const value = row.querySelector('output')!
-        input.addEventListener(slider.onRelease ? 'change' : 'input', () => {
-            slider.set(Number(input.value))
-            value.textContent = (slider.format ?? ((v: number) => String(v)))(Number(input.value))
-        })
-        if (slider.onRelease)
-            input.addEventListener('input', () => { value.textContent = (slider.format ?? ((v: number) => String(v)))(Number(input.value)) })
-        parent.appendChild(row)
-        this.sliders.push({ input, value, slider })
-    }
-
-    private toggleControl(parent: HTMLElement, label: string, get: () => boolean, set: (on: boolean) => void) {
-        const row = document.createElement('label')
-        row.className = 'dev-toggle'
-        row.innerHTML = `<input type="checkbox"><span>${label}</span>`
-        const input = row.querySelector('input')!
-        input.checked = get()
-        input.addEventListener('change', () => set(input.checked))
-        parent.appendChild(row)
-    }
-
-    private buttons(parent: HTMLElement, items: [string, () => void][]) {
-        const row = document.createElement('div')
-        row.className = 'dev-buttons'
-        for (const [label, action] of items) {
-            const button = document.createElement('button')
-            button.textContent = label
-            button.addEventListener('click', action)
-            row.appendChild(button)
-        }
-        parent.appendChild(row)
-    }
-
-    // ── panel ──
-
-    private build() {
+    private buildSky(page: HTMLElement) {
         const { state, view } = this.game
         const settings = Settings.getInstance()
+        const sky = view.sky
+        const ui = this.ui
 
-        // performance
-        const performance = this.section('Performance')
-        this.graph = document.createElement('canvas')
-        this.graph.className = 'dev-graph'
-        this.graph.width = 280
-        this.graph.height = 54
-        performance.appendChild(this.graph)
-        for (const [key, label] of [['fps', 'Frame rate'], ['ms', 'Frame time (avg / worst)'], ['resolution', 'Render resolution'], ['calls', 'Draw calls'], ['triangles', 'Triangles'], ['world', 'Chunks · grass patches'], ['plants', 'Trees near · far · plants']])
-            this.readout(performance, key, label)
-        this.toggleControl(performance, 'Adaptive resolution', () => settings.get('resolution') === 'auto', (on) => settings.set('resolution', on ? 'auto' : 'full'))
-
-        // time
-        const time = this.section('Time of day')
-        this.slider(time, {
-            label: 'Time', min: 0, max: 24, step: 0.05,
+        const time = ui.group(page, 'Time')
+        ui.slider(time, {
+            label: 'Time of day', min: 0, max: 24, step: 0.05,
             get: () => state.day.hour,
             set: (hour) => { state.day.timeProgress = DayCycle.progressForHour(hour); state.day.progress = state.day.timeProgress },
-            format: (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor(h * 60) % 60).padStart(2, '0')}`
+            format: clock
         })
-        const lengths = Object.keys(DAY_LENGTHS) as DayLength[]
-        this.buttons(time, lengths.map((length) => [DAY_LENGTHS[length], () => settings.set('dayLength', length)]))
+        ui.choice(time, DAY_LENGTHS, () => settings.get('dayLength'), (value: DayLength) => settings.set('dayLength', value), 'Length of a day')
 
-        // world
-        const world = this.section('World')
-        const seedRow = document.createElement('form')
-        seedRow.className = 'dev-seed'
-        seedRow.innerHTML = `<span>Seed</span><input type="text" value="${this.game.seed}" spellcheck="false"><button>Go</button>`
-        seedRow.addEventListener('submit', (event) => {
+        const weather = ui.group(page, 'Weather', 'Changing drifts between clear spells, cloudy days and rain on its own; the others settle to that weather over a few seconds.')
+        ui.choice(weather, WEATHERS, () => settings.get('weather'), (value: Weather) => { settings.set('weather', value); sky.cloudCoverOverride = null; this.ui.refresh() }, undefined, true)
+        ui.toggle(weather, 'Set the cloud cover myself', () => sky.cloudCoverOverride !== null, (on) => { sky.cloudCoverOverride = on ? sky.cover : null; this.ui.refresh() })
+        ui.slider(weather, { label: 'Cloud cover', min: 0, max: 1, step: 0.01, get: () => sky.cloudCoverOverride ?? sky.cover, set: (v) => { sky.cloudCoverOverride = v }, format: percent })
+
+        const clouds = ui.group(page, 'Clouds and wind')
+        ui.slider(clouds, { label: 'Wind speed', min: 0, max: 60, step: 0.5, get: () => sky.wind.speed, set: (v) => { sky.wind.speed = v }, format: (v) => `${v.toFixed(1)} m/s` })
+        ui.slider(clouds, { label: 'Wind direction', min: 0, max: 360, step: 1, get: () => sky.wind.direction, set: (v) => { sky.wind.direction = v }, format: (v) => `${Math.round(v)}° ${compass(v)}` })
+        ui.slider(clouds, { label: 'Cloud change speed', min: 0, max: 6, step: 0.1, get: () => sky.cloudEvolution, set: (v) => { sky.cloudEvolution = v }, format: (v) => `${v.toFixed(1)}×` })
+        ui.slider(clouds, { label: 'High wispy clouds', min: 0, max: 1, step: 0.01, get: () => sky.cirrus, set: (v) => { sky.cirrus = v }, format: percent })
+
+        const night = ui.group(page, 'Sun and night sky')
+        ui.slider(night, { label: 'Sun size', min: 0.5, max: 3, step: 0.05, get: () => sky.sunSize, set: (v) => { sky.sunSize = v }, format: (v) => `${v.toFixed(2)}×` })
+        ui.slider(night, { label: 'Stars', min: 0, max: 3, step: 0.05, get: () => sky.starBrightness, set: (v) => { sky.starBrightness = v }, format: (v) => `${v.toFixed(2)}×` })
+        ui.slider(night, { label: 'Milky Way', min: 0, max: 3, step: 0.05, get: () => sky.milkyWay, set: (v) => { sky.milkyWay = v }, format: (v) => `${v.toFixed(2)}×` })
+    }
+
+    private buildWorld(page: HTMLElement) {
+        const { state } = this.game
+        const ui = this.ui
+
+        const seed = ui.group(page, 'Seed', 'The same seed always grows the same world.')
+        const form = document.createElement('form')
+        form.className = 'ctl-seed'
+        form.innerHTML = `<input type="text" value="${this.game.seed.replace(/"/g, '&quot;')}" spellcheck="false" aria-label="World seed"><button>Go</button>`
+        form.addEventListener('submit', (event) => {
             event.preventDefault()
-            const value = (seedRow.querySelector('input') as HTMLInputElement).value.trim() || 'p'
-            const url = new URL(location.href)
-            url.searchParams.set('seed', value)
-            url.hash = 'debug'
-            location.href = url.toString()
+            const value = (form.querySelector('input') as HTMLInputElement).value.trim() || 'p'
+            this.goTo(value)
         })
-        world.appendChild(seedRow)
-        this.buttons(world, [
-            ['Random world', () => {
-                const url = new URL(location.href)
-                url.searchParams.set('seed', Math.random().toString(36).slice(2, 8))
-                url.hash = 'debug'
-                location.href = url.toString()
-            }],
-            ['Default shape', () => {
-                Object.assign(state.terrains.shape, { ...state.terrains.defaultShape })
-                this.regenerate()
-                this.refresh()
-            }]
-        ])
+        seed.appendChild(form)
+        ui.buttons(seed, [['Random world', () => this.goTo(Math.random().toString(36).slice(2, 8))]])
+
+        const shapeGroup = ui.group(page, 'Terrain shape', 'Changes apply when a slider is let go: the terrain and its plants grow again.')
+        ui.buttons(shapeGroup, [['Default shape', () => {
+            Object.assign(state.terrains.shape, { ...state.terrains.defaultShape })
+            this.regenerate()
+            this.ui.refresh()
+        }]])
         const shape = state.terrains.shape
         for (const key of Object.keys(SHAPE_LABELS) as (keyof TerrainShape)[]) {
             const [label, min, max, step] = SHAPE_LABELS[key]
-            this.slider(world, { label, min, max, step, get: () => shape[key], set: (value) => { shape[key] = value; this.regenerate() }, onRelease: true })
+            ui.slider(shapeGroup, { label, min, max, step, get: () => shape[key], set: (value) => { shape[key] = value; this.regenerate() }, onRelease: true })
         }
+    }
 
-        // sky
-        const sky = this.section('Sky', true)
-        this.toggleControl(sky, 'Clouds follow the weather', () => view.sky.cloudCoverOverride === null, (on) => {
-            view.sky.cloudCoverOverride = on ? null : view.sky.uniforms.uCloudCover.value
-            this.refresh()
-        })
-        this.slider(sky, {
-            label: 'Cloud cover', min: 0, max: 1, step: 0.01,
-            get: () => view.sky.uniforms.uCloudCover.value,
-            set: (value) => { view.sky.cloudCoverOverride = value },
-            format: (v) => `${Math.round(v * 100)} %`
-        })
-
-        // rendering: exposure, the film look, ambient occlusion, bloom
-        const rendering = this.section('Rendering', true)
+    private buildVisuals(page: HTMLElement) {
+        const { view } = this.game
         const renderer = view.renderer
-        this.slider(rendering, { label: 'Exposure', min: 0.25, max: 4, step: 0.01, get: () => renderer.exposureBias, set: (v) => { renderer.exposureBias = v } })
-        this.slider(rendering, { label: 'Contrast', min: 0.8, max: 1.6, step: 0.01, get: () => renderer.film.power, set: (v) => { renderer.film.power = v } })
-        this.slider(rendering, { label: 'Saturation', min: 0.5, max: 1.8, step: 0.01, get: () => renderer.film.saturation, set: (v) => { renderer.film.saturation = v } })
-        this.slider(rendering, { label: 'Vignette', min: 0, max: 0.6, step: 0.01, get: () => renderer.film.vignette, set: (v) => { renderer.film.vignette = v } })
-        this.toggleControl(rendering, 'Ambient occlusion', () => renderer.aoPass.enabled, (on) => { renderer.aoPass.enabled = on })
-        this.slider(rendering, { label: 'AO radius (m)', min: 0.2, max: 8, step: 0.1, get: () => renderer.aoPass.configuration.aoRadius, set: (v) => { renderer.aoPass.configuration.aoRadius = v } })
-        this.slider(rendering, { label: 'AO intensity', min: 0, max: 10, step: 0.1, get: () => renderer.aoPass.configuration.intensity, set: (v) => { renderer.aoPass.configuration.intensity = v } })
-        this.slider(rendering, { label: 'Bloom', min: 0, max: 3, step: 0.01, get: () => renderer.bloom.intensity, set: (v) => { renderer.bloom.intensity = v } })
-        this.slider(rendering, { label: 'Bloom threshold', min: 0.2, max: 8, step: 0.05, get: () => renderer.bloom.luminanceMaterial.threshold, set: (v) => { renderer.bloom.luminanceMaterial.threshold = v } })
+        const ui = this.ui
 
-        // layers
-        const layers = this.section('Layers', true)
-        this.toggleControl(layers, 'Grass', () => view.grass.group.visible, (on) => { view.grass.group.visible = on })
-        this.toggleControl(layers, 'Trees', () => true, (on) => {
+        const look = ui.group(page, 'Look')
+        ui.slider(look, { label: 'Exposure', min: 0.25, max: 4, step: 0.01, get: () => renderer.exposureBias, set: (v) => { renderer.exposureBias = v } })
+        ui.slider(look, { label: 'Contrast', min: 0.8, max: 1.6, step: 0.01, get: () => renderer.film.power, set: (v) => { renderer.film.power = v } })
+        ui.slider(look, { label: 'Saturation', min: 0.5, max: 1.8, step: 0.01, get: () => renderer.film.saturation, set: (v) => { renderer.film.saturation = v } })
+        ui.slider(look, { label: 'Vignette', min: 0, max: 0.6, step: 0.01, get: () => renderer.film.vignette, set: (v) => { renderer.film.vignette = v } })
+        ui.slider(look, { label: 'Sharpening', min: 0, max: 1, step: 0.01, get: () => renderer.sharpen.sharpness, set: (v) => { renderer.sharpen.sharpness = v } })
+
+        const light = ui.group(page, 'Light')
+        ui.toggle(light, 'Ambient occlusion', () => renderer.aoPass.enabled, (on) => { renderer.aoPass.enabled = on }, 'Soft contact shadows in creases')
+        ui.slider(light, { label: 'Occlusion radius', min: 0.2, max: 8, step: 0.1, get: () => renderer.aoPass.configuration.aoRadius, set: (v) => { renderer.aoPass.configuration.aoRadius = v }, format: (v) => `${v.toFixed(1)} m` })
+        ui.slider(light, { label: 'Occlusion strength', min: 0, max: 10, step: 0.1, get: () => renderer.aoPass.configuration.intensity, set: (v) => { renderer.aoPass.configuration.intensity = v } })
+        ui.slider(light, { label: 'Bloom', min: 0, max: 3, step: 0.01, get: () => renderer.bloom.intensity, set: (v) => { renderer.bloom.intensity = v } })
+        ui.slider(light, { label: 'Bloom threshold', min: 0.2, max: 8, step: 0.05, get: () => renderer.bloom.luminanceMaterial.threshold, set: (v) => { renderer.bloom.luminanceMaterial.threshold = v } })
+
+        const layers = ui.group(page, 'Layers', 'Hide parts of the world, to see what each one costs (Stats) or just to look.')
+        let trees = true, rocks = true, ferns = true
+        ui.toggle(layers, 'Grass', () => view.grass.group.visible, (on) => { view.grass.group.visible = on })
+        ui.toggle(layers, 'Trees and bushes', () => trees, (on) => {
+            trees = on
             for (const variant of view.trees.variants) for (const mesh of [variant.bark, variant.leaves, variant.barkMid, variant.leavesMid]) mesh.visible = on
             if (view.trees.impostor) view.trees.impostor.mesh.visible = on
         })
-        this.toggleControl(layers, 'Boulders', () => true, (on) => { for (const layer of view.vegetation.layers.values()) layer.mesh.visible = on })
-        this.toggleControl(layers, 'Ferns', () => true, (on) => view.ferns.setVisible(on))
-        this.toggleControl(layers, 'Water', () => view.water.mesh.visible, (on) => { view.water.mesh.visible = on })
-        this.toggleControl(layers, 'Character', () => view.player.group.visible, (on) => { view.player.group.visible = on })
-        this.toggleControl(layers, 'Terrain wireframe', () => view.terrains.material.wireframe, (on) => {
+        ui.toggle(layers, 'Boulders', () => rocks, (on) => { rocks = on; for (const layer of view.vegetation.layers.values()) layer.mesh.visible = on })
+        ui.toggle(layers, 'Ferns', () => ferns, (on) => { ferns = on; view.ferns.setVisible(on) })
+        ui.toggle(layers, 'Water', () => view.water.mesh.visible, (on) => { view.water.mesh.visible = on })
+        ui.toggle(layers, 'Character', () => view.player.group.visible, (on) => { view.player.group.visible = on })
+        ui.toggle(layers, 'Terrain wireframe', () => view.terrains.material.wireframe, (on) => {
             view.terrains.material.wireframe = on
             view.scene.traverse((object) => {
                 const material = (object as { material?: { uniforms?: Record<string, unknown>, wireframe?: boolean } }).material
@@ -237,18 +172,68 @@ export default class Debug {
                     material.wireframe = on
             })
         })
+    }
 
-        // camera & player
-        const camera = this.section('Camera & player', true)
-        this.buttons(camera, [
-            ['Third person', () => this.setCameraMode(Camera.MODE_THIRDPERSON)],
-            ['Free fly (V)', () => this.setCameraMode(Camera.MODE_FLY)]
-        ])
+    private buildPlayer(page: HTMLElement) {
+        const { state } = this.game
         const player = state.player
-        this.slider(camera, { label: 'Jog speed (m/s)', min: 1, max: 15, step: 0.1, get: () => player.walkSpeed, set: (v) => { player.walkSpeed = v } })
-        this.slider(camera, { label: 'Sprint speed (m/s)', min: 2, max: 30, step: 0.1, get: () => player.runSpeed, set: (v) => { player.runSpeed = v } })
-        this.slider(camera, { label: 'Jump speed (m/s)', min: 2, max: 25, step: 0.1, get: () => player.jumpSpeed, set: (v) => { player.jumpSpeed = v } })
-        this.slider(camera, { label: 'Gravity (m/s²)', min: 2, max: 40, step: 0.1, get: () => player.gravity, set: (v) => { player.gravity = v } })
+        const ui = this.ui
+
+        const camera = ui.group(page, 'Camera')
+        ui.choice(camera, { third: 'Follow', fly: 'Free fly (V)' } as Record<'third' | 'fly', string>,
+            () => player.camera.mode === Camera.MODE_FLY ? 'fly' : 'third',
+            (mode) => this.setCameraMode(mode === 'fly' ? Camera.MODE_FLY : Camera.MODE_THIRDPERSON))
+        ui.slider(camera, { label: 'Distance', min: 2.5, max: 18, step: 0.1, get: () => player.camera.thirdPerson.targetDistance, set: (v) => { player.camera.thirdPerson.targetDistance = v }, format: (v) => `${v.toFixed(1)} m` })
+
+        const moving = ui.group(page, 'Moving')
+        ui.slider(moving, { label: 'Jog speed', min: 1, max: 15, step: 0.1, get: () => player.walkSpeed, set: (v) => { player.walkSpeed = v }, format: (v) => `${v.toFixed(1)} m/s` })
+        ui.slider(moving, { label: 'Sprint speed', min: 2, max: 30, step: 0.1, get: () => player.runSpeed, set: (v) => { player.runSpeed = v }, format: (v) => `${v.toFixed(1)} m/s` })
+        ui.slider(moving, { label: 'Jump speed', min: 2, max: 25, step: 0.1, get: () => player.jumpSpeed, set: (v) => { player.jumpSpeed = v }, format: (v) => `${v.toFixed(1)} m/s` })
+        ui.slider(moving, { label: 'Gravity', min: 2, max: 40, step: 0.1, get: () => player.gravity, set: (v) => { player.gravity = v }, format: (v) => `${v.toFixed(1)} m/s²` })
+
+        const climbing = ui.group(page, 'Climbing')
+        ui.slider(climbing, { label: 'Climbing speed', min: 0.5, max: 5, step: 0.1, get: () => player.climbSpeed, set: (v) => { player.climbSpeed = v }, format: (v) => `${v.toFixed(1)} m/s` })
+        ui.slider(climbing, { label: 'Stamina lasts', min: 5, max: 120, step: 1, get: () => 1 / player.climbDrain, set: (v) => { player.climbDrain = 1 / v }, format: (v) => `${Math.round(v)} s` })
+        ui.toggle(climbing, 'Endless stamina', () => player.climbDrain === 0, (on) => { player.climbDrain = on ? 0 : 1 / 22; this.ui.refresh() })
+    }
+
+    private buildStats(page: HTMLElement) {
+        const { view } = this.game
+        const settings = Settings.getInstance()
+        const ui = this.ui
+
+        const live = ui.group(page, 'Live')
+        this.graph = document.createElement('canvas')
+        this.graph.className = 'ctl-graph'
+        this.graph.width = 600
+        this.graph.height = 110
+        this.graph.setAttribute('aria-label', 'Frame times of the last seconds')
+        live.appendChild(this.graph)
+        this.setStat = ui.readouts(live, [
+            ['fps', 'Frame rate'], ['ms', 'Frame time (average / worst)'], ['resolution', 'Render resolution'],
+            ['calls', 'Draw calls'], ['triangles', 'Triangles'], ['world', 'Chunks · grass patches'], ['plants', 'Trees near · mid · far · plants']
+        ])
+
+        const options = ui.group(page, 'Performance')
+        ui.toggle(options, 'Adaptive resolution', () => settings.get('resolution') === 'auto', (on) => settings.set('resolution', on ? 'auto' : 'full'), 'Lower the resolution while frames run slow')
+        // more switches join here (texture compression, culling, anti-aliasing, threads)
+        const holder = document.createElement('div')
+        holder.className = 'ctl-body'
+        holder.dataset.performance = ''
+        options.appendChild(holder)
+        void view
+    }
+
+    /** Where other parts add their performance switches (Stats page). */
+    get performanceGroup() {
+        return this.game.menu.panel('stats').querySelector<HTMLElement>('[data-performance]')!
+    }
+
+    private goTo(seed: string) {
+        const url = new URL(location.href)
+        url.searchParams.set('seed', seed)
+        url.hash = 'debug'
+        location.href = url.toString()
     }
 
     private setCameraMode(mode: number) {
@@ -274,22 +259,15 @@ export default class Debug {
         state.vegetation.version++
     }
 
-    private refresh() {
-        for (const { input, value, slider } of this.sliders) {
-            const current = slider.get()
-            input.value = String(current)
-            value.textContent = (slider.format ?? ((v: number) => String(Number(v.toFixed(5)))))(current)
-        }
-    }
-
     update() {
         const now = performance.now()
         const frame = now - this.last
         this.last = now
         this.frameTimes.push(frame)
-        if (this.frameTimes.length > 140)
+        if (this.frameTimes.length > 180)
             this.frameTimes.shift()
-        if (!this.open)
+        const menu = this.game.menu
+        if (!menu.isOpen || menu.currentTab !== ('stats' as Tab))
             return
 
         this.readoutTimer -= frame
@@ -303,7 +281,7 @@ export default class Debug {
         const worst = Math.max(...times)
         const renderer = view.renderer.instance
         const canvas = renderer.domElement
-        const set = (key: string, text: string) => { this.readouts.get(key)!.textContent = text }
+        const set = this.setStat
         set('fps', `${Math.round(1000 / average)} fps`)
         set('ms', `${average.toFixed(1)} / ${worst.toFixed(1)} ms`)
         set('resolution', `${canvas.width} × ${canvas.height}` + (view.renderer.adaptive.scale < 0.999 ? ` (${Math.round(view.renderer.adaptive.scale * 100)} %)` : ''))
@@ -313,19 +291,24 @@ export default class Debug {
         let plants = 0
         for (const cell of state.vegetation.cells.values())
             plants += cell.plants.length
-        set('plants', `${view.trees.counts.near} · ${view.trees.counts.far} · ${plants.toLocaleString()}`)
+        set('plants', `${view.trees.counts.near} · ${view.trees.counts.mid} · ${view.trees.counts.far} · ${plants.toLocaleString()}`)
 
-        // frame-time graph: 16.7 ms line, taller = slower
+        // frame-time graph: lines at 60 and 30 fps, taller = slower
         const context = this.graph.getContext('2d')!
         const { width, height } = this.graph
+        const scale = (ms: number) => height - Math.min(height, height * ms / 50)
         context.clearRect(0, 0, width, height)
-        context.fillStyle = 'rgba(255, 255, 255, 0.08)'
-        context.fillRect(0, height - height * 16.7 / 50, width, 1)
-        context.fillStyle = '#9fd36a'
+        context.fillStyle = 'rgba(255, 255, 255, 0.12)'
+        context.fillRect(0, scale(16.7), width, 1)
+        context.fillRect(0, scale(33.3), width, 1)
+        context.font = '18px system-ui, sans-serif'
+        context.fillStyle = 'rgba(255, 255, 255, 0.45)'
+        context.fillText('60', 6, scale(16.7) - 5)
+        context.fillText('30', 6, scale(33.3) - 5)
+        const bar = width / 180
         times.forEach((ms, i) => {
-            const h = Math.min(height, height * ms / 50)
-            context.fillStyle = ms > 33 ? '#e8806a' : ms > 20 ? '#e8c46a' : '#9fd36a'
-            context.fillRect(i * (width / 140), height - h, Math.max(1, width / 140 - 0.5), h)
+            context.fillStyle = ms > 33 ? '#f08a76' : ms > 20 ? '#f2c26b' : '#b9de7c'
+            context.fillRect(i * bar, scale(ms), Math.max(1, bar - 1), height - scale(ms))
         })
     }
 }

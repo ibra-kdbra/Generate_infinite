@@ -34,6 +34,15 @@ export const RESOLUTIONS = {
     '50': '50 %'
 } as const
 
+export const WEATHERS = {
+    auto: 'Changing',
+    clear: 'Clear',
+    cloudy: 'Cloudy',
+    overcast: 'Overcast',
+    rain: 'Rain',
+    storm: 'Storm'
+} as const
+
 export const DAY_LENGTHS = {
     '10': '10 min',
     '20': '20 min',
@@ -46,6 +55,7 @@ export type Quality = keyof typeof QUALITIES
 export type GrassStyle = keyof typeof GRASS_STYLES
 export type DayLength = keyof typeof DAY_LENGTHS
 export type Resolution = keyof typeof RESOLUTIONS
+export type Weather = keyof typeof WEATHERS
 
 type Values = {
     character: CharacterName
@@ -53,6 +63,7 @@ type Values = {
     grass: GrassStyle
     dayLength: DayLength
     resolution: Resolution
+    weather: Weather
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -62,7 +73,8 @@ const defaults: Values = {
     quality: 'medium',
     grass: 'meadow',
     dayLength: '20',
-    resolution: 'auto'
+    resolution: 'auto',
+    weather: 'auto'
 }
 
 /**
@@ -130,6 +142,7 @@ export default class Settings {
             if (stored.grass in GRASS_STYLES) valid.grass = stored.grass
             if (stored.dayLength in DAY_LENGTHS) valid.dayLength = stored.dayLength
             if (stored.resolution in RESOLUTIONS) valid.resolution = stored.resolution
+            if (stored.weather in WEATHERS) valid.weather = stored.weather
             return valid
         }
         catch {

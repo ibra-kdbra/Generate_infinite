@@ -1,30 +1,26 @@
-#define M_PI 3.1415926535897932384626433832795
+// Stars: one point each, sized and brightened by magnitude, dimmed and twinkling more near
+// the horizon (through more air), hidden below it
+uniform float uTime;
+uniform float uPixelRatio;
 
-uniform vec3 uSunPosition;
-uniform float uSize;
-uniform float uHeightFragments;
-
-attribute float aSize;
+attribute float aMagnitude;
 attribute vec3 aColor;
+attribute float aPhase;
 
 varying vec3 vColor;
+varying float vFlux;
 
 void main()
 {
-    // Vertex position
-    vec4 modelPosition = modelMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * viewMatrix * modelPosition;
-
-    // Sun size multiplier
-    vec3 normalizedPosition = normalize(modelPosition.xyz);
-    float sunSizeMultiplier = 1.0 - (dot(normalize(uSunPosition), normalizedPosition) * 0.5 + 0.5);
-    // sunSizeMultiplier = smoothstep(0.1, 1.0, sunSizeMultiplier);
-
-    gl_PointSize = aSize * uSize * sunSizeMultiplier * uHeightFragments;
-
-    // Clip out if too small
-    if(gl_PointSize < 0.5)
-        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * world;
+    vec3 direction = normalize(world.xyz - modelMatrix[3].xyz);
+    float airmass = 1.0 / max(direction.y + 0.05, 0.05);
+    float twinkle = 1.0 + sin(uTime * (2.0 + aPhase * 6.0) + aPhase * 60.0) * min(0.45, 0.06 * airmass);
+    float flux = pow(10.0, - 0.4 * aMagnitude) * twinkle * exp(- 0.1 * airmass);
+    vFlux = flux;
     vColor = aColor;
+    gl_PointSize = clamp((1.3 + sqrt(flux) * 3.2) * uPixelRatio, 1.0, 7.0 * uPixelRatio);
+    if (direction.y < - 0.03)
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }

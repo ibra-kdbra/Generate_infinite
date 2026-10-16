@@ -9,10 +9,11 @@ import resolveShader from './Materials/shaders/clouds/resolve.glsl'
 
 /**
  * The cloud layer. Its textures are generated once on the GPU: the weather map (where clouds
- * form, how tall), a tiling 128³ shape noise and a 32³ detail noise. Every frame the clouds
- * are ray-marched at a fraction of the screen resolution (march.glsl) and blended into the
- * previous frames (resolve.glsl), which removes the noise of the jittered march without the
- * smearing; the sky backdrop draws the result over the atmosphere.
+ * form, how tall), a tiling 128³ shape noise and a 32³ detail noise. Every frame a quarter of
+ * the cloud pixels are ray-marched (one of each 2 × 2 block, in turn: march.glsl) and the
+ * resolve (resolve.glsl) rebuilds the full picture from them and the previous frames: four
+ * times less marching for the same sharpness, and the jitter's noise averages out. The sky
+ * backdrop draws the result over the atmosphere.
  */
 export default class Clouds {
     renderer: THREE.WebGLRenderer
@@ -32,6 +33,8 @@ export default class Clouds {
     private camera = new THREE.OrthographicCamera(- 1, 1, 1, - 1, 0, 1)
     private previousViewProjection = new THREE.Matrix4()
     private historyValid = false
+    private frame = 0
+    private static OFFSETS = [[0, 0], [1, 1], [1, 0], [0, 1]]
 
     constructor(renderer: THREE.WebGLRenderer, sharedUniforms: Record<string, THREE.IUniform>) {
         this.renderer = renderer
@@ -64,7 +67,9 @@ export default class Clouds {
                 uCloudDetail: { value: this.detail.texture },
                 uSteps: { value: 48 },
                 uLightSteps: { value: 6 },
-                uFrame: { value: 0 }
+                uFrame: { value: 0 },
+                uMarchOffset: { value: new THREE.Vector2() },
+                uFullResolution: { value: new THREE.Vector2(1, 1) }
             },
             vertexShader: fullscreenVertex,
             fragmentShader: marchShader,
@@ -78,7 +83,8 @@ export default class Clouds {
                 uInverseViewProjection: this.marchMaterial.uniforms.uInverseViewProjection,
                 uPreviousViewProjection: { value: new THREE.Matrix4() },
                 uHistoryValid: { value: 0 },
-                uTexel: { value: new THREE.Vector2() }
+                uTexel: { value: new THREE.Vector2() },
+                uMarchOffset: { value: new THREE.Vector2() }
             },
             vertexShader: fullscreenVertex,
             fragmentShader: resolveShader,
@@ -125,10 +131,12 @@ export default class Clouds {
         if (this.resolution.x === width && this.resolution.y === height)
             return
         this.resolution.set(width, height)
-        this.march.setSize(width, height)
+        const marchWidth = Math.ceil(width / 2), marchHeight = Math.ceil(height / 2)
+        this.march.setSize(marchWidth, marchHeight)
         for (const target of this.history)
             target.setSize(width, height)
-        this.resolveMaterial.uniforms.uTexel.value.set(1 / width, 1 / height)
+        this.resolveMaterial.uniforms.uTexel.value.set(1 / marchWidth, 1 / marchHeight)
+        this.marchMaterial.uniforms.uFullResolution.value.set(width, height)
         this.historyValid = false
     }
 
@@ -139,6 +147,10 @@ export default class Clouds {
         uniforms.uInverseViewProjection.value.copy(viewProjection).invert()
         uniforms.uCameraPosition.value.copy(cameraPosition)
         uniforms.uFrame.value = (uniforms.uFrame.value + 1) % 1024
+        // which pixel of each 2 × 2 block is marched this frame
+        const offset = Clouds.OFFSETS[this.frame++ % 4]
+        uniforms.uMarchOffset.value.set(offset[0], offset[1])
+        this.resolveMaterial.uniforms.uMarchOffset.value.set(offset[0], offset[1])
 
         this.renderPass(this.marchMaterial, this.march)
 
