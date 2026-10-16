@@ -15,6 +15,7 @@ export default class Menu {
     stats: HTMLElement
     clock: HTMLElement
     flyHint: HTMLElement
+    breath: HTMLElement
     private open = false
     private frames = 0
     private elapsed = 0
@@ -54,6 +55,13 @@ export default class Menu {
         this.flyHint.className = 'fly-hint'
         this.flyHint.hidden = true
         document.querySelector('.ui')!.appendChild(this.flyHint)
+
+        // air left while diving
+        this.breath = document.createElement('div')
+        this.breath.className = 'breath'
+        this.breath.hidden = true
+        this.breath.innerHTML = '<span class="breath-label">Air</span><span class="breath-bar"><span></span></span>'
+        document.querySelector('.ui')!.appendChild(this.breath)
         this.panel = this.element.querySelector('.menu-panel')!
         this.stats = this.element.querySelector('[data-stats]')!
 
@@ -115,6 +123,14 @@ export default class Menu {
     }
 
     update() {
+        const player = this.state.player
+        this.breath.hidden = !(player.diving || player.breath < 0.999)
+        if (!this.breath.hidden) {
+            const bar = this.breath.querySelector('.breath-bar span') as HTMLElement
+            bar.style.width = `${Math.round(player.breath * 100)}%`
+            this.breath.classList.toggle('low', player.breath < 0.25)
+        }
+
         // clock: 0 = noon on the day cycle
         const hour = this.state.day.hour
         const minutes = Math.floor(hour * 60) % 60

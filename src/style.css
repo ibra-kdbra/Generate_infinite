@@ -451,3 +451,46 @@
 {
     display: none;
 }
+
+.ui .breath
+{
+    position: absolute;
+    left: 50%;
+    bottom: 64px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-radius: 14px;
+    background: rgba(12, 18, 24, 0.5);
+    backdrop-filter: blur(6px);
+    font-size: 12px;
+}
+
+.ui .breath[hidden]
+{
+    display: none;
+}
+
+.ui .breath-bar
+{
+    width: 120px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+}
+
+.ui .breath-bar span
+{
+    display: block;
+    height: 100%;
+    background: #9fd8ff;
+    transition: width 0.15s linear;
+}
+
+.ui .breath.low .breath-bar span
+{
+    background: #ff8a7a;
+}

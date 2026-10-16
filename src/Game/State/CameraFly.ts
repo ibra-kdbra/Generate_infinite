@@ -169,7 +169,7 @@ export default class CameraFly {
         if (keys.strafeRight) vec3.add(wish, wish, this.rightward)
         if (keys.strafeLeft) vec3.add(wish, wish, this.leftward)
         if (keys.jump) vec3.add(wish, wish, this.gameUp)
-        if (keys.walk) vec3.sub(wish, wish, this.gameUp)      // C
+        if (keys.crouch) vec3.sub(wish, wish, this.gameUp)    // C
         if (vec3.length(wish) > 0)
             vec3.normalize(wish, wish)
         vec3.scale(wish, wish, this.speed * (keys.boost ? 3.5 : 1))

@@ -9,6 +9,8 @@ import Viewport from '../State/Viewport'
 import Camera from './Camera'
 import Settings, { Quality } from '../Settings'
 import FilmEffect from './FilmEffect'
+import UnderwaterEffect from './UnderwaterEffect'
+import { WATER_LEVEL } from '../Workers/TerrainShape'
 
 // Render resolution cap per quality (CSS pixel multiples). A 4K laptop panel at 225 %
 // scaling would otherwise render ~3400 x 1900 pixels, far too many for an integrated GPU.
@@ -42,6 +44,7 @@ export default class Renderer {
     aoPass!: N8AOPostPass
     bloom!: BloomEffect
     film!: FilmEffect
+    underwater!: UnderwaterEffect
     smaa!: SMAAEffect
     effectPass!: EffectPass
     smaaPass!: EffectPass
@@ -140,7 +143,8 @@ export default class Renderer {
 
         this.bloom = new BloomEffect({ luminanceThreshold: 1.6, luminanceSmoothing: 0.6, intensity: 0.45, mipmapBlur: true, radius: 0.7 })
         this.film = new FilmEffect()
-        this.effectPass = new EffectPass(camera, this.bloom, this.film)
+        this.underwater = new UnderwaterEffect()
+        this.effectPass = new EffectPass(camera, this.underwater, this.bloom, this.film)
         this.composer.addPass(this.effectPass)
 
         this.smaa = new SMAAEffect({ preset: SMAAPreset.HIGH })
@@ -242,9 +246,23 @@ export default class Renderer {
         this.film.night = 1 - smoothstep(light, 0.07, 0.16)
     }
 
+    /** Under the surface: absorption and the water's scattered light (UnderwaterEffect). */
+    private updateUnderwater() {
+        const depth = WATER_LEVEL - this.camera.instance.position.y
+        this.underwater.underwater = THREE.MathUtils.smoothstep(depth, - 0.02, 0.08)
+        this.underwater.cameraDepth = Math.max(0, depth)
+        const light = this.view.sky?.light
+        if (light) {
+            const sunUp = Math.max(0, this.state.sun.position.y)
+            const color = this.underwater.waterColor
+            color.set(0.012, 0.05, 0.058).multiply(new THREE.Vector3(...light.sky).addScaledVector(new THREE.Vector3(...light.sun), sunUp * 0.5))
+        }
+    }
+
     update() {
         this.updateAdaptiveResolution()
         this.updateExposure()
+        this.updateUnderwater()
 
         this.instance.info.reset()
         this.composer.render(this.time.delta)

@@ -98,7 +98,7 @@ export default class Controls {
             },
             {
                 codes: ['KeyC'],    // not Ctrl: Ctrl+W closes the browser tab
-                name: 'walk'
+                name: 'crouch'
             },
         ]
 

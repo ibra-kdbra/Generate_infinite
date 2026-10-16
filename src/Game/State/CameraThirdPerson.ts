@@ -91,7 +91,8 @@ export default class CameraThirdPerson {
         }
 
         // ── anchor: eased toward the player's chest ──
-        const targetX = p[0], targetY = p[1] + this.aboveOffset, targetZ = p[2]
+        // lower with the body when crouching or sliding
+        const targetX = p[0], targetY = p[1] + this.aboveOffset - this.player.crouch * 0.45, targetZ = p[2]
         if (!this.anchorReady) {
             vec3.set(this.anchor, targetX, targetY, targetZ)
             this.anchorReady = true
@@ -128,9 +129,17 @@ export default class CameraThirdPerson {
         this.position[0] = this.anchor[0] + dirX * distance
         this.position[1] = this.anchor[1] + dirY * distance
         this.position[2] = this.anchor[2] + dirZ * distance
-        const floor = Math.max(this.ground(this.position[0], this.position[2], this.position[1]), WATER_LEVEL) + 0.6
-        if (this.position[1] < floor)
-            this.position[1] = floor
+        const ground = this.ground(this.position[0], this.position[2], this.position[1])
+        if (this.player.diving) {
+            // follow the diver: under the surface (never straddling it), above the lake bed
+            this.position[1] = Math.min(this.position[1], WATER_LEVEL - 0.35)
+            this.position[1] = Math.max(this.position[1], ground + 0.4)
+        }
+        else {
+            const floor = Math.max(ground, WATER_LEVEL) + 0.6
+            if (this.position[1] < floor)
+                this.position[1] = floor
+        }
 
         // ── orientation last, so it always looks at the anchor ──
         const lookAt = mat4.create()

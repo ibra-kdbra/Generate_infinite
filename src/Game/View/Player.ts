@@ -9,6 +9,7 @@ import Settings, { CharacterName } from '../Settings'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
 import { SHADOW_UNIFORMS } from './Shadows'
 import sunShadowShader from './Materials/shaders/partials/getSunShadow.glsl'
+import CharacterPose from './CharacterPose'
 
 const LOCOMOTION = ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop'] as const
 const ONE_SHOTS = ['Jump_Start', 'Jump_Land', 'Roll']
@@ -59,6 +60,10 @@ export default class Player {
     private airTime = 0
     private fallSpeed = 0
     private swimOffset = 0
+    private pose: CharacterPose | null = null
+    private slideAmount = 0
+    private diveAmount = 0
+    private divePitch = 0
     private loadId = 0
     // wet clothes and skin (State/Player wetness), shared by all the character's materials
     private wetUniforms = { uWetLine: { value: - 1e5 }, uWetness: { value: 0 } }
@@ -126,6 +131,7 @@ export default class Player {
         })
         this.group.add(model)
         this.model = model
+        this.pose = new CharacterPose(model)
 
         // Clips were made on the mannequin; only rotations and the pelvis translation are
         // kept, the pelvis scaled to this body's hip height
@@ -340,7 +346,7 @@ export default class Player {
         const player = this.state.player
         const speed = player.speed
         const state = player.movementState
-        const swimming = state === PlayerState.STATE_SWIM
+        const swimming = state === PlayerState.STATE_SWIM || state === PlayerState.STATE_DIVE
 
         for (const name in this.actions)
             this.targets[name] = 0
@@ -391,6 +397,9 @@ export default class Player {
             else if (!player.grounded && (state === PlayerState.STATE_JUMP || this.airTime > 0.18)) {
                 this.targets.Jump_Loop = 1
             }
+            else if (player.sliding) {
+                this.targets.Idle_Loop = 1         // the slide pose is procedural (CharacterPose)
+            }
             else {
                 this.locomotion(speed, dt)
             }
@@ -410,15 +419,32 @@ export default class Player {
         }
         this.mixer!.update(dt)
 
-        // ── swimming: hold the head just above the surface ──
+        // ── swimming: hold the head just above the surface (diving: the body around the chest) ──
         let offset = 0
         if (swimming) {
             const wIdle = this.weights.Swim_Idle_Loop, wFwd = this.weights.Swim_Fwd_Loop
             const head = (wIdle * this.swimHeadHeight.Swim_Idle_Loop + wFwd * this.swimHeadHeight.Swim_Fwd_Loop) / Math.max(1e-3, wIdle + wFwd)
-            offset = WATER_LEVEL + 0.12 - player.position.current[1] - head
+            offset = player.diving ? 0.8 - head : WATER_LEVEL + 0.12 - player.position.current[1] - head
         }
         this.swimOffset += (offset - this.swimOffset) * (1 - Math.exp(- dt * 4))
-        this.model!.position.y = this.swimOffset
+        this.model!.position.set(0, this.swimOffset, 0)
+        this.model!.quaternion.identity()
+
+        // ── procedural poses over the clips: crouch, slide, dive ──
+        const k2 = 1 - Math.exp(- dt * 9)
+        this.slideAmount += ((player.sliding ? 1 : 0) - this.slideAmount) * k2
+        this.diveAmount += ((player.diving ? 1 : 0) - this.diveAmount) * (1 - Math.exp(- dt * 4))
+        const vertical = player.velocity[1], forwardSpeed = player.speed
+        // descending tips the head down, rising up; swimming along levels out
+        const pitchTarget = THREE.MathUtils.clamp(- Math.atan2(vertical, Math.max(0.6, forwardSpeed)) * 0.9, - 0.9, 1.1)
+        this.divePitch += (pitchTarget - this.divePitch) * (1 - Math.exp(- dt * 3))
+        this.pose?.apply(this.model!, this.group, {
+            crouch: player.crouch * (1 - this.slideAmount),
+            slide: this.slideAmount,
+            dive: this.diveAmount,
+            divePitch: this.divePitch,
+            ground: player.position.current[1]
+        })
     }
 
     update() {

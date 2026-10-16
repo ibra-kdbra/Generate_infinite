@@ -23,7 +23,7 @@ This project is a TypeScript-based evolution of the original [Infinite World](ht
 
 * **Settings Menu & Performance:** Gear button or Esc: character, graphics quality and grass style, with a live frame rate readout. Quality sets the render resolution cap, terrain reach and mesh density, grass and fern reach, ambient occlusion, bloom and anti-aliasing, shadow maps, cloud ray-march steps and texture size; on a first visit it's chosen from the graphics card (low on integrated Intel chips, high on NVIDIA and AMD cards). The render resolution also adapts to the frame time.
 
-**Controls:** WASD / arrows to move, Shift to sprint, C to walk, Space to jump, drag (or P for pointer lock) to look, mouse wheel to zoom, Esc for settings, V to switch to the free camera, B for the developer panel (performance, time of day, world seed and terrain shape, clouds, rendering: exposure, contrast, saturation, AO and bloom, layers). Add `?seed=anything` to the address for another world.
+**Controls:** WASD / arrows to move, Shift to sprint, C to crouch (while sprinting: slide; in deep water: dive, Space to come up), Space to jump, drag (or P for pointer lock) to look, mouse wheel to zoom, Esc for settings, V to switch to the free camera, B for the developer panel (performance, time of day, world seed and terrain shape, clouds, rendering: exposure, contrast, saturation, AO and bloom, layers). Add `?seed=anything` to the address for another world.
 
 ---
 

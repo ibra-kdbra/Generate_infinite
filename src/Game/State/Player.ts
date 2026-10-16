@@ -27,6 +27,8 @@ export default class Player {
     static STATE_FALL = 'fall'
     static STATE_SLIDE = 'slide'
     static STATE_SWIM = 'swim'
+    static STATE_DIVE = 'dive'
+    static STATE_CROUCH = 'crouch'
 
     game: Game
     state: State
@@ -34,7 +36,7 @@ export default class Player {
     controls: Controls
 
     // tuning (metres, seconds)
-    strollSpeed = 1.6            // holding C
+    crouchSpeed = 1.9            // holding C
     walkSpeed = 5.2              // default pace (an easy jog)
     runSpeed = 9.5               // holding Shift
     groundAcceleration = 45
@@ -53,6 +55,17 @@ export default class Player {
     swimSprintSpeed = 4.2
     swimAcceleration = 10
     waterDrag = 2.5
+    slideBoost = 1.12            // a slide starts a little faster than the run
+    slideFriction = 3.4          // m/s² on level ground (much less than walking)
+    slideEndSpeed = 2.6
+    diveSpeed = 2.4              // swimming down (C) or up (Space) under water
+    breathTime = 30              // seconds under water before having to come up
+
+    // poses for the view: 0 standing .. 1 crouched (smoothed)
+    crouch = 0
+    sliding = false
+    diving = false               // under the surface
+    breath = 1                   // 1 full .. 0 out of air
 
     rotation: number
     speed: number                // horizontal speed (m/s)
@@ -78,6 +91,9 @@ export default class Player {
     private timeSinceGrounded = 0
     private timeSinceJumpPressed = Infinity
     private jumpWasDown = false
+    private crouchWasDown = false
+    private crouchPressed = false
+    private slideTime = 0
     private lastGround = 0
     private readonly step = 1 / 120
 
@@ -160,16 +176,53 @@ export default class Player {
         const wading = this.grounded ? Math.min(1, Math.max(0, (WATER_LEVEL - p[1]) / this.swimDepth)) : 0
         if (this.swimming)
             this.swimPhase += dt / (hasInputWish(wish) ? (running ? 0.62 : 0.8) : 1.7)
+        const crouchHeld = !!this.controls.keys.down.crouch && this.camera.mode !== Camera.MODE_FLY
+        // ── slide: C while running drops into a slide that carries the run's momentum, slows
+        // slowly on level ground and speeds up down a slope (held C keeps it going downhill)
+        const horizontal = Math.hypot(v[0], v[2])
+        if (this.crouchPressed && this.grounded && !this.swimming && !this.sliding && horizontal > this.walkSpeed + 0.6) {
+            this.sliding = true
+            this.slideTime = 0
+            v[0] *= this.slideBoost
+            v[2] *= this.slideBoost
+        }
+        this.crouchPressed = false
+        if (this.sliding) {
+            this.slideTime += dt
+            const downhill = (1 - this.groundNormal[1]) > 0.08
+            const over = horizontal < this.slideEndSpeed
+                || (!crouchHeld && this.slideTime > 0.4)
+                || (!downhill && this.slideTime > 2.2)
+                || this.swimming
+                || (!this.grounded && this.timeSinceGrounded > 0.35)
+            if (over)
+                this.sliding = false
+        }
+        const crouching = crouchHeld && this.grounded && !this.swimming && !this.sliding
+
         // each arm stroke pushes: speed surges then glides (the mean stays the nominal speed)
         const stroke = Math.max(0, Math.sin(this.swimPhase * Math.PI * 2))
         const targetSpeed = this.swimming
             ? (running ? this.swimSprintSpeed : this.swimSpeed) * (0.85 + stroke * stroke * 0.6)
-            : (running ? this.runSpeed : this.controls.keys.down.walk ? this.strollSpeed : this.walkSpeed) * (1 - 0.5 * wading)
+            : (running && !crouching ? this.runSpeed : crouching ? this.crouchSpeed : this.walkSpeed) * (1 - 0.5 * wading)
 
         // ── horizontal movement ──
         const hasInput = wish[0] !== 0 || wish[2] !== 0
         let ax = 0, az = 0
-        if (hasInput) {
+        if (this.sliding) {
+            const n = this.groundNormal
+            // friction against the slide, gravity pulling down the slope
+            const s = Math.hypot(v[0], v[2]) || 1
+            const drop = Math.min(s, this.slideFriction * dt)
+            ax = - v[0] / s * drop + n[0] * n[1] * this.gravity * dt
+            az = - v[2] / s * drop + n[2] * n[1] * this.gravity * dt
+            // a little steering
+            if (hasInput) {
+                ax += wish[0] * 3 * dt
+                az += wish[2] * 3 * dt
+            }
+        }
+        else if (hasInput) {
             let wx = wish[0] * targetSpeed, wz = wish[2] * targetSpeed
             if (this.grounded && steep) {
                 // no climbing a too-steep slope: drop the uphill part of the wish
@@ -201,6 +254,10 @@ export default class Player {
         }
         v[0] += ax
         v[2] += az
+        if (this.sliding) {
+            const s = Math.hypot(v[0], v[2])
+            if (s > 18) { v[0] *= 18 / s; v[2] *= 18 / s }
+        }
 
         // ── sliding down steep ground ──
         if (this.grounded && steep) {
@@ -218,6 +275,7 @@ export default class Player {
         const canJump = (this.grounded || this.timeSinceGrounded < this.coyoteTime) && !steep && !this.swimming
         if (canJump && this.timeSinceJumpPressed < this.jumpBufferTime) {
             v[1] = this.jumpSpeed
+            this.sliding = false
             this.grounded = false
             this.timeSinceGrounded = this.coyoteTime   // consume
             this.timeSinceJumpPressed = Infinity
@@ -225,9 +283,22 @@ export default class Player {
 
         // ── gravity (or buoyancy) + integrate ──
         if (this.swimming) {
-            // buoyancy spring toward the surface, damped, with a gentle bob in the stroke rhythm
-            const bob = Math.sin(this.swimPhase * Math.PI * 2 + 1.2) * 0.04
-            v[1] += ((floatHeight + bob - p[1]) * 40 - v[1] * 9) * dt
+            // under water: C swims down, Space up, otherwise the body drifts back up; at the
+            // surface a buoyancy spring holds it chest-deep, bobbing with the strokes
+            const jumpHeld = !!this.controls.keys.down.jump && this.camera.mode !== Camera.MODE_FLY
+            const outOfAir = this.breath <= 0
+            const down = crouchHeld && !outOfAir, up = jumpHeld || outOfAir
+            if (down || up || p[1] < floatHeight - 0.35) {
+                const target = down ? - this.diveSpeed : up ? this.diveSpeed * (outOfAir ? 1.3 : 1) : 0.7
+                v[1] += (target - v[1]) * Math.min(1, 6 * dt)
+                // reaching the surface from below hands over to the spring
+                if (!down && p[1] > floatHeight - 0.2)
+                    v[1] += ((floatHeight - p[1]) * 40 - v[1] * 9) * dt
+            }
+            else {
+                const bob = Math.sin(this.swimPhase * Math.PI * 2 + 1.2) * 0.04
+                v[1] += ((floatHeight + bob - p[1]) * 40 - v[1] * 9) * dt
+            }
         }
         else if (!this.grounded)
             v[1] = Math.max(v[1] - this.gravity * dt, - this.maxFallSpeed)
@@ -241,7 +312,12 @@ export default class Player {
 
         // ── ground contact ──
         const newGround = this.groundAt(p[0], p[2])
-        if (p[1] <= newGround) {
+        if (this.swimming && p[1] < newGround + 0.25) {
+            // the lake bed: swim along it
+            p[1] = newGround + 0.25
+            if (v[1] < 0) v[1] = 0
+        }
+        else if (p[1] <= newGround) {
             p[1] = newGround
             if (v[1] < 0) v[1] = 0
             this.grounded = true
@@ -267,6 +343,10 @@ export default class Player {
         const jumpDown = this.camera.mode !== Camera.MODE_FLY && !!this.controls.keys.down.jump
         let jumpPressed = jumpDown && !this.jumpWasDown
         this.jumpWasDown = jumpDown
+        const crouchDown = this.camera.mode !== Camera.MODE_FLY && !!this.controls.keys.down.crouch
+        if (crouchDown && !this.crouchWasDown)
+            this.crouchPressed = true
+        this.crouchWasDown = crouchDown
 
         this.accumulator = Math.min(this.accumulator + this.time.delta, 0.25)
         while (this.accumulator >= this.step) {
@@ -285,9 +365,20 @@ export default class Player {
         }
 
         const steep = this.groundNormal[1] < this.maxWalkSlope
-        this.movementState = this.swimming ? Player.STATE_SWIM
+        const p0 = this.position.current
+        this.diving = this.swimming && p0[1] < WATER_LEVEL - this.swimDepth - 0.35
+        // holding breath while the head is under (about 1.6 m above the feet)
+        if (this.swimming && p0[1] + 1.6 < WATER_LEVEL)
+            this.breath = Math.max(0, this.breath - this.time.delta / this.breathTime)
+        else
+            this.breath = Math.min(1, this.breath + this.time.delta / 3)
+        const crouchHeld = !!this.controls.keys.down.crouch && this.camera.mode !== Camera.MODE_FLY
+        const crouchTarget = this.sliding ? 1 : crouchHeld && this.grounded && !this.swimming ? 1 : 0
+        this.crouch += (crouchTarget - this.crouch) * (1 - Math.exp(- this.time.delta * 10))
+        this.movementState = this.swimming ? (this.diving ? Player.STATE_DIVE : Player.STATE_SWIM)
             : !this.grounded ? (this.velocity[1] > 0 ? Player.STATE_JUMP : Player.STATE_FALL)
-            : steep && horizontalSpeed > 1 ? Player.STATE_SLIDE
+            : this.sliding || (steep && horizontalSpeed > 1) ? Player.STATE_SLIDE
+            : this.crouch > 0.5 ? Player.STATE_CROUCH
             : horizontalSpeed > this.walkSpeed + 1 ? Player.STATE_RUN
             : horizontalSpeed > 0.3 ? Player.STATE_WALK
             : Player.STATE_IDLE
