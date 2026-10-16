@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import Game from './Game'
-import Settings, { CHARACTERS, GRASS_STYLES, QUALITIES, RESOLUTIONS, CharacterName, GrassStyle, Quality, Resolution } from './Settings'
+import Settings, { ANTIALIASING, CHARACTERS, GRASS_STYLES, QUALITIES, RESOLUTIONS, Antialiasing, CharacterName, GrassStyle, Quality, Resolution } from './Settings'
 import State from './State/State'
 import View from './View/View'
 import Ui from './Ui'
@@ -164,6 +164,8 @@ export default class Menu {
                         <p class="field-note" data-note hidden>Anti-aliasing changes after a reload.</p>
                         ${this.field('resolution', 'Resolution', RESOLUTIONS)}
                         <p class="field-note">Auto lowers the resolution when frames run slow and raises it again when there's room; below full resolution the image is sharpened.</p>
+                        ${this.field('antialiasing', 'Anti-aliasing', ANTIALIASING)}
+                        <p class="field-note">Temporal builds up detail over frames: steadier edges and grass, and a lower resolution looks almost full. SMAA is crisper in fast motion.</p>
                         ${this.field('grass', 'Grass', GRASS_STYLES, 'choice-wrap')}
                         <div data-extra="game"></div>
                         <dl class="readout"><div><dt>Graphics card</dt><dd>${this.gpu}</dd></div></dl>
@@ -223,12 +225,13 @@ export default class Menu {
             const button = (event.target as HTMLElement).closest('button[data-key]') as HTMLButtonElement | null
             if (!button)
                 return
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing'
             const value = button.dataset.value!
             if (key === 'character') this.settings.set('character', value as CharacterName)
             if (key === 'quality') this.settings.set('quality', value as Quality)
             if (key === 'grass') this.settings.set('grass', value as GrassStyle)
             if (key === 'resolution') this.settings.set('resolution', value as Resolution)
+            if (key === 'antialiasing') this.settings.set('antialiasing', value as Antialiasing)
             this.refresh()
         })
         window.addEventListener('keydown', (event) => {
@@ -271,7 +274,7 @@ export default class Menu {
         kit.slider(sound, { label: 'Volume', min: 0, max: 1, step: 0.01, get: () => this.settings.get('volume'), set: (v) => this.settings.set('volume', v), format: (v) => v === 0 ? 'Off' : `${Math.round(v * 100)} %` })
         this.events.on('show', () => kit.refresh())
 
-        for (const key of ['character', 'quality', 'grass', 'resolution'])
+        for (const key of ['character', 'quality', 'grass', 'resolution', 'antialiasing'])
             this.settings.events.on(`change:${key}`, () => this.refresh())
         this.select('game')
         this.refresh()
@@ -311,7 +314,7 @@ export default class Menu {
 
     private refresh() {
         for (const button of this.drawer.querySelectorAll<HTMLButtonElement>('button[data-key]')) {
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing'
             const selected = this.settings.get(key) === button.dataset.value
             button.classList.toggle('is-selected', selected)
             button.setAttribute('aria-pressed', String(selected))

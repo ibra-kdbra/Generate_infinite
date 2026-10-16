@@ -7,10 +7,11 @@ import State from '../State/State'
 import Time from '../State/Time'
 import Viewport from '../State/Viewport'
 import Camera from './Camera'
-import Settings, { Quality, Resolution } from '../Settings'
+import Settings, { Antialiasing, Quality, Resolution } from '../Settings'
 import FilmEffect from './FilmEffect'
 import UnderwaterEffect from './UnderwaterEffect'
 import SharpenEffect from './SharpenEffect'
+import TemporalPass from './TemporalPass'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
 
 // Render resolution cap per quality (CSS pixel multiples). A 4K laptop panel at 225 %
@@ -51,6 +52,7 @@ export default class Renderer {
     smaaPass!: EffectPass
     sharpen!: SharpenEffect
     sharpenPass!: EffectPass
+    temporalPass!: TemporalPass
     exposureBias = 1                   // developer panel
     exposure = 1                       // current, after adaptation
 
@@ -79,6 +81,7 @@ export default class Renderer {
             this.applyResolution(settings.get('resolution'))
         })
         settings.events.on('change:resolution', (resolution: Resolution) => this.applyResolution(resolution))
+        settings.events.on('change:antialiasing', (_: Antialiasing) => this.applyQuality(settings.get('quality')))
     }
 
     setInstance() {
@@ -158,6 +161,10 @@ export default class Renderer {
         this.smaaPass = new EffectPass(camera, this.smaa)
         this.composer.addPass(this.smaaPass)
 
+        this.temporalPass = new TemporalPass(camera)
+        this.temporalPass.enabled = false
+        this.composer.addPass(this.temporalPass)
+
         this.sharpen = new SharpenEffect(0.55)
         this.sharpenPass = new EffectPass(camera, this.sharpen)
         this.sharpenPass.enabled = false
@@ -175,17 +182,22 @@ export default class Renderer {
         }
         // skipped entirely when off (not just faded out: that would still run it)
         this.bloom.blendMode.blendFunction = post.bloom ? BlendFunction.ADD : BlendFunction.SKIP
-        this.smaaPass.enabled = post.smaa !== null
+        // anti-aliasing: SMAA, or temporal (not on low quality)
+        const temporal = post.smaa !== null && Settings.getInstance().get('antialiasing') === 'taa'
+        this.smaaPass.enabled = post.smaa !== null && !temporal
         if (post.smaa !== null)
             this.smaa.applyPreset(post.smaa)
+        if (temporal && !this.temporalPass.enabled)
+            this.temporalPass.invalidate()
+        this.temporalPass.enabled = temporal
         this.updateOutput()
     }
 
     /** The last pass that runs draws to the screen. */
     private updateOutput() {
         // sharpen when rendering noticeably below the display's own resolution
-        this.sharpenPass.enabled = this.pixelRatio() < (this.viewport.pixelRatio ?? 1) * 0.92
-        const passes = [this.effectPass, this.smaaPass, this.sharpenPass]
+        this.sharpenPass.enabled = this.pixelRatio() < (this.viewport.pixelRatio ?? 1) * 0.92 || this.temporalPass.enabled
+        const passes = [this.effectPass, this.smaaPass, this.temporalPass, this.sharpenPass]
         const last = passes.filter((pass) => pass.enabled).pop()
         for (const pass of passes)
             pass.renderToScreen = pass === last
@@ -296,7 +308,15 @@ export default class Renderer {
         this.updateUnderwater()
 
         this.instance.info.reset()
+        const temporal = this.temporalPass.enabled
+        if (temporal) {
+            const size = this.instance.getDrawingBufferSize(new THREE.Vector2())
+            const p = this.state.player.position.current
+            this.temporalPass.applyJitter(size.x, size.y, new THREE.Vector3(p[0], p[1], p[2]))
+        }
         this.composer.render(this.time.delta)
+        if (temporal)
+            this.temporalPass.removeJitter()
     }
 
     destroy() {

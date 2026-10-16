@@ -34,6 +34,11 @@ export const RESOLUTIONS = {
     '50': '50 %'
 } as const
 
+export const ANTIALIASING = {
+    smaa: 'SMAA',
+    taa: 'Temporal'
+} as const
+
 export const WEATHERS = {
     auto: 'Changing',
     clear: 'Clear',
@@ -56,6 +61,7 @@ export type GrassStyle = keyof typeof GRASS_STYLES
 export type DayLength = keyof typeof DAY_LENGTHS
 export type Resolution = keyof typeof RESOLUTIONS
 export type Weather = keyof typeof WEATHERS
+export type Antialiasing = keyof typeof ANTIALIASING
 
 type Values = {
     character: CharacterName
@@ -67,6 +73,7 @@ type Values = {
     volume: number
     textureCompression: boolean
     hideHidden: boolean
+    antialiasing: Antialiasing
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -80,7 +87,8 @@ const defaults: Values = {
     weather: 'auto',
     volume: 0.6,
     textureCompression: true,
-    hideHidden: true
+    hideHidden: true,
+    antialiasing: 'smaa'
 }
 
 /**
@@ -151,6 +159,7 @@ export default class Settings {
             if (stored.weather in WEATHERS) valid.weather = stored.weather
             if (typeof stored.textureCompression === 'boolean') valid.textureCompression = stored.textureCompression
             if (typeof stored.hideHidden === 'boolean') valid.hideHidden = stored.hideHidden
+            if (stored.antialiasing in ANTIALIASING) valid.antialiasing = stored.antialiasing
             if (typeof stored.volume === 'number' && stored.volume >= 0 && stored.volume <= 1) valid.volume = stored.volume
             return valid
         }
