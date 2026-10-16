@@ -2,6 +2,7 @@ import Debug from './Debug/Debug'
 import State from './State/State'
 import View from './View/View'
 import Menu from './Menu'
+import Loading from './Loading'
 
 export default class Game {
     static instance: Game
@@ -11,6 +12,7 @@ export default class Game {
     state!: State
     view!: View
     menu!: Menu
+    loading!: Loading
 
     static getInstance() {
         return Game.instance
@@ -40,6 +42,7 @@ export default class Game {
         
         this.menu = new Menu()
         this.debug = new Debug(this)
+        this.loading = new Loading(this)
 
         window.addEventListener('resize', () => {
             this.resize()
@@ -53,6 +56,7 @@ export default class Game {
         this.view.update()
         this.menu?.update()
         this.debug?.update()
+        this.loading?.update()
 
         window.requestAnimationFrame(() => {
             this.update()

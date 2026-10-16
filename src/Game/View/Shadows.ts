@@ -13,7 +13,7 @@ const CASCADES: Record<Quality, Preset | null> = {
     low: null,
     medium: { sizes: [1024, 1024, 1024], splits: [22, 100, 2200], intervals: [1, 2, 4] },
     high: { sizes: [2048, 1536, 1536], splits: [30, 150, 2600], intervals: [1, 2, 4] },
-    ultra: { sizes: [3072, 2048, 2048], splits: [34, 180, 3000], intervals: [1, 1, 3] }
+    ultra: { sizes: [3072, 2048, 2048], splits: [34, 180, 3000], intervals: [1, 2, 4] }
 }
 
 /** Layer the shadow casters are on (as well as the default one). */
@@ -207,7 +207,7 @@ export default class Shadows {
                 return
             const drawCount = mesh.geometry.drawRange.count
             this.swapped.push({ mesh, material: mesh.material, drawCount })
-            if (terrainOnly && !mesh.userData.terrainCaster) {
+            if ((terrainOnly && !mesh.userData.terrainCaster) || (cascade > 0 && mesh.userData.shadowNearOnly)) {
                 mesh.visible = false
                 return
             }

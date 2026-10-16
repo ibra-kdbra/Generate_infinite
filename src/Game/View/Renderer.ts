@@ -60,7 +60,7 @@ export default class Renderer {
     // per-pixel terrain and grass shading is heavy at high resolutions (4K panels, pixel
     // ratio 2): down when frames run long, slowly back up when there's headroom. Below the
     // display's resolution the frame is sharpened as it's stretched (SharpenEffect).
-    adaptive = { enabled: true, scale: 1, min: 0.5, samples: [] as number[], elapsed: 0, headroom: 0 }
+    adaptive = { enabled: true, scale: 1, min: 0.5, samples: [] as number[], elapsed: 0, headroom: 0, hold: 0, lastMedian: 0, lastScale: 1 }
 
     constructor() {
         this.game = Game.getInstance()
@@ -208,7 +208,12 @@ export default class Renderer {
         this.adaptive.enabled = resolution === 'auto'
         this.adaptive.samples = []
         this.adaptive.elapsed = 0
-        this.setScale(resolution === '75' ? 0.75 : resolution === '50' ? 0.5 : 1)
+        // auto on a very sharp screen (4K panels): start at three quarters, then adapt
+        const cap = MAX_PIXEL_RATIO[Settings.getInstance().get('quality')]
+        const ratio = Math.min(this.viewport.clampedPixelRatio ?? 1, cap)
+        const megapixels = (this.viewport.width ?? 0) * (this.viewport.height ?? 0) * ratio * ratio / 1e6
+        const auto = megapixels > 5 ? 0.75 : 1
+        this.setScale(resolution === '75' ? 0.75 : resolution === '50' ? 0.5 : resolution === 'auto' ? auto : 1)
     }
 
     /** Device pixel ratio, capped by the quality setting, times the adaptive scale. */
@@ -222,6 +227,13 @@ export default class Renderer {
         this.resize()
     }
 
+    /**
+     * Automatic resolution, aiming at a steady 60 frames a second: below it (a 60 Hz screen
+     * with vsync shows anything slower as 30) the resolution steps down, with plenty of
+     * headroom it steps back up. A step down that doesn't make frames faster means the
+     * processor, not the graphics card, is what's slow: the step is undone and no more are
+     * taken for a while (a blurrier picture wouldn't buy anything).
+     */
     private updateAdaptiveResolution() {
         const adaptive = this.adaptive
         // only while someone is playing: a hidden or unfocused page gets throttled frames
@@ -234,30 +246,44 @@ export default class Renderer {
 
         adaptive.samples.push(this.time.delta)
         adaptive.elapsed += this.time.delta
-        if (adaptive.elapsed < 1.5)
+        adaptive.hold = Math.max(0, adaptive.hold - this.time.delta)
+        if (adaptive.elapsed < 1)
             return
 
-        // median frame time of the last ~1.5 s (ignores the odd hitch)
+        // median frame time of the last second (ignores the odd hitch)
         const sorted = adaptive.samples.sort((a, b) => a - b)
         const median = sorted[Math.floor(sorted.length / 2)]
         adaptive.samples = []
         adaptive.elapsed = 0
 
-        if (median > 1 / 48) {
-            adaptive.headroom = 0
-            if (adaptive.scale > adaptive.min)
-                this.setScale(Math.max(adaptive.min, adaptive.scale * 0.85))
+        // judge the last step down
+        if (adaptive.lastMedian > 0) {
+            if (median > adaptive.lastMedian * 0.94 && adaptive.lastScale > adaptive.scale) {
+                // no faster: the processor is the limit
+                this.setScale(adaptive.lastScale)
+                adaptive.hold = 20
+            }
+            adaptive.lastMedian = 0
+            return
         }
-        else if (median < 1 / 58 && adaptive.scale < 1) {
-            // only after ~6 s of headroom, so it doesn't flip between two sizes
-            if (++adaptive.headroom >= 4) {
-                adaptive.headroom = 0
-                this.setScale(Math.min(1, adaptive.scale * 1.1))
+
+        if (median > 1 / 56 && adaptive.hold <= 0) {
+            adaptive.headroom = 0
+            if (adaptive.scale > adaptive.min) {
+                adaptive.lastMedian = median
+                adaptive.lastScale = adaptive.scale
+                this.setScale(Math.max(adaptive.min, adaptive.scale * 0.88))
             }
         }
-        else {
-            adaptive.headroom = 0
+        else if (median < 1 / 72 && adaptive.scale < 1) {
+            // only after a few seconds of headroom, so it doesn't flip between two sizes
+            if (++adaptive.headroom >= 3) {
+                adaptive.headroom = 0
+                this.setScale(Math.min(1, adaptive.scale * 1.06))
+            }
         }
+        else
+            adaptive.headroom = 0
     }
 
     resize() {

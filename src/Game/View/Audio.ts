@@ -5,6 +5,9 @@ import State from '../State/State'
 import Settings from '../Settings'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
 
+export type Category = 'ambience' | 'nature' | 'body' | 'tools' | 'weather'
+const CATEGORY_SETTING = { ambience: 'volumeAmbience', nature: 'volumeNature', body: 'volumeBody', tools: 'volumeTools', weather: 'volumeWeather' } as const
+
 export type Sound = 'swing' | 'heavySwing' | 'hitWood' | 'hitRock' | 'dig' | 'reap' | 'bowDraw' | 'bowRelease' | 'arrowHit'
     | 'treeFall' | 'step' | 'land' | 'splash' | 'equip' | 'jump' | 'snort'
 
@@ -22,6 +25,8 @@ export default class Audio {
     state: State
     context: AudioContext | null = null
     private master!: GainNode
+    private categories = {} as Record<Category, GainNode>
+    private reverb!: GainNode
     private white!: AudioBuffer
     private brown!: AudioBuffer
     private wind!: { gain: GainNode, filter: BiquadFilterNode }
@@ -34,6 +39,7 @@ export default class Audio {
     private wasSwimming = false
     private fall = 0
     private strokeTime = 0
+    private gust = 0
 
     constructor() {
         this.view = View.getInstance()
@@ -50,7 +56,14 @@ export default class Audio {
             if (document.hidden) this.context.suspend()
             else this.context.resume()
         })
-        this.settings.events.on('change:volume', () => this.applyVolume())
+        for (const key of ['volume', 'muted', ...Object.values(CATEGORY_SETTING)])
+            this.settings.events.on(`change:${key}`, () => this.applyVolume())
+        // M mutes everything (not while typing)
+        window.addEventListener('keydown', (event) => {
+            const target = event.target as HTMLElement | null
+            if (event.code === 'KeyM' && !event.repeat && !target?.matches?.('input[type="text"], textarea'))
+                this.settings.set('muted', !this.settings.get('muted'))
+        })
         this.view.weather.events.add((event, delay, strength) => {
             if (event === 'thunder')
                 setTimeout(() => this.thunder(strength), delay * 1000)
@@ -63,10 +76,36 @@ export default class Audio {
         const context = new AudioContext()
         this.context = context
         const compressor = context.createDynamicsCompressor()
-        compressor.threshold.value = - 14
-        compressor.ratio.value = 4
+        compressor.threshold.value = - 18
+        compressor.knee.value = 12
+        compressor.ratio.value = 3
+        // a gentle top cut: synthesized noise is harsh above ~11 kHz
+        const soften = context.createBiquadFilter()
+        soften.type = 'lowpass'
+        soften.frequency.value = 11000
+        soften.Q.value = 0.5
         this.master = context.createGain()
-        this.master.connect(compressor).connect(context.destination)
+        this.master.connect(soften).connect(compressor).connect(context.destination)
+        // a short open-air reverb (exponentially decaying noise), so sounds sit in a space
+        const convolver = context.createConvolver()
+        const tail = Math.floor(context.sampleRate * 0.9)
+        const impulse = context.createBuffer(2, tail, context.sampleRate)
+        for (let channel = 0; channel < 2; channel++) {
+            const data = impulse.getChannelData(channel)
+            for (let i = 0; i < tail; i++)
+                data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / tail, 3.2) * (i < 120 ? i / 120 : 1)
+        }
+        convolver.buffer = impulse
+        this.reverb = context.createGain()
+        this.reverb.gain.value = 0.18
+        this.reverb.connect(convolver).connect(this.master)
+        for (const category of Object.keys(CATEGORY_SETTING) as Category[]) {
+            const gain = context.createGain()
+            gain.connect(this.master)
+            if (category === 'tools' || category === 'body' || category === 'weather')
+                gain.connect(this.reverb)
+            this.categories[category] = gain
+        }
         this.applyVolume()
 
         // noise: white, and brown (deeper, for wind, rumbles, thuds)
@@ -88,7 +127,7 @@ export default class Audio {
         windFilter.Q.value = 0.8
         const windGain = context.createGain()
         windGain.gain.value = 0
-        windSource.connect(windFilter).connect(windGain).connect(this.master)
+        windSource.connect(windFilter).connect(windGain).connect(this.categories.ambience)
         this.wind = { gain: windGain, filter: windFilter }
 
         // rain: a hiss and a softer patter
@@ -101,20 +140,30 @@ export default class Audio {
         low.frequency.value = 7000
         const rainGain = context.createGain()
         rainGain.gain.value = 0
-        hiss.connect(high).connect(low).connect(rainGain).connect(this.master)
+        high.type = 'bandpass'
+        high.frequency.value = 2600
+        high.Q.value = 0.35
+        low.frequency.value = 6500
+        hiss.connect(high).connect(low).connect(rainGain).connect(this.categories.weather)
         const patterSource = this.loop(this.brown, 1.7)
         const patterFilter = context.createBiquadFilter()
         patterFilter.type = 'bandpass'
         patterFilter.frequency.value = 900
         const patter = context.createGain()
         patter.gain.value = 0
-        patterSource.connect(patterFilter).connect(patter).connect(this.master)
+        patterFilter.frequency.value = 650
+        patterFilter.Q.value = 0.7
+        patterSource.connect(patterFilter).connect(patter).connect(this.categories.weather)
         this.rain = { gain: rainGain, patter }
     }
 
     private applyVolume() {
-        if (this.context)
-            this.master.gain.setTargetAtTime(this.settings.get('volume'), this.context.currentTime, 0.05)
+        if (!this.context)
+            return
+        const t = this.context.currentTime
+        this.master.gain.setTargetAtTime(this.settings.get('muted') ? 0 : this.settings.get('volume'), t, 0.05)
+        for (const [category, key] of Object.entries(CATEGORY_SETTING) as [Category, typeof CATEGORY_SETTING[Category]][])
+            this.categories[category].gain.setTargetAtTime(this.settings.get(key), t, 0.05)
     }
 
     private loop(buffer: AudioBuffer, rate = 1) {
@@ -130,7 +179,7 @@ export default class Audio {
     // ── building blocks ──
 
     /** Where a world point is heard: a stereo pan and a level by distance (null: too far). */
-    private place(at?: THREE.Vector3, range = 60) {
+    private place(at?: THREE.Vector3, range = 60, category: Category = 'tools') {
         const context = this.context!
         const panner = context.createStereoPanner()
         let level = 1
@@ -144,7 +193,7 @@ export default class Audio {
             panner.pan.value = THREE.MathUtils.clamp(offset.normalize().dot(right), - 1, 1) * 0.8
             level = 1 / (1 + distance * distance / 60)
         }
-        panner.connect(this.master)
+        panner.connect(this.categories[category])
         return { panner, level }
     }
 
@@ -195,7 +244,8 @@ export default class Audio {
     play(sound: Sound, at?: THREE.Vector3, strength = 1) {
         if (!this.context || this.context.state !== 'running')
             return
-        const where = this.place(at)
+        const category: Category = sound === 'step' || sound === 'land' || sound === 'jump' || sound === 'splash' ? 'body' : sound === 'snort' ? 'nature' : 'tools'
+        const where = this.place(at, 60, category)
         if (!where)
             return
         const out = where.panner
@@ -244,8 +294,9 @@ export default class Audio {
                 this.noise(out, { type: 'bandpass', frequency: 1400, q: 0.5, gain: 0.35 * k, attack: 0.01, duration: 0.9, delay: 1.22 })
                 break
             case 'step':
-                this.noise(out, { type: 'bandpass', frequency: 1100 * vary(), q: 0.8, gain: 0.1 * k, duration: 0.08 })
-                this.noise(out, { brown: true, type: 'lowpass', frequency: 300, gain: 0.12 * k, duration: 0.07 })
+                // a soft thud and the brush of grass
+                this.noise(out, { brown: true, type: 'lowpass', frequency: 380 * vary(), gain: 0.16 * k, attack: 0.008, duration: 0.09 })
+                this.noise(out, { type: 'bandpass', frequency: 1500 * vary(), q: 0.6, gain: 0.025 * k, attack: 0.012, duration: 0.11 })
                 break
             case 'jump':
                 this.noise(out, { type: 'bandpass', frequency: 900, q: 0.7, gain: 0.08 * k, duration: 0.1 })
@@ -274,7 +325,7 @@ export default class Audio {
     private thunder(strength: number) {
         if (!this.context || this.context.state !== 'running')
             return
-        const where = this.place()!
+        const where = this.place(undefined, 60, 'weather')!
         if (strength > 0.6)
             this.noise(where.panner, { type: 'highpass', frequency: 1200, gain: 0.5 * strength, duration: 0.25 })
         this.noise(where.panner, { brown: true, type: 'lowpass', frequency: 160, gain: 1.1 * strength, attack: 0.25, duration: 4 + Math.random() * 3, rate: 0.7 })
@@ -282,7 +333,7 @@ export default class Audio {
     }
 
     private chirp() {
-        const where = this.place()!
+        const where = this.place(undefined, 60, 'nature')!
         where.panner.pan.value = Math.random() * 1.6 - 0.8
         const base = 2800 + Math.random() * 2200
         const notes = 2 + Math.floor(Math.random() * 4)
@@ -292,11 +343,12 @@ export default class Audio {
     }
 
     private cricket() {
-        const where = this.place()!
+        const where = this.place(undefined, 60, 'nature')!
         where.panner.pan.value = Math.random() * 1.6 - 0.8
-        const level = 0.012 + Math.random() * 0.01
+        const level = 0.005 + Math.random() * 0.004
+        const pitch = 3700 + Math.random() * 400
         for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++)
-            this.tone(where.panner, { frequency: 4300 + Math.random() * 300, gain: level, attack: 0.004, duration: 0.03, delay: i * 0.07 })
+            this.tone(where.panner, { frequency: pitch, gain: level, attack: 0.008, duration: 0.035, delay: i * 0.075 })
     }
 
     update() {
@@ -312,10 +364,13 @@ export default class Audio {
         // ── ambience ──
         const height = THREE.MathUtils.smoothstep(p[1] - WATER_LEVEL, 20, 160)
         const windiness = THREE.MathUtils.clamp(sky.wind.speed / 40, 0, 1) * 0.5 + height * 0.4 + weather.storm * 0.6
-        this.wind.gain.gain.setTargetAtTime(0.05 + windiness * 0.22, t, 0.5)
-        this.wind.filter.frequency.setTargetAtTime(240 + windiness * 900 + Math.sin(this.state.time.elapsed * 0.35) * 80 * windiness, t, 0.6)
-        this.rain.gain.gain.setTargetAtTime(weather.rain * 0.22, t, 0.6)
-        this.rain.patter.gain.setTargetAtTime(weather.rain * 0.3, t, 0.6)
+        // gusts: a slow wander of strength, so the wind breathes instead of hissing steadily
+        this.gust += (Math.random() - 0.5) * dt * 1.4 - this.gust * dt * 0.3
+        const gust = THREE.MathUtils.clamp(0.75 + this.gust, 0.35, 1.3)
+        this.wind.gain.gain.setTargetAtTime((0.012 + windiness * 0.09) * gust, t, 0.6)
+        this.wind.filter.frequency.setTargetAtTime(160 + windiness * 520 * gust, t, 0.8)
+        this.rain.gain.gain.setTargetAtTime(weather.rain * 0.07, t, 0.8)
+        this.rain.patter.gain.setTargetAtTime(weather.rain * 0.12, t, 0.8)
 
         const day = THREE.MathUtils.smoothstep(this.state.sun.position.y, 0.0, 0.15)
         const night = 1 - THREE.MathUtils.smoothstep(this.state.sun.position.y, - 0.12, 0.02)

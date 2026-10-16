@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { vec3 } from 'gl-matrix'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 import View from './View'
 import State from '../State/State'
@@ -69,26 +70,53 @@ export default class Wildlife {
                 const gltf = await loader.loadAsync(`/models/animals/${kind}.glb`)
                 // the file has every clip twice (with and without the armature's prefix)
                 const clips = gltf.animations.filter((clip) => !clip.name.includes('|'))
-                gltf.scene.traverse((child) => {
-                    const mesh = child as THREE.Mesh
-                    if (!mesh.isMesh) return
-                    const material = mesh.material as THREE.MeshStandardMaterial
-                    material.roughness = Math.max(material.roughness, 0.85)     // fur, not plastic
-                    material.metalness = 0
-                    // the pack's flat colours, toned to a real deer's coat (they read orange in this light)
-                    const coat: Record<string, string> = {
-                        Main: '#5e4430', Main_Dark: '#3d2c1e', Main_Light: '#a8957c', Hooves: '#2e2722',
-                        Material: '#5a4230', 'Material.010': '#3a2b1d', 'Material.003': '#a8957c', 'Material.001': '#5b4a36'
-                    }
-                    if (coat[material.name])
-                        material.color.set(coat[material.name])
-                })
+                this.mergeMeshes(gltf.scene)
                 this.sources[kind] = { scene: gltf.scene, clips }
             }
         }
         catch (error) {
             console.warn('[wildlife] animals unavailable', error)
         }
+    }
+
+    /**
+     * The pack splits each animal into one mesh per flat colour (7 or 8 draws, in every
+     * pass, shadows included). Bake each colour into the vertices, toned to a real deer's
+     * coat, and merge them: one skinned mesh, one draw.
+     */
+    private mergeMeshes(scene: THREE.Object3D) {
+        const coat: Record<string, string> = {
+            Main: '#5e4430', Main_Dark: '#3d2c1e', Main_Light: '#a8957c', Hooves: '#2e2722',
+            Material: '#5a4230', 'Material.010': '#3a2b1d', 'Material.003': '#a8957c', 'Material.001': '#5b4a36'
+        }
+        const meshes: THREE.SkinnedMesh[] = []
+        scene.traverse((child) => { if ((child as THREE.SkinnedMesh).isSkinnedMesh) meshes.push(child as THREE.SkinnedMesh) })
+        if (meshes.length < 2)
+            return
+        const geometries = meshes.map((mesh) => {
+            const material = mesh.material as THREE.MeshStandardMaterial
+            const color = new THREE.Color(coat[material.name] ?? material.color)
+            if (coat[material.name]) color.convertSRGBToLinear()
+            const geometry = mesh.geometry.clone()
+            const count = geometry.getAttribute('position').count
+            const colors = new Float32Array(count * 3)
+            for (let i = 0; i < count; i++) colors.set([color.r, color.g, color.b], i * 3)
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+            for (const name of Object.keys(geometry.attributes))
+                if (!['position', 'normal', 'color', 'skinIndex', 'skinWeight'].includes(name)) geometry.deleteAttribute(name)
+            geometry.morphAttributes = {}
+            return geometry
+        })
+        const merged = mergeGeometries(geometries)
+        if (!merged)
+            return
+        const first = meshes[0]
+        const mesh = new THREE.SkinnedMesh(merged, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }))
+        mesh.name = 'Body_merged'
+        first.parent!.add(mesh)
+        mesh.bind(first.skeleton, first.bindMatrix)
+        for (const old of meshes)
+            old.parent!.remove(old)
     }
 
     /** A spot for a herd: walkable, dry ground, out of the trees, preferring forest edges, out of view. */
@@ -141,6 +169,7 @@ export default class Wildlife {
             if (!mesh.isMesh) return
             mesh.frustumCulled = false
             this.view.shadows.addCaster(mesh, this.depthMaterial)
+            mesh.userData.shadowNearOnly = true          // only the sharp cascade around the camera
         })
         const root = new THREE.Group()
         root.add(model)
@@ -294,6 +323,42 @@ export default class Wildlife {
 
         for (const animal of [...this.animals])
             this.updateAnimal(animal, dt, p)
+        this.collide()
+    }
+
+    /**
+     * The player can't walk through a deer: each body is a capsule along its spine (rump to
+     * chest, about a metre and a half), and the player is pushed out of it.
+     */
+    private collide() {
+        const player = this.state.player
+        const p = player.position.current
+        for (const animal of this.animals) {
+            const scale = animal.model.scale.x / SCALE[animal.kind]
+            const forward = new THREE.Vector3(Math.sin(animal.heading), 0, Math.cos(animal.heading))
+            const rump = animal.position.clone().addScaledVector(forward, - 0.55 * scale)
+            const chest = animal.position.clone().addScaledVector(forward, 0.55 * scale)
+            // standing on it, or far above (a jump over a lying deer) doesn't collide
+            if (p[1] > animal.position.y + (animal.mood === 'dead' ? 0.45 : 1.25) * scale)
+                continue
+            // nearest point on the spine
+            const segment = chest.clone().sub(rump)
+            const t = THREE.MathUtils.clamp(((p[0] - rump.x) * segment.x + (p[2] - rump.z) * segment.z) / segment.lengthSq(), 0, 1)
+            const nx = rump.x + segment.x * t, nz = rump.z + segment.z * t
+            const dx = p[0] - nx, dz = p[2] - nz
+            const distance = Math.hypot(dx, dz)
+            const minimum = (animal.mood === 'dead' ? 0.3 : 0.38) * scale + 0.32
+            if (distance < minimum && distance > 1e-4) {
+                p[0] = nx + dx / distance * minimum
+                p[2] = nz + dz / distance * minimum
+                // what was carrying the player into it stops
+                const along = (player.velocity[0] * dx + player.velocity[2] * dz) / distance
+                if (along < 0) {
+                    player.velocity[0] -= along * dx / distance
+                    player.velocity[2] -= along * dz / distance
+                }
+            }
+        }
     }
 
     private updateAnimal(animal: Animal, dt: number, player: THREE.Vector3) {

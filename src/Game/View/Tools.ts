@@ -298,8 +298,10 @@ export default class Tools {
         ui.appendChild(this.hud)
         this.hud.addEventListener('click', (event) => {
             const slot = (event.target as HTMLElement).closest('[data-slot]') as HTMLElement | null
-            if (slot)
+            if (slot) {
                 this.select(Number(slot.dataset.slot))
+                ;(document.activeElement as HTMLElement | null)?.blur()     // the keys go back to the game
+            }
         })
         this.crosshair = document.createElement('div')
         this.crosshair.className = 'crosshair'

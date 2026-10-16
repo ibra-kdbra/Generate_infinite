@@ -118,8 +118,11 @@ export default class Controls {
             return this.keys.map.find((mapItem) => mapItem.codes.includes(key))
         }
 
-        // Handlers
+        // Handlers: keys pressed while a control of the interface has the focus (a slider, a
+        // text field, a button in the menu) belong to that control, not to the game
         const keyDownHandler = (event: KeyboardEvent) => {
+            if (Controls.isTyping(event.target))
+                return
             const mapItem = this.keys.findPerCode(event.code)
 
             if (mapItem) {
@@ -154,8 +157,10 @@ export default class Controls {
         this.pointer.deltaTemp = { x: 0, y: 0 }
         this.pointer.delta = { x: 0, y: 0 }
 
-        window.addEventListener('pointerdown', () => {
-            this.pointer.down = true
+        // only presses on the world itself turn the camera (not on the menu or the toolbar)
+        window.addEventListener('pointerdown', (event) => {
+            if (!Controls.isInterface(event.target))
+                this.pointer.down = true
         })
 
         window.addEventListener('pointermove', (event) => {
@@ -174,6 +179,24 @@ export default class Controls {
 
         this.pointer.deltaTemp.x = 0
         this.pointer.deltaTemp.y = 0
+    }
+
+    /** Whether an event comes from the interface (anything but the game's canvas and the hidden keyboard input). */
+    static isInterface(target: EventTarget | null) {
+        const element = target as HTMLElement | null
+        if (!element || !element.closest)
+            return false
+        if (element.classList?.contains('keyboard-input'))
+            return false
+        return !!element.closest('.ui') || element.matches('input, textarea, select, button')
+    }
+
+    /** Whether a key goes to the interface: a text field, or anything in the open menu. */
+    static isTyping(target: EventTarget | null) {
+        const element = target as HTMLElement | null
+        if (!element || !element.closest || element.classList?.contains('keyboard-input'))
+            return false
+        return element.matches('input[type="text"], textarea, select') || !!element.closest('.drawer:not([hidden])')
     }
 
     setMobile() {

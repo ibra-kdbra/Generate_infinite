@@ -63,6 +63,7 @@ const CONTROLS: Group[] = [
             { keys: ['Esc'], label: 'Menu' },
             { keys: ['H'], label: 'Controls' },
             { keys: ['F'], label: 'Full screen' },
+            { keys: ['M'], label: 'Mute sound' },
             { keys: ['B'], label: 'Developer panel' }
         ]
     }
@@ -188,6 +189,8 @@ export default class Menu {
                         <dl class="readout">
                             <div><dt>World seed</dt><dd>${this.escape(Game.getInstance().seed)}</dd></div>
                         </dl>
+                        <h3>Created by</h3>
+                        <p class="about-credit">Saruma</p>
                         <h3>Made with</h3>
                         <ul class="credits">
                             <li>Characters and animations: <a href="https://quaternius.com" target="_blank" rel="noopener">Quaternius</a> (CC0)</li>
@@ -270,8 +273,16 @@ export default class Menu {
 
         // sound
         const kit = new Ui()
-        const sound = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Sound', 'All of it is made as you play: wind, rain, birds and crickets, footsteps, tools, thunder.')
-        kit.slider(sound, { label: 'Volume', min: 0, max: 1, step: 0.01, get: () => this.settings.get('volume'), set: (v) => this.settings.set('volume', v), format: (v) => v === 0 ? 'Off' : `${Math.round(v * 100)} %` })
+        const sound = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Sound', 'All of it is made as you play. M mutes and unmutes.')
+        const percent = (v: number) => v === 0 ? 'Off' : `${Math.round(v * 100)} %`
+        kit.toggle(sound, 'Mute', () => this.settings.get('muted'), (on) => this.settings.set('muted', on))
+        kit.slider(sound, { label: 'Volume', min: 0, max: 1, step: 0.01, get: () => this.settings.get('volume'), set: (v) => this.settings.set('volume', v), format: percent })
+        const channels: [string, 'volumeAmbience' | 'volumeNature' | 'volumeBody' | 'volumeTools' | 'volumeWeather'][] = [
+            ['Wind', 'volumeAmbience'], ['Birds, crickets and animals', 'volumeNature'], ['Footsteps and water', 'volumeBody'], ['Tools and hits', 'volumeTools'], ['Rain and thunder', 'volumeWeather']
+        ]
+        for (const [label, key] of channels)
+            kit.slider(sound, { label, min: 0, max: 1, step: 0.01, get: () => this.settings.get(key), set: (v) => this.settings.set(key, v), format: percent })
+        this.settings.events.on('change:muted', () => kit.refresh())
         this.events.on('show', () => kit.refresh())
 
         for (const key of ['character', 'quality', 'grass', 'resolution', 'antialiasing'])
@@ -375,7 +386,9 @@ export default class Menu {
         this.drawer.classList.remove('is-open')
         document.querySelector('.ui')!.classList.remove('has-drawer')
         setTimeout(() => { if (!this.open) this.drawer.hidden = true }, 220)
-        this.lastFocus?.focus?.({ preventScroll: true })
+        // the keys go back to the game
+        if (this.lastFocus && this.lastFocus !== document.body && !this.drawer.contains(this.lastFocus)) this.lastFocus.focus?.({ preventScroll: true })
+        else (document.activeElement as HTMLElement | null)?.blur()
     }
 
     toggle(tab: Tab = this.tab) {

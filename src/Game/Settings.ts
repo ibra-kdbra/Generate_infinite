@@ -80,6 +80,12 @@ type Values = {
     resolution: Resolution
     weather: Weather
     volume: number
+    muted: boolean
+    volumeAmbience: number
+    volumeNature: number
+    volumeBody: number
+    volumeTools: number
+    volumeWeather: number
     textureCompression: boolean
     hideHidden: boolean
     antialiasing: Antialiasing
@@ -96,6 +102,12 @@ const defaults: Values = {
     resolution: 'auto',
     weather: 'auto',
     volume: 0.6,
+    muted: false,
+    volumeAmbience: 0.7,
+    volumeNature: 0.8,
+    volumeBody: 0.8,
+    volumeTools: 0.9,
+    volumeWeather: 0.8,
     textureCompression: true,
     hideHidden: true,
     antialiasing: 'smaa',
@@ -172,6 +184,9 @@ export default class Settings {
             if (typeof stored.hideHidden === 'boolean') valid.hideHidden = stored.hideHidden
             if (stored.antialiasing in ANTIALIASING) valid.antialiasing = stored.antialiasing
             if (stored.threads in THREADS) valid.threads = stored.threads
+            if (typeof stored.muted === 'boolean') valid.muted = stored.muted
+            for (const key of ['volumeAmbience', 'volumeNature', 'volumeBody', 'volumeTools', 'volumeWeather'] as const)
+                if (typeof stored[key] === 'number' && stored[key] >= 0 && stored[key] <= 1) valid[key] = stored[key]
             if (typeof stored.volume === 'number' && stored.volume >= 0 && stored.volume <= 1) valid.volume = stored.volume
             return valid
         }

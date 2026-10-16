@@ -60,6 +60,8 @@ export default class CameraThirdPerson {
         this.phiLimits = { min: 0.15, max: Math.PI * 0.62 }   // can look up a little, not from underground
 
         window.addEventListener('wheel', (event) => {
+            if (Controls.isInterface(event.target))
+                return          // scrolling the menu, not zooming
             if (!this.active)
                 return
             this.targetDistance *= Math.pow(1.0015, event.deltaY)

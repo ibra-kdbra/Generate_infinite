@@ -75,6 +75,8 @@ export default class CameraFly {
         this.rotateXLimits = { min: - Math.PI * 0.49, max: Math.PI * 0.49 }
 
         window.addEventListener('wheel', (event) => {
+            if (Controls.isInterface(event.target))
+                return          // scrolling the menu, not zooming
             if (!this.active)
                 return
             this.speed = Math.min(220, Math.max(2, this.speed * Math.pow(1.0012, - event.deltaY)))

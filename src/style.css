@@ -613,6 +613,14 @@ body
     line-height: 1.6;
 }
 
+.ui .about-credit
+{
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
 .ui .credits
 {
     margin: 0;
@@ -991,6 +999,88 @@ body
 .ui .crosshair.is-hit .crosshair-hit
 {
     opacity: 0.9;
+}
+
+/* ── Loading screen ── */
+
+.ui .loading
+{
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    background:
+        radial-gradient(ellipse at 50% 120%, rgba(185, 222, 124, 0.08), transparent 60%),
+        #0d110e;
+    pointer-events: auto;
+    transition: opacity 0.7s var(--ease);
+}
+
+.ui .loading.is-leaving
+{
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ui .loading-card
+{
+    width: min(360px, calc(100vw - 48px));
+    text-align: center;
+}
+
+.ui .loading h1
+{
+    margin: 0 0 26px;
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+}
+
+.ui .loading-bar
+{
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.ui .loading-bar span
+{
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 0.25s linear;
+}
+
+.ui .loading-status
+{
+    margin: 14px 0 0;
+    color: var(--text-soft);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ui .loading-hint
+{
+    position: absolute;
+    bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 12px;
+}
+
+.ui .loading-hint kbd + kbd
+{
+    margin-left: 10px;
 }
 
 /* ── Menu controls (Ui.ts) ── */
