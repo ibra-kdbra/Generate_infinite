@@ -1,5 +1,5 @@
 import Game from './Game'
-import Settings, { CHARACTERS, DAY_LENGTHS, GRASS_STYLES, QUALITIES, CharacterName, DayLength, GrassStyle, Quality } from './Settings'
+import Settings, { CHARACTERS, DAY_LENGTHS, GRASS_STYLES, QUALITIES, RESOLUTIONS, CharacterName, DayLength, GrassStyle, Quality, Resolution } from './Settings'
 import State from './State/State'
 import View from './View/View'
 
@@ -149,6 +149,8 @@ export default class Menu {
                     ${this.field('character', 'Character', CHARACTERS, 'choice-grid')}
                     ${this.field('quality', 'Graphics', QUALITIES)}
                     <p class="field-note" data-note hidden>Anti-aliasing changes after a reload.</p>
+                    ${this.field('resolution', 'Resolution', RESOLUTIONS)}
+                    <p class="field-note">Auto lowers the resolution when frames run slow and raises it again when there's room; below full resolution the image is sharpened.</p>
                     ${this.field('grass', 'Grass', GRASS_STYLES, 'choice-wrap')}
                     ${this.field('dayLength', 'Day length', DAY_LENGTHS)}
                     <dl class="readout" data-stats>
@@ -206,12 +208,13 @@ export default class Menu {
             const button = (event.target as HTMLElement).closest('button[data-key]') as HTMLButtonElement | null
             if (!button)
                 return
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'dayLength'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'dayLength' | 'resolution'
             const value = button.dataset.value!
             if (key === 'character') this.settings.set('character', value as CharacterName)
             if (key === 'quality') this.settings.set('quality', value as Quality)
             if (key === 'grass') this.settings.set('grass', value as GrassStyle)
             if (key === 'dayLength') this.settings.set('dayLength', value as DayLength)
+            if (key === 'resolution') this.settings.set('resolution', value as Resolution)
             this.refresh()
         })
         window.addEventListener('keydown', (event) => {
@@ -248,7 +251,7 @@ export default class Menu {
         }
         catch { /* storage blocked: no tip */ }
 
-        for (const key of ['character', 'quality', 'grass', 'dayLength'])
+        for (const key of ['character', 'quality', 'grass', 'dayLength', 'resolution'])
             this.settings.events.on(`change:${key}`, () => this.refresh())
         this.select('settings')
         this.refresh()
@@ -288,7 +291,7 @@ export default class Menu {
 
     private refresh() {
         for (const button of this.drawer.querySelectorAll<HTMLButtonElement>('button[data-key]')) {
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'dayLength'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'dayLength' | 'resolution'
             const selected = this.settings.get(key) === button.dataset.value
             button.classList.toggle('is-selected', selected)
             button.setAttribute('aria-pressed', String(selected))

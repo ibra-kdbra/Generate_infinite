@@ -77,6 +77,5 @@ export default class Trail {
         geometry.setDrawRange(0, count > 1 ? (count - 1) * 6 : 0)
         geometry.getAttribute('position').needsUpdate = true
         geometry.getAttribute('aFade').needsUpdate = true
-        this.mesh.visible = count > 1
     }
 }

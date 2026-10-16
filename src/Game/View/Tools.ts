@@ -270,8 +270,14 @@ export default class Tools {
 
         this.trail = new Trail(this.view.scene)
         this.flame = this.createFlame()
+        // always in the scene (dark when the torch is out): a light coming and going would
+        // change the light count and recompile every lit material, a visible hitch
         this.flameLight = new THREE.PointLight('#ffa248', 0, 14, 2)
-        this.flame.add(this.flameLight)
+        this.view.scene.add(this.flameLight)
+        // compile the nocked arrow's shader now rather than at the first draw of the bow
+        this.nocked.visible = true
+        this.view.renderer.instance.compile(this.nocked, this.view.camera.instance, this.view.scene)
+        this.nocked.visible = false
 
         const ui = document.querySelector('.ui')!
         this.hud = document.createElement('div')
@@ -1041,8 +1047,9 @@ export default class Tools {
     /** The torch: a flickering flame and rising embers, lighting the character and the land around. */
     private placeTorch() {
         const torch = this.view.sky.uniforms.uTorch.value as THREE.Vector4
-        const lit = this.equipped === 'torch' && this.inHand.has('torch')
-        this.flame.visible = lit
+        const lit = this.equipped === 'torch' && this.inHand.has('torch') && this.set.includes('torch')
+        for (const sprite of this.flame.children)
+            sprite.visible = lit
         if (!lit) {
             torch.w = 0
             this.flameLight.intensity = 0
@@ -1055,6 +1062,7 @@ export default class Tools {
         this.flame.updateWorldMatrix(true, false)
         const at = new THREE.Vector3().setFromMatrixPosition(this.flame.matrixWorld)
         torch.set(at.x, at.y, at.z, strength)
+        this.flameLight.position.copy(at)
         this.flameLight.intensity = strength * 2.2
         this.flame.children.forEach((sprite, i) => sprite.scale.setScalar((0.22 - i * 0.05) * (0.9 + Math.random() * 0.2)))
         this.emberTime += dt

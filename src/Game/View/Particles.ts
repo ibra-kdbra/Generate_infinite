@@ -206,7 +206,6 @@ export default class Particles {
             attribute.addUpdateRange(0, pool.count * attribute.itemSize)
             attribute.needsUpdate = true
         }
-        pool.points.visible = pool.count > 0
     }
 
     update() {
@@ -218,7 +217,8 @@ export default class Particles {
         const scale = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(this.view.camera.instance.fov) / 2))
         for (const pool of [this.lit, this.glow]) {
             (pool.points.material as THREE.ShaderMaterial).uniforms.uScale.value = scale
-            if (pool.count > 0 || pool.points.visible)
+            // (always drawn, even empty: its shader is compiled up front, not at the first hit)
+            if (pool.count > 0 || pool.points.geometry.drawRange.count > 0)
                 this.step(pool, dt, state.time.elapsed, ground)
         }
     }

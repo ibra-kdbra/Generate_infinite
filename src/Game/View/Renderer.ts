@@ -7,9 +7,10 @@ import State from '../State/State'
 import Time from '../State/Time'
 import Viewport from '../State/Viewport'
 import Camera from './Camera'
-import Settings, { Quality } from '../Settings'
+import Settings, { Quality, Resolution } from '../Settings'
 import FilmEffect from './FilmEffect'
 import UnderwaterEffect from './UnderwaterEffect'
+import SharpenEffect from './SharpenEffect'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
 
 // Render resolution cap per quality (CSS pixel multiples). A 4K laptop panel at 225 %
@@ -48,12 +49,15 @@ export default class Renderer {
     smaa!: SMAAEffect
     effectPass!: EffectPass
     smaaPass!: EffectPass
+    sharpen!: SharpenEffect
+    sharpenPass!: EffectPass
     exposureBias = 1                   // developer panel
     exposure = 1                       // current, after adaptation
 
-    // Adaptive resolution: the per-pixel terrain and grass shading is heavy for integrated
-    // GPUs at high resolutions (4K panels, pixel ratio 2), so the render resolution follows
-    // the frame time: down when frames run long, slowly back up when there's headroom.
+    // Render resolution (the Resolution setting): 'auto' follows the frame time, since the
+    // per-pixel terrain and grass shading is heavy at high resolutions (4K panels, pixel
+    // ratio 2): down when frames run long, slowly back up when there's headroom. Below the
+    // display's resolution the frame is sharpened as it's stretched (SharpenEffect).
     adaptive = { enabled: true, scale: 1, min: 0.5, samples: [] as number[], elapsed: 0, headroom: 0 }
 
     constructor() {
@@ -68,10 +72,13 @@ export default class Renderer {
 
         this.setInstance()
         this.setComposer()
-        Settings.getInstance().events.on('change:quality', (quality: Quality) => {
+        const settings = Settings.getInstance()
+        this.applyResolution(settings.get('resolution'))
+        settings.events.on('change:quality', (quality: Quality) => {
             this.applyQuality(quality)
-            this.setScale(1)
+            this.applyResolution(settings.get('resolution'))
         })
+        settings.events.on('change:resolution', (resolution: Resolution) => this.applyResolution(resolution))
     }
 
     setInstance() {
@@ -151,6 +158,11 @@ export default class Renderer {
         this.smaaPass = new EffectPass(camera, this.smaa)
         this.composer.addPass(this.smaaPass)
 
+        this.sharpen = new SharpenEffect(0.55)
+        this.sharpenPass = new EffectPass(camera, this.sharpen)
+        this.sharpenPass.enabled = false
+        this.composer.addPass(this.sharpenPass)
+
         this.applyQuality(Settings.getInstance().get('quality'))
     }
 
@@ -166,8 +178,25 @@ export default class Renderer {
         this.smaaPass.enabled = post.smaa !== null
         if (post.smaa !== null)
             this.smaa.applyPreset(post.smaa)
-        this.effectPass.renderToScreen = post.smaa === null
-        this.smaaPass.renderToScreen = post.smaa !== null
+        this.updateOutput()
+    }
+
+    /** The last pass that runs draws to the screen. */
+    private updateOutput() {
+        // sharpen when rendering noticeably below the display's own resolution
+        this.sharpenPass.enabled = this.pixelRatio() < (this.viewport.pixelRatio ?? 1) * 0.92
+        const passes = [this.effectPass, this.smaaPass, this.sharpenPass]
+        const last = passes.filter((pass) => pass.enabled).pop()
+        for (const pass of passes)
+            pass.renderToScreen = pass === last
+    }
+
+    /** The Resolution setting: adaptive, or a fixed share of the display's resolution. */
+    applyResolution(resolution: Resolution) {
+        this.adaptive.enabled = resolution === 'auto'
+        this.adaptive.samples = []
+        this.adaptive.elapsed = 0
+        this.setScale(resolution === '75' ? 0.75 : resolution === '50' ? 0.5 : 1)
     }
 
     /** Device pixel ratio, capped by the quality setting, times the adaptive scale. */
@@ -224,6 +253,8 @@ export default class Renderer {
         this.instance.setSize(this.viewport.width!, this.viewport.height!)
         // the composer's buffers follow the drawing buffer size (pixel ratio included)
         this.composer?.setSize(this.viewport.width!, this.viewport.height!)
+        if (this.sharpenPass)
+            this.updateOutput()
     }
 
     /**

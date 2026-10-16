@@ -146,13 +146,7 @@ export default class Debug {
         performance.appendChild(this.graph)
         for (const [key, label] of [['fps', 'Frame rate'], ['ms', 'Frame time (avg / worst)'], ['resolution', 'Render resolution'], ['calls', 'Draw calls'], ['triangles', 'Triangles'], ['world', 'Chunks · grass patches'], ['plants', 'Trees near · far · plants']])
             this.readout(performance, key, label)
-        this.toggleControl(performance, 'Adaptive resolution', () => view.renderer.adaptive.enabled, (on) => {
-            view.renderer.adaptive.enabled = on
-            if (!on) {
-                view.renderer.adaptive.scale = 1
-                view.renderer.resize()
-            }
-        })
+        this.toggleControl(performance, 'Adaptive resolution', () => settings.get('resolution') === 'auto', (on) => settings.set('resolution', on ? 'auto' : 'full'))
 
         // time
         const time = this.section('Time of day')
