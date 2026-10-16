@@ -9,7 +9,8 @@ const MAX_STAMPS = 64
 
 /**
  * Wet patches on the ground around the player: footprints left by wet feet (one per step,
- * left and right) and the spots where drips land. A 512² texture over 64 m (12.5 cm per
+ * left and right) and the spots where drips land; and (green channel) soil turned with the
+ * hoe, which fades over a few minutes. A 512² texture over 64 m (12.5 cm per
  * texel) that scrolls with the player and dries out over about half a minute; the terrain
  * shader darkens and glosses the ground where it's wet.
  */
@@ -48,18 +49,20 @@ export default class GroundWetness {
 
         // pass 1: last frame's wetness, scrolled with the player, drying
         this.fadeMaterial = new THREE.ShaderMaterial({
-            uniforms: { uPrevious: { value: null }, uShift: { value: new THREE.Vector2() }, uDecay: { value: 1 } },
+            uniforms: { uPrevious: { value: null }, uShift: { value: new THREE.Vector2() }, uDecay: { value: 1 }, uTilledDecay: { value: 1 } },
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
             fragmentShader: `
                 uniform sampler2D uPrevious;
                 uniform vec2 uShift;
                 uniform float uDecay;
+                uniform float uTilledDecay;
                 varying vec2 vUv;
                 void main()
                 {
                     vec2 uv = vUv + uShift;
                     bool inside = all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0)));
-                    gl_FragColor = vec4(inside ? texture2D(uPrevious, uv).r * uDecay : 0.0, 0.0, 0.0, 1.0);
+                    vec2 previous = inside ? texture2D(uPrevious, uv).rg : vec2(0.0);
+                    gl_FragColor = vec4(previous.r * uDecay, previous.g * uTilledDecay, 0.0, 1.0);
                 }`,
             depthTest: false,
             depthWrite: false
@@ -102,7 +105,9 @@ export default class GroundWetness {
                 void main()
                 {
                     float d = length(vLocal);
-                    gl_FragColor = vec4((1.0 - smoothstep(0.55, 1.0, d)) * vWetness, 0.0, 0.0, 1.0);
+                    float stamp = 1.0 - smoothstep(0.55, 1.0, d);
+                    // negative: tilled soil (green channel)
+                    gl_FragColor = vWetness >= 0.0 ? vec4(stamp * vWetness, 0.0, 0.0, 1.0) : vec4(0.0, stamp * - vWetness, 0.0, 1.0);
                 }`,
             depthTest: false,
             depthWrite: false,
@@ -117,6 +122,11 @@ export default class GroundWetness {
     }
 
     private interleaved: THREE.InstancedInterleavedBuffer
+
+    /** Soil turned over by the hoe: a patch this long and wide, along `angle`. */
+    till(x: number, z: number, length: number, width: number, angle: number) {
+        this.stamp(x, z, length, width, angle, - 1)
+    }
 
     private stamp(x: number, z: number, length: number, width: number, angle: number, wetness: number) {
         if (this.pending.length / 6 < MAX_STAMPS)
@@ -155,6 +165,7 @@ export default class GroundWetness {
         // drying: about half a minute (a little faster in sunshine)
         const sunUp = Math.max(0, this.state.sun.position.y)
         this.fadeMaterial.uniforms.uDecay.value = Math.exp(- dt / (32 - sunUp * 12))
+        this.fadeMaterial.uniforms.uTilledDecay.value = Math.exp(- dt / 240)
 
         const renderer = this.view.renderer.instance
         const source = this.targets[this.current]

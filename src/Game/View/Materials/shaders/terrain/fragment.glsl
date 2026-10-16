@@ -132,8 +132,12 @@ void main()
     float wet = 1.0 - smoothstep(0.0, 0.35, height);
     // wet footprints and drips
     vec2 wetUv = (p - uWetOrigin) / uWetSize + 0.5;
-    if (all(greaterThan(wetUv, vec2(0.0))) && all(lessThan(wetUv, vec2(1.0))))
-        wet = max(wet, texture2D(uWetMap, wetUv).r);
+    float tilled = 0.0;
+    if (all(greaterThan(wetUv, vec2(0.0))) && all(lessThan(wetUv, vec2(1.0)))) {
+        vec2 marks = texture2D(uWetMap, wetUv).rg;
+        wet = max(wet, marks.r);
+        tilled = marks.g;
+    }
 
     // ── photo-scanned detail close up ──
     // (low quality has no texture detail: (0, 0), where smoothstep is undefined; a NaN here
@@ -224,6 +228,12 @@ void main()
         }
         color = mix(color, sand, shoreMask);
     }
+    // soil turned with the hoe: dark, freshly broken earth in rough furrows
+    if (tilled > 0.01) {
+        float furrows = sin(dot(p, vec2(0.71, 0.71)) * 18.0 + noise3(p * 0.9).r * 3.0) * 0.5 + 0.5;
+        vec3 earth = mix(vec3(0.16, 0.12, 0.08), vec3(0.24, 0.18, 0.12), furrows) * (0.85 + speck * 0.3);
+        color = mix(color, earth, smoothstep(0.05, 0.6, tilled));
+    }
     color *= mix(1.0, 0.55, wet);
 
     // ── distant forests: past where trees are drawn, the crowns' colour, clumped ──
@@ -238,7 +248,7 @@ void main()
     }
 
     // Under the grass field the ground is shaded by the blades (fades exactly as they do)
-    float grassAttenuation = getGrassAttenuation(p) * (1.0 - rockMask) * (1.0 - snowMask) * vGrassDensity;
+    float grassAttenuation = getGrassAttenuation(p) * (1.0 - rockMask) * (1.0 - snowMask) * vGrassDensity * (1.0 - tilled);
     color *= mix(1.0, 0.72, grassAttenuation);
 
     // ── micro relief: strong on rock, gentle on grass and snow ──
@@ -262,6 +272,7 @@ void main()
     occlusion = mix(1.0, occlusion, textured);
     vec3 lit = albedo * getTerrainLight(detailNormal, sunDirection, sunVisibility) * (1.0 - cavity) * (1.0 - treeShade * 0.3) * mix(1.0, occlusion, 0.8);
     lit *= 1.0 - canopy * 0.3;     // crowns shade each other
+    lit += albedo * getTorchLight(vWorldPosition, detailNormal) * (1.0 - cavity);
 
     // sun highlight (GGX): faint on dry ground, bright where it's wet (water fills the pores)
     // and on rock and snow

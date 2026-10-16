@@ -65,7 +65,7 @@ void main()
         albedo = toLinear(albedo);
         // in the leaves' shade (and the crown's own: dark inside, lit at the edges)
         float sunVisibility = vSunVisibility * getSunShadow(vWorldPosition, normal, sunDirection);
-        vec3 lit = albedo * getTerrainLight(normal, sunDirection, sunVisibility);
+        vec3 lit = albedo * (getTerrainLight(normal, sunDirection, sunVisibility) + getTorchLight(vWorldPosition, normal));
         #ifdef LEAVES
             // sunlight through the leaves (lit leaves glow, shaded ones less so)
             vec3 toEye = normalize(cameraPosition - vWorldPosition);

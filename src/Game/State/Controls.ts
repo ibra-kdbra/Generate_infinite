@@ -100,6 +100,10 @@ export default class Controls {
                 codes: ['KeyC'],    // not Ctrl: Ctrl+W closes the browser tab
                 name: 'crouch'
             },
+            { codes: ['Digit1', 'Numpad1'], name: 'tool1' },
+            { codes: ['Digit2', 'Numpad2'], name: 'tool2' },
+            { codes: ['Digit3', 'Numpad3'], name: 'tool3' },
+            { codes: ['KeyE'], name: 'use' },
         ]
 
         // Down keys

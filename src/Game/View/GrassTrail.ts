@@ -8,6 +8,7 @@ import State from '../State/State'
  * texel) that the grass vertex shader reads.
  *   rg: direction the blades were pushed (they lie down the way you walked)
  *   b:  how flattened they are (0..1)
+ *   a:  how much they've been cut short (sickle, sword, hoe; grows back over a minute or so)
  * Every frame the old values fade (trodden grass stands back up over a few seconds) and the
  * player's feet press a new spot, but only while they touch the ground: jumping presses
  * nothing, landing flattens a wider ring. The texture scrolls with the player in whole
@@ -28,6 +29,12 @@ export default class GrassTrail {
     private material: THREE.ShaderMaterial
     private wasGrounded = true
     private fallSpeed = 0
+    private pendingCut: { x: number, z: number, radius: number, strength: number } | null = null
+
+    /** Cut the grass short in a disc (applied on the next update). */
+    cut(x: number, z: number, radius: number, strength = 0.85) {
+        this.pendingCut = { x, z, radius, strength }
+    }
 
     constructor() {
         this.view = View.getInstance()
@@ -55,7 +62,11 @@ export default class GrassTrail {
                 uStampRadius: { value: 0.01 },
                 uStampStrength: { value: 0 },
                 uStampDirection: { value: new THREE.Vector2() },
-                uStampRadial: { value: 0 }
+                uStampRadial: { value: 0 },
+                uCutDecay: { value: 1 },
+                uCutCenter: { value: new THREE.Vector2(0.5, 0.5) },
+                uCutRadius: { value: 0.01 },
+                uCutStrength: { value: 0 }
             },
             vertexShader: `
                 varying vec2 vUv;
@@ -69,12 +80,17 @@ export default class GrassTrail {
                 uniform float uStampStrength;
                 uniform vec2 uStampDirection;
                 uniform float uStampRadial;
+                uniform float uCutDecay;
+                uniform vec2 uCutCenter;
+                uniform float uCutRadius;
+                uniform float uCutStrength;
                 varying vec2 vUv;
                 void main()
                 {
                     vec2 previousUv = vUv + uShift;
                     bool inside = all(greaterThanEqual(previousUv, vec2(0.0))) && all(lessThanEqual(previousUv, vec2(1.0)));
-                    vec4 previous = inside ? texture2D(uPrevious, previousUv) * uDecay : vec4(0.0);
+                    vec4 previous = inside ? texture2D(uPrevious, previousUv) : vec4(0.0);
+                    previous = vec4(previous.rgb * uDecay, previous.a * uCutDecay);
 
                     vec2 away = vUv - uStampCenter;
                     float d = length(away) / uStampRadius;
@@ -83,7 +99,8 @@ export default class GrassTrail {
 
                     float pressure = max(previous.b, stamp);
                     vec2 bend = mix(previous.rg, direction, clamp(stamp * 1.5, 0.0, 1.0));
-                    gl_FragColor = vec4(bend, pressure, 1.0);
+                    float cut = max(previous.a, (1.0 - smoothstep(0.6, 1.0, length(vUv - uCutCenter) / uCutRadius)) * uCutStrength);
+                    gl_FragColor = vec4(bend, pressure, cut);
                 }`,
             depthTest: false,
             depthWrite: false
@@ -134,6 +151,14 @@ export default class GrassTrail {
         uniforms.uStampRadius.value = radius / this.size
         uniforms.uStampStrength.value = strength
         uniforms.uStampRadial.value = radial
+        uniforms.uCutDecay.value = Math.exp(- dt / 70)
+        const cut = this.pendingCut
+        uniforms.uCutStrength.value = cut ? cut.strength : 0
+        if (cut) {
+            uniforms.uCutCenter.value.set((cut.x - originX) / this.size + 0.5, (cut.z - originZ) / this.size + 0.5)
+            uniforms.uCutRadius.value = cut.radius / this.size
+            this.pendingCut = null
+        }
 
         // ping-pong
         const source = this.targets[this.current]

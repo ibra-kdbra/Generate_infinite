@@ -35,7 +35,7 @@ void main()
     vec3 albedo = toLinear(color.rgb) * mix(0.8, 1.15, vTint);
     float sunVisibility = (1.0 - getCloudShadow(vWorldPosition, sunDirection)) * getSunShadow(vWorldPosition, geometric, sunDirection);
     float shade = mix(0.45, 1.05, vHeight);          // the plant's own shade near its root
-    vec3 lit = albedo * shade * getTerrainLight(normal, sunDirection, sunVisibility);
+    vec3 lit = albedo * shade * (getTerrainLight(normal, sunDirection, sunVisibility) + getTorchLight(vWorldPosition, normal));
     // sunlight through the fronds
     float back = pow(clamp(dot(- toEye, sunDirection), 0.0, 1.0), 3.0);
     lit += albedo * uSunLight * vec3(1.0, 1.0, 0.55) * back * 0.4 * sunVisibility;

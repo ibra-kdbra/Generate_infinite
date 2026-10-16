@@ -7,6 +7,8 @@ uniform vec3 uSunPosition;
 uniform sampler2D uNoiseTexture;
 uniform float uSway;
 uniform vec3 uViewPosition;     // the view's camera (in the shadow pass cameraPosition is the light's)
+uniform vec4 uTreeHit;          // a tree just struck with the axe: x, z, when (s), strength
+uniform vec2 uTreeHitDirection;
 
 attribute vec4 aInstance;        // x, y, z, scale (height in metres)
 attribute vec2 aInstanceExtra;   // rotation, unused
@@ -71,6 +73,10 @@ void main()
             sway += sin(uTime * 4.3 + dot(world, vec3(1.7, 2.3, 1.1))) * 0.025 * aSway;
         #endif
         world.xz += sway;
+        // struck: the crown shudders, dying away over a couple of seconds
+        float hitAge = uTime - uTreeHit.z;
+        if (hitAge > 0.0 && hitAge < 3.0 && distance(aInstance.xz, uTreeHit.xy) < 0.6)
+            world.xz += uTreeHitDirection * sin(hitAge * 13.0) * exp(- hitAge * 2.2) * uTreeHit.w * aSway * scale * 0.035;
     #endif
 
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);

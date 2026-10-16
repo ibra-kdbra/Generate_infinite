@@ -22,3 +22,17 @@ vec3 getTerrainLight(vec3 normal, vec3 sunDirection, float sunVisibility)
     vec3 moon = uMoonLight * clamp(dot(normal, - sunDirection) * 0.8 + 0.2, 0.0, 1.0);
     return ambient + sun + moon;
 }
+
+uniform vec4 uTorch;         // a flame carried by the player: world position, strength (0: none)
+uniform vec3 uTorchColor;
+
+// The flame's light on a surface: warm, falling off with distance, gone by about 14 m
+vec3 getTorchLight(vec3 position, vec3 normal)
+{
+    if (uTorch.w <= 0.0)
+        return vec3(0.0);
+    vec3 toLight = uTorch.xyz - position;
+    float d2 = dot(toLight, toLight);
+    float facing = clamp(dot(normal, toLight * inversesqrt(max(d2, 1e-4))) * 0.75 + 0.25, 0.0, 1.0);
+    return uTorchColor * uTorch.w * facing * (1.0 - smoothstep(100.0, 196.0, d2)) / (1.0 + d2);
+}

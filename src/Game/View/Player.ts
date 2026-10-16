@@ -64,6 +64,8 @@ export default class Player {
     private slideAmount = 0
     private diveAmount = 0
     private divePitch = 0
+    modelYaw = 0                        // the model may be turned to face the way it walks
+    private boneCache = new Map<string, THREE.Object3D | undefined>()
     private loadId = 0
     // wet clothes and skin (State/Player wetness), shared by all the character's materials
     private wetUniforms = { uWetLine: { value: - 1e5 }, uWetness: { value: 0 } }
@@ -132,6 +134,7 @@ export default class Player {
         this.group.add(model)
         this.model = model
         this.pose = new CharacterPose(model)
+        this.boneCache.clear()
 
         // Clips were made on the mannequin; only rotations and the pelvis translation are
         // kept, the pelvis scaled to this body's hip height
@@ -154,6 +157,7 @@ export default class Player {
         }
 
         this.calibrate(model)
+        this.modelYaw = model.rotation.y
 
         for (const [clipName, action] of Object.entries(this.actions)) {
             this.weights[clipName] = clipName === 'Idle_Loop' ? 1 : 0
@@ -308,6 +312,15 @@ export default class Player {
     }
 
 
+    /** A bone of the current model (tools hold on to the hands). */
+    bone(name: string) {
+        if (!this.model)
+            return undefined
+        if (!this.boneCache.has(name))
+            this.boneCache.set(name, this.model.getObjectByName(name))
+        return this.boneCache.get(name)
+    }
+
     private startOneShot(name: string, from = 0, timeScale = 1) {
         const action = this.actions[name]
         if (!action)
@@ -428,7 +441,7 @@ export default class Player {
         }
         this.swimOffset += (offset - this.swimOffset) * (1 - Math.exp(- dt * 4))
         this.model!.position.set(0, this.swimOffset, 0)
-        this.model!.quaternion.identity()
+        this.model!.rotation.set(0, this.modelYaw, 0)
 
         // ── procedural poses over the clips: crouch, slide, dive ──
         const k2 = 1 - Math.exp(- dt * 9)
@@ -443,7 +456,9 @@ export default class Player {
             slide: this.slideAmount,
             dive: this.diveAmount,
             divePitch: this.divePitch,
-            ground: player.position.current[1]
+            ground: player.position.current[1],
+            yaw: this.modelYaw,
+            hands: this.view.tools?.hands
         })
     }
 

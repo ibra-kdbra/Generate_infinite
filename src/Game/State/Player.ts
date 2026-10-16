@@ -66,6 +66,7 @@ export default class Player {
     sliding = false
     diving = false               // under the surface
     breath = 1                   // 1 full .. 0 out of air
+    aimYaw: number | null = null // set while aiming or striking with a tool: face this way
 
     rotation: number
     speed: number                // horizontal speed (m/s)
@@ -357,7 +358,12 @@ export default class Player {
 
         // face the movement direction, smoothly
         const horizontalSpeed = Math.hypot(this.velocity[0], this.velocity[2])
-        if (horizontalSpeed > 0.4) {
+        if (this.aimYaw !== null) {
+            let delta = this.aimYaw - this.rotation
+            delta = Math.atan2(Math.sin(delta), Math.cos(delta))
+            this.rotation += delta * Math.min(1, 18 * this.time.delta)
+        }
+        else if (horizontalSpeed > 0.4) {
             const target = Math.atan2(- this.velocity[0], - this.velocity[2])
             let delta = target - this.rotation
             delta = Math.atan2(Math.sin(delta), Math.cos(delta))

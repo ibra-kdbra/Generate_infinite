@@ -31,7 +31,7 @@ void main()
     // flowering blades: petals at the tip
     float petals = vFlower.a * smoothstep(0.4, 0.55, vHeight);
     vec3 albedo = mix(base, toLinear(vFlower.rgb), petals);
-    vec3 lit = albedo * shade * getTerrainLight(normal, sunDirection, vSunVisibility);
+    vec3 lit = albedo * shade * (getTerrainLight(normal, sunDirection, vSunVisibility) + getTorchLight(vWorldPosition, normal));
     vec3 sunLight = getSunLight(sunDirection) * vSunVisibility;
 
     // Sunlight through the blades when looking toward the sun

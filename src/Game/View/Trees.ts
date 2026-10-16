@@ -133,6 +133,8 @@ export default class Trees {
         for (const name of SHADOW_UNIFORMS)
             this.uniforms[name] = this.view.shadows.uniforms[name]
         this.uniforms.uLodCenter = { value: new THREE.Vector3() }
+        this.uniforms.uTreeHit = { value: new THREE.Vector4(0, 0, - 100, 0) }
+        this.uniforms.uTreeHitDirection = { value: new THREE.Vector2(1, 0) }
 
         this.applyQuality()
         this.settings.events.on('change:quality', () => this.applyQuality())
@@ -520,6 +522,13 @@ export default class Trees {
 
         this.version = this.state.vegetation.version
         this.builtAt.set(p[0], p[2])
+    }
+
+    /** Shake the tree at (x, z), struck from `direction` (axe). */
+    strike(x: number, z: number, directionX: number, directionZ: number, strength = 1) {
+        this.uniforms.uTreeHit.value.set(x, z, this.state.time.elapsed, strength)
+        const length = Math.hypot(directionX, directionZ) || 1
+        this.uniforms.uTreeHitDirection.value.set(directionX / length, directionZ / length)
     }
 
     update() {

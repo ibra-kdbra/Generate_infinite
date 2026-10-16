@@ -42,7 +42,7 @@ void main()
     float sunVisibility = vSunVisibility * getSunShadow(vWorldPosition, geometric, sunDirection);
     // where the stone meets the ground: soil and shade
     float contact = smoothstep(0.0, 0.3, vBase);
-    vec3 lit = albedo * getTerrainLight(normal, sunDirection, sunVisibility) * mix(0.5, 1.0, contact);
+    vec3 lit = albedo * (getTerrainLight(normal, sunDirection, sunVisibility) + getTorchLight(vWorldPosition, normal)) * mix(0.5, 1.0, contact);
 
     // sun highlight (GGX)
     vec3 halfway = normalize(sunDirection + toEye);

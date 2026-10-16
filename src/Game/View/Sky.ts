@@ -23,7 +23,7 @@ const CLOUDS: Record<Quality, { steps: number, lightSteps: number, resolution: n
 
 // Uniforms shared by reference with every material lit by the sky or shadowed by the clouds
 // (terrain, grass, trees, rocks, water): the atmosphere's light and the cloud layer
-export const LIGHT_UNIFORMS = ['uSunLight', 'uMoonLight', 'uSkyLight', 'uGroundLight', 'uHazeRange']
+export const LIGHT_UNIFORMS = ['uSunLight', 'uMoonLight', 'uSkyLight', 'uGroundLight', 'uHazeRange', 'uTorch', 'uTorchColor']
 export const CLOUD_UNIFORMS = ['uCloudWeather', 'uCloudOffset', 'uCloudCover', 'uCloudTime']
 
 const WIND = new THREE.Vector2(7, 3.5)       // m/s at the clouds' height
@@ -66,6 +66,8 @@ export default class Sky {
             uSkyLight: { value: new THREE.Vector3() },
             uGroundLight: { value: new THREE.Vector3() },
             uHazeRange: { value: 2048 },        // where the terrain ends (getAerialFog.glsl)
+            uTorch: { value: new THREE.Vector4(0, 0, 0, 0) },      // the player's torch (Tools.ts)
+            uTorchColor: { value: new THREE.Vector3(1, 0.55, 0.22) },
             uCloudWeather: { value: null },
             uCloudOffset: { value: new THREE.Vector2() },
             uCloudCover: { value: 0.45 },

@@ -133,6 +133,7 @@ void main()
     // Trodden grass lies down the way it was walked through, then slowly stands back up
     vec4 trail = texture2D(uTrailTexture, (root - uTrailOrigin) / uTrailSize + 0.5);
     float trodden = trail.b;
+    float cutShort = trail.a;            // cut by a blade (grows back)
     vec2 treadDirection = trail.rg / max(length(trail.rg), 1e-3);
 
     float curve = h * h;
@@ -143,7 +144,7 @@ void main()
 
     vec3 world = vec3(root.x, ground, root.y);
     world.xz += across * position.x * width * 0.5 + offset;
-    world.y += h * height * (1.0 - 0.38 * bentAmount) * (1.0 - trodden * 0.45);
+    world.y += h * height * (1.0 - 0.38 * bentAmount) * (1.0 - trodden * 0.45) * (1.0 - cutShort * 0.78);
 
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 
