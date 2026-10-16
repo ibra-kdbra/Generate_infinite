@@ -317,6 +317,11 @@ export default class Player {
     }
 
 
+    /** The walk cycle (0..1, shared by the gaits) and how much the character is walking (0..1). */
+    get gait() {
+        return { phase: this.phase, moving: THREE.MathUtils.smoothstep(this.state.player.speed, 0.3, 1.5) * (this.state.player.grounded ? 1 : 0) }
+    }
+
     /** A bone of the current model (tools hold on to the hands). */
     bone(name: string) {
         if (!this.model)
@@ -484,6 +489,7 @@ export default class Player {
             climbMove: player.climbMove,
             climbLunge: player.climbLunge,
             mantle,
+            dt,
             tool: this.view.tools?.pose
         })
     }

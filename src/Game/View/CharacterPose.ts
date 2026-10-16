@@ -29,6 +29,7 @@ export type PoseInput = {
     climbMove: { up: number, right: number }
     climbLunge: number       // 1 .. 0 during a lunge up
     mantle: number           // 0 .. 1 pulling up over an edge (0 when not)
+    dt: number               // seconds since the last pose
     tool?: ToolPose
 }
 
@@ -69,10 +70,22 @@ export default class CharacterPose {
     private pelvisDrop = 0
     private footLift = [0, 0]
     private footTilt = [new THREE.Quaternion(), new THREE.Quaternion()]
+    // climbing: where each hand and foot holds on (left hand, right hand, left foot, right
+    // foot), and the step it's taking: from, to, progress
+    private limbs = Array.from({ length: 4 }, () => ({ anchor: null as THREE.Vector3 | null, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1 }))
+
+    // the chest's place in the bind pose, and how far the clip has moved it now (the run
+    // leans it forward): held tools move with the chest, not with the feet
+    private chestRest = new THREE.Vector3(0, 1.27, - 0.05)
+    private chestShift = new THREE.Vector3()
 
     constructor(model: THREE.Object3D) {
         for (const name of BONES)
             this.bones[name] = model.getObjectByName(name)
+        if (this.bones.spine_03) {
+            model.updateMatrixWorld(true)
+            this.chestRest.copy(model.worldToLocal(this.bones.spine_03.getWorldPosition(new THREE.Vector3())))
+        }
     }
 
     /** Rotate a bone by a world-space rotation (keeping its children attached). */
@@ -94,47 +107,68 @@ export default class CharacterPose {
     }
 
     /**
-     * Two-bone solve: bend the middle joint for the root-to-target distance, aim the chain at
-     * the target, turn the middle joint toward `pole` (a direction) if given; the end keeps
-     * its world orientation if asked.
+     * Two-bone solve, by aiming: where the middle joint must be for the root-to-target
+     * distance (law of cosines), bent toward `pole` (a direction; without one, the way the
+     * joint bends now), then each bone turned the shortest way onto its new direction. The
+     * bend never depends on the arm or leg being slightly bent already, so a nearly straight
+     * limb doesn't flip its elbow or knee between frames. The end keeps its world
+     * orientation if asked.
      */
     private solve(root: THREE.Object3D, middle: THREE.Object3D, end: THREE.Object3D, target: THREE.Vector3, keepEnd = true, pole: THREE.Vector3 | null = null) {
-        const [hip, knee, ankle, a, b, axis] = this.v
-        root.getWorldPosition(hip)
-        middle.getWorldPosition(knee)
-        end.getWorldPosition(ankle)
-        const endWorld = end.getWorldQuaternion(this.q[2]).clone()
+        const hip = root.getWorldPosition(new THREE.Vector3())
+        const knee = middle.getWorldPosition(new THREE.Vector3())
+        const ankle = end.getWorldPosition(new THREE.Vector3())
+        const endWorld = end.getWorldQuaternion(new THREE.Quaternion())
         const upper = hip.distanceTo(knee), lower = knee.distanceTo(ankle)
-        const reach = THREE.MathUtils.clamp(hip.distanceTo(target), Math.abs(upper - lower) + 1e-3, upper + lower - 1e-3)
-        a.subVectors(hip, knee).normalize()
-        b.subVectors(ankle, knee).normalize()
-        const current = Math.acos(THREE.MathUtils.clamp(a.dot(b), - 1, 1))
-        const desired = Math.acos(THREE.MathUtils.clamp((upper * upper + lower * lower - reach * reach) / (2 * upper * lower), - 1, 1))
-        axis.crossVectors(a, b)
-        if (axis.lengthSq() < 1e-8)
-            axis.set(1, 0, 0).applyQuaternion(root.getWorldQuaternion(this.q[3]))
-        axis.normalize()
-        this.rotateWorld(middle, new THREE.Quaternion().setFromAxisAngle(axis, desired - current))
-        end.getWorldPosition(ankle)
-        this.rotateWorld(root, new THREE.Quaternion().setFromUnitVectors(a.subVectors(ankle, hip).normalize(), b.subVectors(target, hip).normalize()))
-        if (pole) {
-            // swing the chain about the root-to-target line until the middle joint faces the pole
-            const line = b.subVectors(target, hip).normalize()
-            middle.getWorldPosition(knee)
-            const toKnee = a.subVectors(knee, hip)
-            toKnee.addScaledVector(line, - toKnee.dot(line))
-            const toPole = axis.copy(pole).addScaledVector(line, - pole.dot(line))
-            if (toKnee.lengthSq() > 1e-8 && toPole.lengthSq() > 1e-8) {
-                toKnee.normalize()
-                toPole.normalize()
-                const angle = Math.atan2(line.dot(new THREE.Vector3().crossVectors(toKnee, toPole)), toKnee.dot(toPole))
-                this.rotateWorld(root, new THREE.Quaternion().setFromAxisAngle(line, angle))
-            }
+        const toTarget = target.clone().sub(hip)
+        const length = toTarget.length()
+        if (length < 1e-5 || upper < 1e-5 || lower < 1e-5)
+            return
+        const line = toTarget.divideScalar(length)
+        const reach = THREE.MathUtils.clamp(length, Math.abs(upper - lower) + 1e-3, upper + lower - 1e-3)
+        // the bend: the pole's part across the line (or the joint's own), else any perpendicular
+        const bend = (pole ? pole.clone() : knee.clone().sub(hip))
+        bend.addScaledVector(line, - bend.dot(line))
+        if (bend.lengthSq() < 1e-8) {
+            bend.copy(knee).sub(hip).addScaledVector(line, - knee.clone().sub(hip).dot(line))
+            if (bend.lengthSq() < 1e-8) bend.set(line.y, - line.x, 0).lengthSq() < 1e-8 ? bend.set(0, line.z, - line.y) : bend
         }
+        bend.normalize()
+        const cos = THREE.MathUtils.clamp((upper * upper + reach * reach - lower * lower) / (2 * upper * reach), - 1, 1)
+        const kneeTarget = hip.clone().addScaledVector(line, upper * cos).addScaledVector(bend, upper * Math.sqrt(1 - cos * cos))
+        const endTarget = hip.clone().addScaledVector(line, reach)
+        // both bones get their whole orientation: along the bone (+Y in this rig) and the
+        // hinge (+X: the elbow and knee bend about it) across the bend plane; nothing is
+        // inherited from the clip's pose, so a swinging run cycle can't twist or flip the limb
+        const hinge = new THREE.Vector3().crossVectors(bend, line).normalize()
+        this.orient(root, kneeTarget.clone().sub(hip).normalize(), hinge)
+        this.orient(middle, endTarget.sub(kneeTarget).normalize(), hinge)
         if (keepEnd) {
-            const middleWorld = middle.getWorldQuaternion(this.q[3])
+            const middleWorld = middle.getWorldQuaternion(new THREE.Quaternion())
             end.quaternion.copy(middleWorld.invert().multiply(endWorld))
             end.updateMatrixWorld(true)
+        }
+    }
+
+    /** Give a bone the world orientation with +Y along `along` and +X as close to `hinge` as it can be. */
+    private orient(bone: THREE.Object3D, along: THREE.Vector3, hinge: THREE.Vector3) {
+        const z = new THREE.Vector3().crossVectors(hinge, along).normalize()
+        const x = new THREE.Vector3().crossVectors(along, z)
+        const world = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, along, z))
+        const parent = bone.parent!.getWorldQuaternion(new THREE.Quaternion()).invert()
+        bone.quaternion.copy(parent.multiply(world))
+        bone.updateMatrixWorld(true)
+    }
+
+    /** Solve a limb fully, then keep only `weight` of the change (a smooth hand-over from the clip). */
+    private solveBlended(root: THREE.Object3D, middle: THREE.Object3D, end: THREE.Object3D, target: THREE.Vector3, weight: number, keepEnd: boolean, pole: THREE.Vector3 | null) {
+        if (weight <= 0.001)
+            return
+        const before = [root.quaternion.clone(), middle.quaternion.clone(), end.quaternion.clone()]
+        this.solve(root, middle, end, target, keepEnd, pole)
+        if (weight < 0.999) {
+            [root, middle, end].forEach((bone, i) => bone.quaternion.copy(before[i].slerp(bone.quaternion, weight)))
+            root.updateMatrixWorld(true)
         }
     }
 
@@ -152,12 +186,65 @@ export default class CharacterPose {
         return out.set(ground(x - e, z) - ground(x + e, z), 2 * e, ground(x, z - e) - ground(x, z + e)).normalize()
     }
 
+    /**
+     * Hands and feet on the rock: each holds where it was placed while the body moves past;
+     * when a diagonal pair (left hand with right foot, or the other two) has fallen too far
+     * behind where it should be, it lets go and reaches a little ahead along the way of
+     * travel, in an arc off the rock, while the other pair holds. Holding still, they stay put.
+     */
+    private climbLimbs(base: THREE.Vector3, surfaceUp: THREE.Vector3, right: THREE.Vector3, normal: THREE.Vector3, move: THREE.Vector3, input: PoseInput) {
+        const reach = 1.62 + input.climbLunge * 0.3
+        const layout: [number, number, number][] = [[reach, - 0.27, 0.06], [reach, 0.27, 0.06], [0.22, - 0.17, 0.08], [0.22, 0.17, 0.08]]
+        const pairOf = [0, 1, 1, 0]
+        const ideal = layout.map(([height, sideways, clearance]) =>
+            this.onGround(base.clone().addScaledVector(surfaceUp, height).addScaledVector(right, sideways), input.ground, clearance, normal))
+        const limbs = this.limbs
+        limbs.forEach((limb, i) => {
+            // first frame on the rock, or flung far off (a lunge): straight to the hold
+            if (!limb.anchor || limb.anchor.distanceTo(ideal[i]) > 0.75) {
+                limb.anchor = ideal[i].clone()
+                limb.t = 1
+            }
+        })
+        const stepping = limbs.some((limb) => limb.t < 1)
+        if (!stepping) {
+            const lag = [0, 1].map((pair) => Math.max(...limbs.map((limb, i) => pairOf[i] === pair ? limb.anchor!.distanceTo(ideal[i]) : 0)))
+            const pair = lag[0] >= lag[1] ? 0 : 1
+            if (lag[pair] > 0.2) {
+                limbs.forEach((limb, i) => {
+                    if (pairOf[i] !== pair) return
+                    limb.from.copy(limb.anchor!)
+                    limb.to.copy(this.onGround(ideal[i].clone().addScaledVector(move, 0.14), input.ground, layout[i][2], normal))
+                    limb.t = 0
+                })
+            }
+        }
+        const duration = input.climbLunge > 0.05 ? 0.13 : 0.2
+        return limbs.map((limb) => {
+            if (limb.t < 1) {
+                limb.t = Math.min(1, limb.t + input.dt / duration)
+                const u = limb.t * limb.t * (3 - 2 * limb.t)
+                const point = limb.from.clone().lerp(limb.to, u).addScaledVector(normal, Math.sin(limb.t * Math.PI) * 0.1)
+                if (limb.t >= 1)
+                    limb.anchor!.copy(limb.to)
+                return point
+            }
+            return limb.anchor!.clone()
+        })
+    }
+
     apply(model: THREE.Object3D, group: THREE.Object3D, input: PoseInput) {
         const bones = this.bones
         if (!bones.thigh_l || !bones.thigh_r || !bones.pelvis)
             return
         const yaw = new THREE.Quaternion().setFromAxisAngle(up, input.yaw)
         const tool = input.tool && input.tool.weight > 0.001 ? input.tool : null
+        if (bones.spine_03) {
+            model.updateMatrixWorld(true)
+            const chest = model.worldToLocal(bones.spine_03.getWorldPosition(new THREE.Vector3())).sub(this.chestRest)
+            chest.x = 0
+            this.chestShift.lerp(chest, 0.35)
+        }
 
         // ── the whole body: pitched for a dive, on the slope for a slide, to the rock for a climb ──
         const groupInverse = group.getWorldQuaternion(new THREE.Quaternion()).invert()
@@ -179,7 +266,7 @@ export default class CharacterPose {
             const lean = (Math.PI / 2 - steepness) * input.climb
             const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(yaw)
             root = new THREE.Quaternion().setFromAxisAngle(axis, lean).multiply(root)
-            model.position.addScaledVector(normal, 0.3 * input.climb)
+            model.position.addScaledVector(normal, 0.36 * input.climb)
         }
         model.quaternion.copy(root).multiply(yaw)
         model.updateMatrixWorld(true)
@@ -212,12 +299,12 @@ export default class CharacterPose {
         feet.forEach((foot, i) => { foot.y += this.footLift[i] * Math.max(ik, 0.0) })
 
         const toolLower = tool ? tool.lower * tool.weight : 0
-        const lowering = input.crouch * 0.42 + input.slide * 0.68 + toolLower + input.mantle * 0.25 - this.pelvisDrop
+        const lowering = input.crouch * 0.42 + input.slide * 0.68 + toolLower + Math.sin(Math.min(1, input.mantle) * Math.PI) * 0.3 - this.pelvisDrop
         model.position.addScaledVector(bodyUp.clone().applyQuaternion(groupInverse), - lowering)
         model.updateMatrixWorld(true)
 
         // ── the spine ──
-        const spineLean = input.crouch * 0.34 - input.slide * 0.22 + (tool ? tool.lean * tool.weight : 0) + input.mantle * 0.5
+        const spineLean = input.crouch * 0.34 - input.slide * 0.22 + (tool ? tool.lean * tool.weight : 0) + Math.sin(Math.min(1, input.mantle) * Math.PI) * 0.55
         if (input.slide > 0.001)
             this.rotateWorld(bones.pelvis, new THREE.Quaternion().setFromAxisAngle(left, - input.slide * 0.72))
         if (bones.spine_01 && Math.abs(spineLean) > 1e-4)
@@ -236,13 +323,14 @@ export default class CharacterPose {
             this.rotateWorld(bones.spine_02, new THREE.Quaternion().setFromAxisAngle(chestLeft, tool.pitch * tool.weight))
         }
         if (bones.neck_01) {
-            const look = input.slide * 0.5 - input.climb * 0.35 - (tool ? tool.lean * tool.weight * 0.4 : 0)
+            const look = input.slide * 0.5 - input.climb * 0.6 - (tool ? tool.lean * tool.weight * 0.4 : 0)
             if (Math.abs(look) > 1e-4)
                 this.rotateWorld(bones.neck_01, new THREE.Quaternion().setFromAxisAngle(left, look))
         }
 
         // ── legs and arms by pose ──
-        let poleL: THREE.Vector3 | null = null, poleR: THREE.Vector3 | null = null
+        let poleL: THREE.Vector3 | null = forward.clone().addScaledVector(left, 0.15)
+        let poleR: THREE.Vector3 | null = forward.clone().addScaledVector(left, - 0.15)
         const arms: { side: 'l' | 'r', target: THREE.Vector3, pole: THREE.Vector3 | null, weight: number }[] = []
 
         if (input.slide > 0.001) {
@@ -272,30 +360,16 @@ export default class CharacterPose {
             const move = new THREE.Vector3().addScaledVector(surfaceUp, input.climbMove.up).addScaledVector(right, input.climbMove.right)
             if (move.lengthSq() < 1e-6) move.copy(surfaceUp)
             move.normalize()
-            // a limb's offset along the way of travel over the cycle: planted (sliding back
-            // relative to the body) for 60 %, then reaching ahead off the rock
-            const limb = (offset: number, amplitude: number) => {
-                const phase = ((input.climbPhase + offset) % 1 + 1) % 1
-                if (phase < 0.6)
-                    return { along: amplitude * (1 - 2 * phase / 0.6), lift: 0 }
-                const t = (phase - 0.6) / 0.4
-                return { along: amplitude * (- 1 + 2 * t), lift: Math.sin(t * Math.PI) * 0.1 }
-            }
-            const place = (height: number, sideways: number, offset: number, amplitude: number, clearance: number) => {
-                const step = limb(offset, amplitude)
-                const point = base.clone().addScaledVector(surfaceUp, height).addScaledVector(right, sideways).addScaledVector(move, step.along)
-                return this.onGround(point, input.ground, clearance + step.lift, n)
-            }
-            const reach = 1.62 + input.climbLunge * 0.3
-            const handL = place(reach, - 0.27, 0, 0.18, 0.06)
-            const handR = place(reach, 0.27, 0.5, 0.18, 0.06)
-            footL.lerp(place(0.2, - 0.17, 0.5, 0.18, 0.08), c)
-            footR.lerp(place(0.2, 0.17, 0, 0.18, 0.08), c)
+            const positions = this.climbLimbs(base, surfaceUp, right, n, move, input)
+            footL.lerp(positions[2], c)
+            footR.lerp(positions[3], c)
             poleL = right.clone().negate().addScaledVector(n, 0.6).addScaledVector(surfaceUp, - 0.2)
             poleR = right.clone().addScaledVector(n, 0.6).addScaledVector(surfaceUp, - 0.2)
-            arms.push({ side: 'l', target: handL, pole: surfaceUp.clone().negate().addScaledVector(right, - 0.6).addScaledVector(n, 0.4), weight: c })
-            arms.push({ side: 'r', target: handR, pole: surfaceUp.clone().negate().addScaledVector(right, 0.6).addScaledVector(n, 0.4), weight: c })
+            arms.push({ side: 'l', target: positions[0], pole: surfaceUp.clone().negate().addScaledVector(right, - 0.6).addScaledVector(n, 0.4), weight: c })
+            arms.push({ side: 'r', target: positions[1], pole: surfaceUp.clone().negate().addScaledVector(right, 0.6).addScaledVector(n, 0.4), weight: c })
         }
+        else
+            this.limbs.forEach((limb) => { limb.anchor = null; limb.t = 1 })
 
         if (input.mantle > 0.001) {
             // hands pressing down on the top, ahead of the body
@@ -332,8 +406,7 @@ export default class CharacterPose {
             const upper = bones[`upperarm_${arm.side}`], lower = bones[`lowerarm_${arm.side}`], hand = bones[`hand_${arm.side}`]
             if (!upper || !lower || !hand || (tool && (arm.side === 'r' ? tool.right : tool.left)))
                 continue
-            const current = hand.getWorldPosition(new THREE.Vector3())
-            this.solve(upper, lower, hand, current.lerp(arm.target, arm.weight), true, arm.pole)
+            this.solveBlended(upper, lower, hand, arm.target, arm.weight, true, arm.pole)
         }
         if (tool)
             this.hands(model, tool)
@@ -350,13 +423,12 @@ export default class CharacterPose {
                 continue
             const orientation = target.quaternion ? modelQuaternion.clone().multiply(target.quaternion) : null
             if (target.position) {
-                const grip = target.position.clone().applyMatrix4(model.matrixWorld)
+                const grip = target.position.clone().add(this.chestShift).applyMatrix4(model.matrixWorld)
                 // the wrist sits back from the grip by the palm's offset, turned as the hand will be
                 const handQuaternion = orientation ?? hand.getWorldQuaternion(new THREE.Quaternion())
                 const wrist = grip.sub((side === 'r' ? GRIP_RIGHT : GRIP_LEFT).clone().applyQuaternion(handQuaternion))
-                const current = hand.getWorldPosition(new THREE.Vector3())
                 const pole = new THREE.Vector3(side === 'r' ? - 0.6 : 0.6, - 1, - 0.3).applyQuaternion(modelQuaternion)
-                this.solve(upper, lower, hand, current.lerp(wrist, tool.weight), false, pole)
+                this.solveBlended(upper, lower, hand, wrist, tool.weight, false, pole)
             }
             if (orientation)
                 this.orientWorld(hand, orientation, tool.weight)

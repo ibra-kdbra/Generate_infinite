@@ -939,6 +939,28 @@ body
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
+.ui .crosshair-hit
+{
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 22px;
+    height: 22px;
+    transform: translate(-50%, -50%) rotate(45deg);
+    background:
+        linear-gradient(var(--text), var(--text)) center / 2px 100% no-repeat,
+        linear-gradient(var(--text), var(--text)) center / 100% 2px no-repeat;
+    -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+    mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+.ui .crosshair.is-hit .crosshair-hit
+{
+    opacity: 0.9;
+}
+
 /* ── Developer panel (B) ── */
 
 .ui .dev-panel

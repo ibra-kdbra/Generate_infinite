@@ -113,8 +113,8 @@ const SWINGS: Partial<Record<ToolName, Swing[]>> = {
 
 // Carried: how each tool is held while walking about (weight: how much the arm gives up its swing)
 const CARRY: Record<ToolName, { key: Key, weight: number }> = {
-    sword: { key: { t: 0, grip: [- 0.25, 0.94, 0.16], dir: [0.06, - 0.55, 0.83], edge: [0, - 0.83, - 0.55] }, weight: 0.55 },
-    sickle: { key: { t: 0, grip: [- 0.24, 0.92, 0.1], dir: [0.02, 0.3, 0.95], edge: [0, - 0.95, 0.3] }, weight: 0.5 },
+    sword: { key: { t: 0, grip: [- 0.25, 0.94, 0.16], dir: [0.06, - 0.55, 0.83], edge: [0, - 0.83, - 0.55] }, weight: 1 },
+    sickle: { key: { t: 0, grip: [- 0.24, 0.92, 0.1], dir: [0.02, 0.3, 0.95], edge: [0, - 0.95, 0.3] }, weight: 1 },
     axe: { key: { t: 0, grip: [- 0.2, 1.2, 0.2], dir: [- 0.1, 0.55, - 0.83], edge: [0, 0.83, 0.55] }, weight: 1 },
     hoe: { key: { t: 0, grip: [- 0.2, 1.2, 0.2], dir: [- 0.12, 0.52, - 0.85], edge: [0, - 0.85, - 0.52] }, weight: 1 },
     torch: { key: { t: 0, grip: [- 0.24, 1.18, 0.3], dir: [0.05, 1, 0.12], edge: [0, - 0.12, 1] }, weight: 1 },
@@ -233,6 +233,9 @@ export default class Tools {
     private transition: { tool: ToolName, kind: 'draw' | 'stow', time: number, then: ToolName | null, from: Pose | null } | null = null
     private useHeld = false
     private recover = 0              // after a shot
+    private aimLift = 0              // the camera rising to aim level as the draw starts
+    private hitMarker = 0
+    private streaks: THREE.LineSegments
     private stringTime = 10          // since the string was released
     private raised = 0               // the torch held up
     private chops = new Map<Plant, number>()
@@ -268,6 +271,14 @@ export default class Tools {
         this.nocked.visible = false
         this.view.scene.add(this.nocked)
 
+        // faint streaks behind arrows in flight, so a shot can be followed
+        const streakGeometry = new THREE.BufferGeometry()
+        streakGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_ARROWS * 6), 3).setUsage(THREE.DynamicDrawUsage))
+        streakGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_ARROWS * 6), 3).setUsage(THREE.DynamicDrawUsage))
+        streakGeometry.setDrawRange(0, 0)
+        this.streaks = new THREE.LineSegments(streakGeometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }))
+        this.streaks.frustumCulled = false
+        this.view.scene.add(this.streaks)
         this.trail = new Trail(this.view.scene)
         this.flame = this.createFlame()
         // always in the scene (dark when the torch is out): a light coming and going would
@@ -293,7 +304,7 @@ export default class Tools {
         this.crosshair = document.createElement('div')
         this.crosshair.className = 'crosshair'
         this.crosshair.hidden = true
-        this.crosshair.innerHTML = '<span class="crosshair-dot"></span><span class="crosshair-ring"></span>'
+        this.crosshair.innerHTML = '<span class="crosshair-dot"></span><span class="crosshair-ring"></span><span class="crosshair-hit"></span>'
         ui.appendChild(this.crosshair)
         this.buildModels()
         this.renderHotbar()
@@ -394,6 +405,8 @@ export default class Tools {
         if (!tool || player.swimming || player.climbing || player.mantle || this.transition || !this.inHand.has(tool))
             return
         if (tool === 'bow') {
+            if (!this.aiming)
+                this.aimLift = 0.3        // raise a downward-looking camera to the horizon
             this.aiming = true
             return
         }
@@ -408,8 +421,9 @@ export default class Tools {
     private useEnd() {
         this.useHeld = false
         if (this.equipped === 'bow' && this.aiming) {
-            if (this.draw > 0.25)
-                this.shoot()
+            // a tap still looses a quick, weak arrow
+            this.draw = Math.max(this.draw, 0.3)
+            this.shoot()
             this.aiming = false
         }
     }
@@ -770,6 +784,7 @@ export default class Tools {
                     p.copy(contact).addScaledVector(along, depth - 0.38)
                     arrow.stuck = true
                     arrow.stuckAt = arrow.age
+                    this.hitMarker = 0.3
                     arrow.wobbleAxis.crossVectors(along, UP)
                     if (arrow.wobbleAxis.lengthSq() < 1e-3) arrow.wobbleAxis.set(1, 0, 0)
                     arrow.wobbleAxis.normalize()
@@ -799,6 +814,23 @@ export default class Tools {
         })
         this.arrowMesh.count = this.arrows.length
         this.arrowMesh.instanceMatrix.needsUpdate = true
+
+        const positions = this.streaks.geometry.getAttribute('position') as THREE.BufferAttribute
+        const colors = this.streaks.geometry.getAttribute('color') as THREE.BufferAttribute
+        let lines = 0
+        for (const arrow of this.arrows) {
+            if (arrow.stuck || arrow.floating)
+                continue
+            const tail = arrow.position.clone().addScaledVector(arrow.velocity, - 0.045)
+            positions.setXYZ(lines * 2, tail.x, tail.y, tail.z)
+            positions.setXYZ(lines * 2 + 1, arrow.position.x, arrow.position.y, arrow.position.z)
+            colors.setXYZ(lines * 2, 0, 0, 0)
+            colors.setXYZ(lines * 2 + 1, 0.9, 0.9, 0.85)
+            lines++
+        }
+        this.streaks.geometry.setDrawRange(0, lines * 2)
+        positions.needsUpdate = true
+        colors.needsUpdate = true
     }
 
     private createFlame() {
@@ -897,6 +929,13 @@ export default class Tools {
     private updateBow(dt: number) {
         if (this.aiming)
             this.draw = Math.min(1, this.draw + dt / 0.7)
+        if (this.aimLift > 0) {
+            this.aimLift = Math.max(0, this.aimLift - dt)
+            const camera = this.state.player.camera.thirdPerson
+            const level = Math.PI * 0.475
+            if (camera.phi < level)
+                camera.phi += (level - camera.phi) * (1 - Math.exp(- dt * 14))
+        }
         this.recover = Math.max(0, this.recover - dt)
         const aim = this.aimLocal()
         const draw = 1 - Math.pow(1 - this.draw, 2)
@@ -950,6 +989,13 @@ export default class Tools {
         else if (tool && this.inHand.has(tool)) {
             // carried (the torch raised while the button is held)
             const carry = this.carryPose(tool)
+            // a gentle sway with the walk (the held arm no longer swings freely, which made
+            // half-blended poses wobble and flip)
+            const gait = this.view.player.gait
+            const swing = Math.sin(gait.phase * Math.PI * 2) * gait.moving
+            const bob = Math.abs(Math.cos(gait.phase * Math.PI * 2)) * gait.moving
+            carry.grip.add(new THREE.Vector3(0, bob * 0.02 - gait.moving * 0.01, (tool === 'bow' ? - swing : swing) * (SECOND_HAND[tool] !== undefined ? 0.025 : 0.07)))
+            carry.dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), (tool === 'bow' ? swing : - swing) * 0.08).normalize()
             if (tool === 'torch') {
                 this.raised += ((this.useHeld ? 1 : 0) - this.raised) * (1 - Math.exp(- dt * 8))
                 carry.grip.lerp(new THREE.Vector3(- 0.2, 1.68, 0.3), this.raised)
@@ -975,8 +1021,10 @@ export default class Tools {
         // face where the camera looks while aiming or striking
         player.aimYaw = this.aiming || this.swing !== null ? player.camera.thirdPerson.theta : null
         player.camera.thirdPerson.aim = this.aiming ? 1 : 0
-        this.crosshair.hidden = !(this.aiming || (tool === 'bow' && this.recover > 0))
+        this.crosshair.hidden = !(this.aiming || (tool === 'bow' && (this.recover > 0 || this.hitMarker > 0)))
         this.crosshair.style.setProperty('--draw', this.draw.toFixed(3))
+        this.hitMarker = Math.max(0, this.hitMarker - dt)
+        this.crosshair.classList.toggle('is-hit', this.hitMarker > 0)
         this.updateArrows(dt)
         this.trail.update(dt)
     }

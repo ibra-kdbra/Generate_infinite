@@ -524,7 +524,8 @@ export default class Player {
             const tx = p[0] + ux * 0.85, tz = p[2] + uz * 0.85
             this.climbing = false
             this.climbLunge = 0
-            this.mantle = { time: 0, duration: 0.75, from: vec3.clone(p), to: vec3.fromValues(tx, this.groundAt(tx, tz), tz) }
+            const to = vec3.fromValues(tx, this.groundAt(tx, tz), tz)
+            this.mantle = { time: 0, duration: 0.55 + Math.max(0, to[1] - p[1]) * 0.35, from: vec3.clone(p), to }
             return
         }
         // the bottom: walkable ground under the feet stands the climber up
@@ -541,20 +542,19 @@ export default class Player {
         vec3.set(this.velocity, 0, 0, 0)
     }
 
-    /** Pulling up over the edge: up first, then forward onto the top. */
+    /**
+     * Pulling up over the edge: along the ground onto the top, easing in and out (no hop:
+     * the feet follow the terrain the whole way, the body crouches through it in the view).
+     */
     private mantleStep(dt: number) {
         const m = this.mantle!
         m.time += dt
         const t = Math.min(1, m.time / m.duration)
+        const u = t * t * (3 - 2 * t)
         const p = this.position.current
-        const rise = Math.min(1, t / 0.6)
-        const along = Math.max(0, (t - 0.35) / 0.65)
-        const easeRise = 1 - Math.pow(1 - rise, 2)
-        const easeAlong = along * along * (3 - 2 * along)
-        p[0] = m.from[0] + (m.to[0] - m.from[0]) * easeAlong
-        p[2] = m.from[2] + (m.to[2] - m.from[2]) * easeAlong
-        const lift = Math.max(m.to[1], m.from[1]) + 0.12
-        p[1] = Math.max(this.groundAt(p[0], p[2]), m.from[1] + (lift - m.from[1]) * easeRise - (t > 0.8 ? (t - 0.8) / 0.2 * 0.12 : 0))
+        p[0] = m.from[0] + (m.to[0] - m.from[0]) * u
+        p[2] = m.from[2] + (m.to[2] - m.from[2]) * u
+        p[1] = Math.max(this.groundAt(p[0], p[2]), m.from[1] + (m.to[1] - m.from[1]) * u)
         vec3.set(this.velocity, 0, 0, 0)
         if (t >= 1) {
             p[1] = this.groundAt(p[0], p[2])
