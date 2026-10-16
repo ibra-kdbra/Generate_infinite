@@ -41,11 +41,26 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Tools',
-        note: 'Ranger: sword (click again in time to chain three strokes), bow (hold to draw, release to shoot), torch. Villager: axe (enough chops fell a tree), hoe, sickle.',
+        note: 'Ranger: sword, bow (hold to draw, release to shoot), torch. Villager: axe (enough chops fell a tree), hoe, sickle.',
         rows: [
             { keys: ['1', '2', '3'], label: 'Take out a tool (again: put it away)' },
             { keys: ['E'], label: 'Use the tool' },
             { keys: ['Click'], label: 'Use the tool (the bow: hold)' }
+        ]
+    },
+    {
+        title: 'Sword',
+        note: 'Five strokes chain when you press again in time (or hold): forehand, backhand, level cut, thrust, overhead.',
+        rows: [
+            { keys: ['E'], label: 'Slash, press again to chain' },
+            { keys: ['Shift', 'E'], label: 'Running cut, while sprinting', combo: true },
+            { keys: ['Space', 'E'], label: 'Plunging cut, in the air', combo: true },
+            { keys: ['C', 'E'], label: 'Low sweep', combo: true },
+            { keys: ['S', 'E'], label: 'Step back and slash', combo: true },
+            { keys: ['A', 'E'], label: 'Side-step cut (D: the other way)', combo: true },
+            { keys: ['Q'], label: 'Heavy: spin (right button too)' },
+            { keys: ['W', 'Q'], label: 'Heavy: leaping overhead', combo: true },
+            { keys: ['C', 'Q'], label: 'Heavy: rising uppercut', combo: true }
         ]
     },
     {

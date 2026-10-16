@@ -104,6 +104,7 @@ export default class Controls {
             { codes: ['Digit2', 'Numpad2'], name: 'tool2' },
             { codes: ['Digit3', 'Numpad3'], name: 'tool3' },
             { codes: ['KeyE'], name: 'use' },
+            { codes: ['KeyQ'], name: 'heavy' },
         ]
 
         // Down keys

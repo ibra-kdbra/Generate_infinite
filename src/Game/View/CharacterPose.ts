@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 /** A hand's target in the character's own space (x left, y up, z forward, from the feet). */
-export type HandTarget = { position: THREE.Vector3 | null, quaternion: THREE.Quaternion | null }
+export type HandTarget = { position: THREE.Vector3 | null, quaternion: THREE.Quaternion | null, pole?: THREE.Vector3 }   // pole: where the elbow points (character space)
 
 /** What a tool asks of the body this frame (Tools.ts). */
 export type ToolPose = {
@@ -427,7 +427,7 @@ export default class CharacterPose {
                 // the wrist sits back from the grip by the palm's offset, turned as the hand will be
                 const handQuaternion = orientation ?? hand.getWorldQuaternion(new THREE.Quaternion())
                 const wrist = grip.sub((side === 'r' ? GRIP_RIGHT : GRIP_LEFT).clone().applyQuaternion(handQuaternion))
-                const pole = new THREE.Vector3(side === 'r' ? - 0.6 : 0.6, - 1, - 0.3).applyQuaternion(modelQuaternion)
+                const pole = (target.pole ? target.pole.clone() : new THREE.Vector3(side === 'r' ? - 0.6 : 0.6, - 1, - 0.3)).applyQuaternion(modelQuaternion)
                 this.solveBlended(upper, lower, hand, wrist, tool.weight, false, pole)
             }
             if (orientation)

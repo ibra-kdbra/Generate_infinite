@@ -75,6 +75,7 @@ export default class Player {
     diving = false               // under the surface
     breath = 1                   // 1 full .. 0 out of air
     aimYaw: number | null = null // set while aiming or striking with a tool: face this way
+    forcedRotation: number | null = null   // set by a spinning stroke: face exactly this way
 
     // climbing: the rock face's normal (out of the rock), the limb cycle and the way the
     // climber moves along the face (up, right) for the view; pulling up over the top
@@ -595,6 +596,9 @@ export default class Player {
         const horizontalSpeed = Math.hypot(this.velocity[0], this.velocity[2])
         if (this.climbing || this.mantle) {
             // the climb turns the player to the rock (climbStep)
+        }
+        else if (this.forcedRotation !== null) {
+            this.rotation = this.forcedRotation
         }
         else if (this.aimYaw !== null) {
             let delta = this.aimYaw - this.rotation
