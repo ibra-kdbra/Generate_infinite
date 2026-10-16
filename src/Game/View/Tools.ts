@@ -576,6 +576,13 @@ export default class Tools {
         const away = new THREE.Vector3(tip.x - p[0], 0, tip.z - p[2]).normalize()
 
         for (const point of BLADE[tool].map((v) => vector(v).applyMatrix4(model.matrixWorld))) {
+            if (!swing.hits.has('animal') && this.view.wildlife.hit(point, new THREE.Vector3(p[0], p[1], p[2]))) {
+                swing.hits.add('animal')
+                this.freeze = 0.07
+                this.jolt(0.2)
+                this.rebound(0.05, 0.38)
+                return
+            }
             // trunks and boulders stop the blade
             const plant = this.state.vegetation.solidAt(point.x, point.y, point.z, 0.03)
             if (plant && !swing.hits.has(plant)) {
@@ -766,6 +773,13 @@ export default class Tools {
                 // the head leads: test there (the position is the shaft's middle)
                 const along = v.clone().normalize()
                 const head = p.clone().addScaledVector(along, 0.38)
+                // a deer: the arrow goes in (and is gone), the deer flinches or falls
+                if (this.view.wildlife.hit(head, previous)) {
+                    arrow.age = 1e9
+                    arrow.stuck = true
+                    this.hitMarker = 0.3
+                    break
+                }
                 const ground = this.ground(head.x, head.z)
                 const plant = this.state.vegetation.solidAt(head.x, head.y, head.z, 0.02)
                 if (head.y < WATER_LEVEL && ground < WATER_LEVEL) {

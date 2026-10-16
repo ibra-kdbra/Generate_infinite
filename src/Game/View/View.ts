@@ -23,6 +23,7 @@ import Weather from './Weather'
 import Birds from './Birds'
 import Audio from './Audio'
 import Horizon from './Horizon'
+import Wildlife from './Wildlife'
 
 import * as THREE from 'three'
 
@@ -49,6 +50,7 @@ export default class View {
     birds!: Birds
     audio!: Audio
     horizon!: Horizon
+    wildlife!: Wildlife
     terrains!: Terrains
     chunks!: Chunks
     player!: Player
@@ -90,6 +92,7 @@ export default class View {
         this.weather = new Weather()
         this.birds = new Birds()
         this.audio = new Audio()
+        this.wildlife = new Wildlife()
         this.tools = new Tools()
         this.terrains.material.uniforms.uWetMap.value = this.groundWetness.texture
         this.terrains.material.uniforms.uWetOrigin.value = this.groundWetness.origin
@@ -126,6 +129,7 @@ export default class View {
         this.splashes.update()
         this.weather.update()
         this.birds.update()
+        this.wildlife.update()
         this.audio.update()
         this.particles.update()
         this.groundWetness.update()

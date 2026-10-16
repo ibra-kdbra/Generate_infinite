@@ -6,7 +6,7 @@ import Settings from '../Settings'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
 
 export type Sound = 'swing' | 'heavySwing' | 'hitWood' | 'hitRock' | 'dig' | 'reap' | 'bowDraw' | 'bowRelease' | 'arrowHit'
-    | 'treeFall' | 'step' | 'land' | 'splash' | 'equip' | 'jump'
+    | 'treeFall' | 'step' | 'land' | 'splash' | 'equip' | 'jump' | 'snort'
 
 /**
  * Every sound is made here, from oscillators and filtered noise (WebAudio): nothing to
@@ -257,6 +257,12 @@ export default class Audio {
             case 'splash':
                 this.noise(out, { type: 'bandpass', frequency: 700, toFrequency: 2400, q: 0.8, gain: 0.4 * k, attack: 0.01, duration: 0.35 })
                 this.noise(out, { brown: true, type: 'lowpass', frequency: 600, gain: 0.3 * k, duration: 0.25 })
+                break
+            case 'snort':
+                // a deer's alarm: a sharp nasal blow, then the hooves drumming away
+                this.noise(out, { type: 'bandpass', frequency: 900, toFrequency: 500, q: 2, gain: 0.5 * k, attack: 0.01, duration: 0.3 })
+                for (let i = 0; i < 10; i++)
+                    this.noise(out, { brown: true, type: 'lowpass', frequency: 260, gain: 0.25 * k * (1 - i / 12), duration: 0.08, delay: 0.25 + i * 0.12 + Math.random() * 0.03 })
                 break
             case 'equip':
                 this.noise(out, { type: 'bandpass', frequency: 2000, q: 1.2, gain: 0.08 * k, attack: 0.03, duration: 0.18 })
