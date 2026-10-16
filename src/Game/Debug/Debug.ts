@@ -1,5 +1,5 @@
 import Game from '../Game'
-import Settings, { DAY_LENGTHS, WEATHERS, DayLength, Weather } from '../Settings'
+import Settings, { DAY_LENGTHS, THREADS, WEATHERS, DayLength, Threads, Weather } from '../Settings'
 import Camera from '../State/Camera'
 import DayCycle from '../State/DayCycle'
 import { TerrainShape } from '../Workers/TerrainShape'
@@ -218,6 +218,7 @@ export default class Debug {
         ui.toggle(options, 'Adaptive resolution', () => settings.get('resolution') === 'auto', (on) => settings.set('resolution', on ? 'auto' : 'full'), 'Lower the resolution while frames run slow')
         ui.toggle(options, 'Hide trees behind hills', () => settings.get('hideHidden'), (on) => settings.set('hideHidden', on), 'Skip drawing what the terrain hides from the camera')
         ui.toggle(options, 'Compressed ground textures', () => settings.get('textureCompression'), (on) => settings.set('textureCompression', on), 'A quarter of the graphics memory; applies after a reload')
+        ui.choice(options, THREADS, () => settings.get('threads'), (value: Threads) => settings.set('threads', value), 'World generation threads')
         // more switches join here
         const holder = document.createElement('div')
         holder.className = 'ctl-body'

@@ -39,6 +39,14 @@ export const ANTIALIASING = {
     taa: 'Temporal'
 } as const
 
+export const THREADS = {
+    auto: 'Auto',
+    '1': '1',
+    '2': '2',
+    '4': '4',
+    '8': '8'
+} as const
+
 export const WEATHERS = {
     auto: 'Changing',
     clear: 'Clear',
@@ -62,6 +70,7 @@ export type DayLength = keyof typeof DAY_LENGTHS
 export type Resolution = keyof typeof RESOLUTIONS
 export type Weather = keyof typeof WEATHERS
 export type Antialiasing = keyof typeof ANTIALIASING
+export type Threads = keyof typeof THREADS
 
 type Values = {
     character: CharacterName
@@ -74,6 +83,7 @@ type Values = {
     textureCompression: boolean
     hideHidden: boolean
     antialiasing: Antialiasing
+    threads: Threads
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -88,7 +98,8 @@ const defaults: Values = {
     volume: 0.6,
     textureCompression: true,
     hideHidden: true,
-    antialiasing: 'smaa'
+    antialiasing: 'smaa',
+    threads: 'auto'
 }
 
 /**
@@ -160,6 +171,7 @@ export default class Settings {
             if (typeof stored.textureCompression === 'boolean') valid.textureCompression = stored.textureCompression
             if (typeof stored.hideHidden === 'boolean') valid.hideHidden = stored.hideHidden
             if (stored.antialiasing in ANTIALIASING) valid.antialiasing = stored.antialiasing
+            if (stored.threads in THREADS) valid.threads = stored.threads
             if (typeof stored.volume === 'number' && stored.volume >= 0 && stored.volume <= 1) valid.volume = stored.volume
             return valid
         }

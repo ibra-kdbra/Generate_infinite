@@ -77,10 +77,28 @@ export default class Terrains {
         this.workers = []
         this.workerIndex = 0
         this.setWorkers()
+        Settings.getInstance().events.on('change:threads', () => {
+            for (const worker of this.workers)
+                worker.terminate()
+            this.workers = []
+            this.workerIndex = 0
+            this.setWorkers()
+            this.recreate()      // whatever was still being generated starts again
+        })
     }
 
+    get workerCount() {
+        return this.workers.length
+    }
+
+    /**
+     * The terrain is generated in background workers (Settings: threads): more of them fill
+     * the world in faster, at the cost of more of the processor; "auto" leaves one core free
+     * for the game itself.
+     */
     setWorkers() {
-        const workersCount = Math.max(1, (navigator.hardwareConcurrency || 4) - 1)
+        const threads = Settings.getInstance().get('threads')
+        const workersCount = threads === 'auto' ? Math.max(1, (navigator.hardwareConcurrency || 4) - 1) : Number(threads)
 
         for (let i = 0; i < workersCount; i++) {
             const worker = new TerrainWorker()
