@@ -110,6 +110,7 @@ export default class Trees {
     uniforms: Record<string, THREE.IUniform>
     impostor!: { mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>, instances: Instances }
     counts = { near: 0, mid: 0, far: 0 }
+    windStrength = 1                     // gusts in storms (Weather.ts)
 
     private loader = new THREE.TextureLoader()
     private textures = new Map<string, THREE.Texture>()
@@ -190,6 +191,7 @@ export default class Trees {
                 },
                 side: leaves ? THREE.DoubleSide : THREE.FrontSide
             })
+            material.userData.sway = SWAY[kindOfPlant]
             this.materials.set(key, material)
         }
         return material
@@ -622,6 +624,9 @@ export default class Trees {
             this.rebuild()
         const sun = this.state.sun.position
         this.uniforms.uTime.value = this.state.time.elapsed
+        for (const material of this.materials.values())
+            if (material.uniforms.uSway && material.userData.sway !== undefined)
+                material.uniforms.uSway.value = material.userData.sway * this.windStrength
         this.uniforms.uSunPosition.value.set(sun.x, sun.y, sun.z)
     }
 }

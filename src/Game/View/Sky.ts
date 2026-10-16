@@ -23,7 +23,7 @@ const CLOUDS: Record<Quality, { steps: number, lightSteps: number, resolution: n
 
 // Uniforms shared by reference with every material lit by the sky or shadowed by the clouds
 // (terrain, grass, trees, rocks, water): the atmosphere's light and the cloud layer
-export const LIGHT_UNIFORMS = ['uSunLight', 'uMoonLight', 'uSkyLight', 'uGroundLight', 'uHazeRange', 'uTorch', 'uTorchColor']
+export const LIGHT_UNIFORMS = ['uSunLight', 'uMoonLight', 'uSkyLight', 'uGroundLight', 'uHazeRange', 'uTorch', 'uTorchColor', 'uRainWet']
 export const CLOUD_UNIFORMS = ['uCloudWeather', 'uCloudOffset', 'uCloudCover', 'uCloudTime']
 
 // The cloud cover each kind of weather settles to (auto: it drifts on its own)
@@ -67,6 +67,7 @@ export default class Sky {
     milkyWay = 1
     sunSize = 1
     cover = 0.45                                   // the cloud cover now (0 clear .. 1 overcast)
+    lightning = 0                                  // a flash of lightning (Weather.ts)
 
     private skyCamera = new THREE.PerspectiveCamera()
     private lastSun = new THREE.Vector3(0, - 2, 0)
@@ -93,6 +94,7 @@ export default class Sky {
             uHazeRange: { value: 2048 },        // where the terrain ends (getAerialFog.glsl)
             uTorch: { value: new THREE.Vector4(0, 0, 0, 0) },      // the player's torch (Tools.ts)
             uTorchColor: { value: new THREE.Vector3(1, 0.55, 0.22) },
+            uRainWet: { value: 0 },             // how wet the ground is from rain (Weather.ts)
             uCloudWeather: { value: null },
             uCloudOffset: { value: new THREE.Vector2() },
             uCloudCover: { value: 0.45 },
@@ -233,8 +235,21 @@ export default class Sky {
         this.uniforms.uSunLight.value.fromArray(this.light.sun)
         this.uniforms.uSunLightClouds.value.fromArray(this.light.sunClouds)
         this.uniforms.uMoonLight.value.fromArray(this.light.moon)
-        this.uniforms.uSkyLight.value.fromArray(this.light.sky)
-        this.uniforms.uGroundLight.value.fromArray(this.light.ground)
+    }
+
+    /**
+     * The light as the weather has it: under heavy cloud the sky's light is dimmer and greyer
+     * (direct sun is dimmed separately, by the cloud shadows); lightning flashes white.
+     */
+    private applyWeatherLight() {
+        const overcast = THREE.MathUtils.smoothstep(this.cover, 0.45, 0.95)
+        const grey = (from: number[], target: THREE.Vector3, dim: number) => {
+            const luminance = from[0] * 0.2126 + from[1] * 0.7152 + from[2] * 0.0722
+            target.set(from[0], from[1], from[2]).lerp(new THREE.Vector3(luminance, luminance, luminance), overcast * 0.55).multiplyScalar(1 - overcast * dim)
+            target.addScalar(this.lightning * 0.35)
+        }
+        grey(this.light.sky, this.uniforms.uSkyLight.value, 0.35)
+        grey(this.light.ground, this.uniforms.uGroundLight.value, 0.4)
     }
 
     get sunIlluminance() { return SUN_ILLUMINANCE }
@@ -269,6 +284,7 @@ export default class Sky {
         this.uniforms.uCloudOffset.value.addScaledVector(wind, this.wind.speed * dt)
         this.cover += (this.targetCover(t) - this.cover) * (1 - Math.exp(- dt * (this.cloudCoverOverride !== null ? 4 : 0.12)))
         this.uniforms.uCloudCover.value = this.cover
+        this.applyWeatherLight()
 
         // clouds: rendered for a camera at the origin with the view's rotation and projection
         // (the field of view changes when sprinting)

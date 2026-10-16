@@ -19,6 +19,7 @@ import Shadows from './Shadows'
 import Ferns from './Ferns'
 import Tools from './Tools'
 import Particles from './Particles'
+import Weather from './Weather'
 
 import * as THREE from 'three'
 
@@ -41,6 +42,7 @@ export default class View {
     ferns!: Ferns
     tools!: Tools
     particles!: Particles
+    weather!: Weather
     terrains!: Terrains
     chunks!: Chunks
     player!: Player
@@ -78,6 +80,7 @@ export default class View {
         this.splashes = new Splashes()
         this.groundWetness = new GroundWetness(this.splashes)
         this.particles = new Particles()
+        this.weather = new Weather()
         this.tools = new Tools()
         this.terrains.material.uniforms.uWetMap.value = this.groundWetness.texture
         this.terrains.material.uniforms.uWetOrigin.value = this.groundWetness.origin
@@ -111,6 +114,7 @@ export default class View {
         this.trees.update()
         this.ferns.update()
         this.splashes.update()
+        this.weather.update()
         this.particles.update()
         this.groundWetness.update()
         this.terrains.material.uniforms.uWetMap.value = this.groundWetness.texture

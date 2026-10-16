@@ -18,6 +18,7 @@ uniform sampler2DArray uGroundAlbedo;   // TerrainTextures.ts: 0 grass ground, 1
 uniform sampler2DArray uGroundNormal;   // 3 sand, 4 snow, 5 forest floor
 uniform vec3 uGroundMeans[6];
 uniform float uGroundReady;
+uniform float uRainWet;           // the ground wet from rain (Weather.ts)
 uniform sampler2D uWetMap;          // wet footprints and drips near the player (GroundWetness.ts)
 uniform vec2 uWetOrigin;
 uniform float uWetSize;
@@ -235,6 +236,9 @@ void main()
         color = mix(color, earth, smoothstep(0.05, 0.6, tilled));
     }
     color *= mix(1.0, 0.55, wet);
+    // rain: the whole ground a little darker and less matte (not puddles: those are \`wet\`)
+    float rainWet = uRainWet * (1.0 - snowMask);
+    color *= mix(1.0, 0.74, rainWet);
 
     // ── distant forests: past where trees are drawn, the crowns' colour, clumped ──
     float canopy = vForest * smoothstep(uForestFade.x, uForestFade.y, distance(vWorldPosition.xz, uPlayerPosition.xz));
@@ -277,6 +281,7 @@ void main()
     // sun highlight (GGX): faint on dry ground, bright where it's wet (water fills the pores)
     // and on rock and snow
     roughness = mix(mix(roughness, 0.95, 1.0 - textured), 0.12, wet);
+    roughness = mix(roughness, 0.42, rainWet * 0.6);
     vec3 toEye = - viewDirection;
     vec3 halfway = normalize(sunDirection + toEye);
     float nl = max(dot(detailNormal, sunDirection), 0.0);
@@ -296,6 +301,10 @@ void main()
     if (wet > 0.0) {
         float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(detailNormal, toEye), 0.0), 5.0);
         lit += getSkyLut(reflect(viewDirection, detailNormal) + vec3(0.0, 0.05, 0.0)) * fresnel * wet * 0.4;
+    }
+    if (rainWet > 0.0) {
+        float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(detailNormal, toEye), 0.0), 5.0);
+        lit += getSkyLut(reflect(viewDirection, detailNormal) + vec3(0.0, 0.05, 0.0)) * fresnel * rainWet * 0.06;
     }
 
     // ── under water: light absorbed along the water column (the surface adds reflections) ──

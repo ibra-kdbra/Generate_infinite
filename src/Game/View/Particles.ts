@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import View from './View'
 import State from '../State/State'
 
-export type ParticleKind = 'spark' | 'ember' | 'chip' | 'dirt' | 'grass' | 'leaf' | 'splash' | 'dust'
+export type ParticleKind = 'spark' | 'ember' | 'chip' | 'dirt' | 'grass' | 'leaf' | 'splash' | 'drizzle' | 'dust'
 
 type Look = {
     colors: string[]
@@ -23,6 +23,7 @@ const LOOKS: Record<ParticleKind, Look> = {
     grass: { colors: ['#6f8f3a', '#86a04a', '#5d7a2e', '#9aa85a'], size: [0.03, 0.06], life: [0.7, 1.4], gravity: 3.5, drag: 2.6, glow: false, spin: true },
     leaf: { colors: ['#5f7a33', '#748c3e', '#8a9a4a', '#56702c'], size: [0.05, 0.09], life: [1.6, 3.2], gravity: 1.6, drag: 2.2, glow: false, spin: true },
     splash: { colors: ['#d8e6ec', '#b9cfd8', '#eef5f8'], size: [0.03, 0.06], life: [0.35, 0.7], gravity: 9.8, drag: 0.8, glow: false },
+    drizzle: { colors: ['#9fb0b8', '#b4c2c8'], size: [0.012, 0.022], life: [0.15, 0.3], gravity: 9.8, drag: 0.8, glow: false },
     dust: { colors: ['#8a7a62', '#9a8b72', '#776a55'], size: [0.12, 0.28], life: [0.8, 1.6], gravity: - 0.3, drag: 2.2, glow: false }
 }
 
