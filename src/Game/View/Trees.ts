@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import View from './View'
 import State from '../State/State'
 import Settings, { Quality } from '../Settings'
-import { PLANT, PlantKind } from '../State/Vegetation'
+import { PLANT, Plant, PlantKind } from '../State/Vegetation'
 import { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
 import Shadows, { SHADOW_UNIFORMS } from './Shadows'
 import { Tree } from '../Vendor/ezTree/tree.js'
@@ -48,6 +48,8 @@ const BAND = 10
 const FULL = 0.4
 const LEAF_KEEP = 0.4
 const VIEWS = 8
+// trees lying felled at once (the oldest is cleared away for a new one)
+const FELLED = 4
 // billboard atlas cell (pixels per baked view), by quality when the trees are built
 const CELLS: Record<Quality, number> = { low: 192, medium: 256, high: 384, ultra: 448 }
 
@@ -114,6 +116,7 @@ export default class Trees {
     private materials = new Map<string, THREE.ShaderMaterial>()
     private version = -1
     private builtAt = new THREE.Vector2(Infinity, Infinity)
+    private felled: { plant: Plant, angle: number, speed: number, direction: number, rest: number, landed: boolean }[] = []
 
     constructor() {
         this.view = View.getInstance()
@@ -135,6 +138,8 @@ export default class Trees {
         this.uniforms.uLodCenter = { value: new THREE.Vector3() }
         this.uniforms.uTreeHit = { value: new THREE.Vector4(0, 0, - 100, 0) }
         this.uniforms.uTreeHitDirection = { value: new THREE.Vector2(1, 0) }
+        // trees falling or fallen: x, z, angle from upright, direction of the fall
+        this.uniforms.uFelled = { value: Array.from({ length: FELLED }, () => new THREE.Vector4(0, 0, 0, 0)) }
 
         this.applyQuality()
         this.settings.events.on('change:quality', () => this.applyQuality())
@@ -531,9 +536,87 @@ export default class Trees {
         this.uniforms.uTreeHitDirection.value.set(directionX / length, directionZ / length)
     }
 
+    /**
+     * Fell a tree away from (directionX, directionZ): it tips slowly, then falls like a rod
+     * hinged at its foot (angular acceleration 3g/2L sin θ) until it meets the slope, bounces
+     * once and lies there. Its trunk no longer blocks the way.
+     */
+    fell(plant: Plant, directionX: number, directionZ: number) {
+        if (this.felled.some((tree) => tree.plant === plant))
+            return
+        if (this.felled.length >= FELLED) {
+            const oldest = this.felled.shift()!
+            this.state.vegetation.remove(oldest.plant)
+        }
+        const direction = Math.atan2(directionZ, directionX)
+        // lying angle: where the trunk meets the ground at half its height down the slope
+        const reach = plant.scale * 0.5
+        const ground = this.state.player.groundAt(plant.x + Math.cos(direction) * reach, plant.z + Math.sin(direction) * reach)
+        const rest = THREE.MathUtils.clamp(Math.PI / 2 - Math.atan2(ground - plant.y, reach), 1.15, 1.95)
+        plant.collision = 0
+        this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false })
+    }
+
+    private updateFelled(dt: number) {
+        const slots = this.uniforms.uFelled.value as THREE.Vector4[]
+        const p = this.state.player.position.current
+        this.felled = this.felled.filter((tree) => {
+            if (Math.hypot(tree.plant.x - p[0], tree.plant.z - p[2]) > 90) {
+                this.state.vegetation.remove(tree.plant)
+                return false
+            }
+            return true
+        })
+        for (const tree of this.felled) {
+            if (tree.landed)
+                continue
+            const length = Math.max(4, tree.plant.scale * 0.7)
+            for (let i = 0; i < 4; i++) {
+                const h = dt / 4
+                tree.speed += 1.5 * 9.81 / length * Math.sin(tree.angle) * h
+                tree.angle += tree.speed * h
+                if (tree.angle >= tree.rest) {
+                    tree.angle = tree.rest
+                    const impact = tree.speed
+                    tree.speed = - tree.speed * 0.18
+                    if (impact > 0.6)
+                        this.landed(tree, impact)
+                    else {
+                        tree.landed = true
+                        tree.speed = 0
+                    }
+                }
+            }
+        }
+        slots.forEach((slot, i) => {
+            const tree = this.felled[i]
+            if (tree) slot.set(tree.plant.x, tree.plant.z, tree.angle, tree.direction)
+            else slot.set(0, 0, 0, 0)
+        })
+    }
+
+    /** The trunk hits the ground: dust along it, leaves flying from the crown, the ground shakes. */
+    private landed(tree: { plant: Plant, angle: number, direction: number }, impact: number) {
+        const particles = this.view.particles
+        const dx = Math.cos(tree.direction), dz = Math.sin(tree.direction)
+        const height = tree.plant.scale
+        const strength = Math.min(1, impact / 2.5)
+        for (let s = 0.2; s <= 1; s += 0.2) {
+            const x = tree.plant.x + dx * height * s * Math.sin(tree.angle), z = tree.plant.z + dz * height * s * Math.sin(tree.angle)
+            const at = new THREE.Vector3(x, this.state.player.groundAt(x, z) + 0.2, z)
+            particles?.emit('dust', at, Math.round(3 * strength) + 1, new THREE.Vector3(0, 1, 0), 1.5, 0.9)
+            if (s > 0.5 && tree.plant.kind !== PLANT.BUSH)
+                particles?.emit('leaf', at.add(new THREE.Vector3(0, 1, 0)), Math.round(10 * strength), new THREE.Vector3(0, 1, 0), 3.5, 0.9)
+        }
+        const p = this.state.player.position.current
+        const distance = Math.hypot(tree.plant.x - p[0], tree.plant.z - p[2])
+        this.state.player.camera.thirdPerson.shake(0.55 * strength * Math.max(0, 1 - distance / 40))
+    }
+
     update() {
         if (!this.ready)
             return
+        this.updateFelled(Math.min(this.state.time.delta, 0.05))
         const p = this.state.player.position.current
         if (this.version !== this.state.vegetation.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 6)
             this.rebuild()

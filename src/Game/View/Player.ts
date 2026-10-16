@@ -64,6 +64,11 @@ export default class Player {
     private slideAmount = 0
     private diveAmount = 0
     private divePitch = 0
+    private climbAmount = 0
+    private footIK = 0
+    private climbNormal = new THREE.Vector3(0, 0, 1)
+    private groundNormal = new THREE.Vector3(0, 1, 0)
+    private groundSampler = (x: number, z: number) => this.state.player.groundAt(x, z)
     modelYaw = 0                        // the model may be turned to face the way it walks
     private boneCache = new Map<string, THREE.Object3D | undefined>()
     private loadId = 0
@@ -360,19 +365,20 @@ export default class Player {
         const speed = player.speed
         const state = player.movementState
         const swimming = state === PlayerState.STATE_SWIM || state === PlayerState.STATE_DIVE
+        const climbing = player.climbing || player.mantle !== null
 
         for (const name in this.actions)
             this.targets[name] = 0
 
         // ── events ──
-        if (!player.grounded && !swimming) {
+        if (!player.grounded && !swimming && !climbing) {
             this.airTime += dt
             this.fallSpeed = Math.max(this.fallSpeed, - player.velocity[1])
         }
         if (state === PlayerState.STATE_JUMP && this.previousState !== PlayerState.STATE_JUMP)
             this.startOneShot('Jump_Start', 0.22, 1.3)     // skip the wind-up: the physics already left the ground
-        if ((player.grounded || swimming) && !this.wasGrounded) {
-            if (swimming)
+        if ((player.grounded || swimming || climbing) && !this.wasGrounded) {
+            if (swimming || climbing)
                 this.oneShot = null
             else if (this.fallSpeed > 13 && speed > 3)
                 this.startOneShot('Roll', 0.05, 1.25)
@@ -383,7 +389,7 @@ export default class Player {
             this.airTime = 0
             this.fallSpeed = 0
         }
-        this.wasGrounded = player.grounded || swimming
+        this.wasGrounded = player.grounded || swimming || climbing
         this.previousState = state
 
         // ── one-shot clips until they end or get interrupted ──
@@ -393,7 +399,7 @@ export default class Player {
             const interrupted =
                 (this.oneShot === 'Jump_Start' && (player.velocity[1] < 1 || player.grounded)) ||
                 (this.oneShot === 'Jump_Land' && speed > 1.5) ||
-                swimming
+                swimming || climbing
             if (finished || interrupted)
                 this.oneShot = null
             else
@@ -401,7 +407,10 @@ export default class Player {
         }
 
         if (!this.oneShot) {
-            if (swimming) {
+            if (climbing) {
+                this.targets.Idle_Loop = 1         // the climbing pose is procedural (CharacterPose)
+            }
+            else if (swimming) {
                 const moving = THREE.MathUtils.smoothstep(speed, 0.3, 1.0)
                 this.targets.Swim_Idle_Loop = 1 - moving
                 this.targets.Swim_Fwd_Loop = moving
@@ -451,14 +460,31 @@ export default class Player {
         // descending tips the head down, rising up; swimming along levels out
         const pitchTarget = THREE.MathUtils.clamp(- Math.atan2(vertical, Math.max(0.6, forwardSpeed)) * 0.9, - 0.9, 1.1)
         this.divePitch += (pitchTarget - this.divePitch) * (1 - Math.exp(- dt * 3))
+        this.climbAmount += ((player.climbing ? 1 : 0) - this.climbAmount) * (1 - Math.exp(- dt * 10))
+        const n = player.climbNormal
+        this.climbNormal.set(n[0], n[1], n[2])
+        const g = player.groundNormal
+        this.groundNormal.lerp(new THREE.Vector3(g[0], g[1], g[2]), 1 - Math.exp(- dt * 8)).normalize()
+        // feet on the terrain while standing and walking (not in the air, the water or a slide)
+        const footing = player.grounded && !swimming && !player.sliding && !climbing ? 1 : 0
+        this.footIK += (footing - this.footIK) * (1 - Math.exp(- dt * 12))
+        const mantle = player.mantle ? Math.min(1, player.mantle.time / player.mantle.duration) : 0
         this.pose?.apply(this.model!, this.group, {
             crouch: player.crouch * (1 - this.slideAmount),
             slide: this.slideAmount,
             dive: this.diveAmount,
             divePitch: this.divePitch,
-            ground: player.position.current[1],
+            ground: this.groundSampler,
+            groundNormal: this.groundNormal,
+            footIK: this.footIK,
             yaw: this.modelYaw,
-            hands: this.view.tools?.hands
+            climb: this.climbAmount * (1 - mantle),
+            climbNormal: this.climbNormal,
+            climbPhase: player.climbPhase,
+            climbMove: player.climbMove,
+            climbLunge: player.climbLunge,
+            mantle,
+            tool: this.view.tools?.pose
         })
     }
 

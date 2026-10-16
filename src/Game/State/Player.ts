@@ -14,8 +14,10 @@ import { WATER_LEVEL } from '../Workers/TerrainShape'
  * horizontal velocity toward a walk/sprint target with ground friction and limited air
  * control; gravity, jumping with coyote time and a jump buffer; the ground is the terrain
  * height under the player, its slope comes from finite differences. Slopes steeper than
- * `maxWalkSlope` can't be climbed and make the player slide. Water slows wading; where it's
- * deeper than `swimDepth` the player floats chest-deep and swims.
+ * `maxWalkSlope` can't be walked up and make the player slide; pushing into one climbs it
+ * (hands and feet on the rock, W/S up and down, A/D along it, Space a lunge up, C lets go)
+ * while stamina lasts, and at the top the player pulls up over the edge. Water slows wading;
+ * where it's deeper than `swimDepth` the player floats chest-deep and swims.
  */
 const hasInputWish = (wish: vec3) => wish[0] !== 0 || wish[2] !== 0
 
@@ -29,6 +31,8 @@ export default class Player {
     static STATE_SWIM = 'swim'
     static STATE_DIVE = 'dive'
     static STATE_CROUCH = 'crouch'
+    static STATE_CLIMB = 'climb'
+    static STATE_MANTLE = 'mantle'
 
     game: Game
     state: State
@@ -60,6 +64,10 @@ export default class Player {
     slideEndSpeed = 2.6
     diveSpeed = 2.4              // swimming down (C) or up (Space) under water
     breathTime = 30              // seconds under water before having to come up
+    climbSpeed = 1.5             // along the rock face
+    climbDrain = 1 / 22          // stamina per second while climbing (a third of that holding still)
+    lungeCost = 0.14             // stamina for a lunge up the face
+    staminaRegen = 1 / 3.5       // per second on the ground
 
     // poses for the view: 0 standing .. 1 crouched (smoothed)
     crouch = 0
@@ -67,6 +75,17 @@ export default class Player {
     diving = false               // under the surface
     breath = 1                   // 1 full .. 0 out of air
     aimYaw: number | null = null // set while aiming or striking with a tool: face this way
+
+    // climbing: the rock face's normal (out of the rock), the limb cycle and the way the
+    // climber moves along the face (up, right) for the view; pulling up over the top
+    climbing = false
+    climbNormal = vec3.fromValues(0, 0, 1)
+    climbPhase = 0
+    climbMove = { up: 0, right: 0 }
+    climbLunge = 0               // 1 at the start of a lunge .. 0
+    mantle: { time: number, duration: number, from: vec3, to: vec3 } | null = null
+    stamina = 1                  // 1 full .. 0 spent
+    exhausted = false            // ran out: no climbing until it's refilled a bit
 
     rotation: number
     speed: number                // horizontal speed (m/s)
@@ -96,6 +115,9 @@ export default class Player {
     private crouchPressed = false
     private slideTime = 0
     private lastGround = 0
+    private pushTime = 0           // how long the player has pushed into a too-steep face
+    private lungeTime = 0
+    private lunge = { x: 0, z: 0, speed: 0, time: 0 }      // a step with a tool strike
     private readonly step = 1 / 120
 
     constructor() {
@@ -121,7 +143,7 @@ export default class Player {
         this.camera = new Camera(this)
     }
 
-    private groundAt(x: number, z: number): number {
+    groundAt(x: number, z: number): number {
         const elevation = this.state.chunks.getElevationForPosition(x, z)
         if (typeof elevation === 'number' && !Number.isNaN(elevation)) {
             this.lastGround = elevation
@@ -130,8 +152,7 @@ export default class Player {
         return this.lastGround      // chunk not generated yet: keep the last known height
     }
 
-    private sampleGroundNormal(x: number, z: number, out: vec3) {
-        const e = 0.6
+    sampleGroundNormal(x: number, z: number, out: vec3, e = 0.6) {
         const hL = this.groundAt(x - e, z)
         const hR = this.groundAt(x + e, z)
         const hD = this.groundAt(x, z - e)
@@ -168,6 +189,18 @@ export default class Player {
 
         this.sampleGroundNormal(p[0], p[2], this.groundNormal)
         const steep = this.groundNormal[1] < this.maxWalkSlope
+
+        if (this.mantle) {
+            this.mantleStep(dt)
+            return
+        }
+        if (this.climbing) {
+            this.climbStep(dt, jumpPressed)
+            return
+        }
+        this.tryClimb(dt, wish)
+        if (this.climbing)
+            return
 
         // ── water: float where it's deep, slow down while wading ──
         const floatHeight = WATER_LEVEL - this.swimDepth
@@ -260,6 +293,16 @@ export default class Player {
             if (s > 18) { v[0] *= 18 / s; v[2] *= 18 / s }
         }
 
+        // ── a step into a tool strike ──
+        if (this.lunge.time > 0 && this.grounded) {
+            this.lunge.time -= dt
+            const along = v[0] * this.lunge.x + v[2] * this.lunge.z
+            if (along < this.lunge.speed) {
+                v[0] += (this.lunge.speed - along) * this.lunge.x
+                v[2] += (this.lunge.speed - along) * this.lunge.z
+            }
+        }
+
         // ── sliding down steep ground ──
         if (this.grounded && steep) {
             const n = this.groundNormal
@@ -336,6 +379,191 @@ export default class Player {
         this.timeSinceJumpPressed += dt
     }
 
+    /** Step forward with a strike (the tools): at least this speed that way for a moment. */
+    stepForward(directionX: number, directionZ: number, speed: number, duration: number) {
+        const length = Math.hypot(directionX, directionZ) || 1
+        this.lunge = { x: directionX / length, z: directionZ / length, speed, time: duration }
+    }
+
+    /** Pushing into a face too steep to walk up (or jumping at one) grabs hold of it. */
+    private tryClimb(dt: number, wish: vec3) {
+        const p = this.position.current
+        const crouchHeld = !!this.controls.keys.down.crouch
+        if (!hasInputWish(wish) || crouchHeld || this.sliding || this.exhausted || this.stamina < 0.05
+            || this.camera.mode === Camera.MODE_FLY || (this.swimming && this.diving)) {
+            this.pushTime = 0
+            return
+        }
+        const ax = p[0] + wish[0] * 0.55, az = p[2] + wish[2] * 0.55
+        const rise = this.groundAt(ax, az) - p[1]
+        const n = vec3.create()
+        this.sampleGroundNormal(ax, az, n, 0.45)
+        const horizontal = Math.hypot(n[0], n[2]) || 1
+        const into = - (n[0] * wish[0] + n[2] * wish[2]) / horizontal       // 1 straight at the face
+        if (n[1] < this.maxWalkSlope - 0.02 && rise > 0.3 && into > 0.55)
+            this.pushTime += dt
+        else
+            this.pushTime = 0
+        const airborne = !this.grounded && !this.swimming
+        if (this.pushTime > 0.14 || (airborne && this.pushTime > 0 && rise > 0.5))
+            this.startClimb()
+    }
+
+    private startClimb() {
+        this.climbing = true
+        this.sliding = false
+        this.swimming = false
+        this.grounded = false
+        this.pushTime = 0
+        vec3.set(this.velocity, 0, 0, 0)
+        const p = this.position.current
+        p[1] = this.groundAt(p[0], p[2])
+        this.sampleGroundNormal(p[0], p[2], this.climbNormal, 0.45)
+    }
+
+    private stopClimb(push: number) {
+        this.climbing = false
+        this.climbLunge = 0
+        const n = this.climbNormal
+        const horizontal = Math.hypot(n[0], n[2]) || 1
+        this.velocity[0] = n[0] / horizontal * push
+        this.velocity[2] = n[2] / horizontal * push
+        this.velocity[1] = 0
+        this.timeSinceGrounded = this.coyoteTime     // no jumping off thin air
+    }
+
+    /**
+     * On the face: moving along the rock's surface (up the slope's steepest line or across
+     * it), stuck to the terrain under the hands; stamina drains; walkable ground under the
+     * feet ends the climb, walkable ground just above pulls the climber up over the edge.
+     */
+    private climbStep(dt: number, jumpPressed: boolean) {
+        const p = this.position.current
+        const keys = this.controls.keys.down
+        const n = this.climbNormal
+        const sampled = vec3.create()
+        this.sampleGroundNormal(p[0], p[2], sampled, 0.45)
+        vec3.lerp(n, n, sampled, Math.min(1, dt * 12))
+        vec3.normalize(n, n)
+
+        // the face's own frame: up along the steepest line, right across it
+        const up = vec3.fromValues(- n[0] * n[1], 1 - n[1] * n[1], - n[2] * n[1])
+        vec3.normalize(up, up)
+        const right = vec3.cross(vec3.create(), up, n)
+        vec3.normalize(right, right)
+
+        let forward = (keys.forward ? 1 : 0) - (keys.backward ? 1 : 0)
+        let side = (keys.strafeRight ? 1 : 0) - (keys.strafeLeft ? 1 : 0)
+        const length = Math.hypot(forward, side)
+        if (length > 0) { forward /= length; side /= length }
+
+        // Space: a lunge up the face (or, pulling back, a jump away from it); C lets go
+        if (jumpPressed && !this.exhausted) {
+            if (forward < - 0.5) {
+                this.stopClimb(4.5)
+                this.velocity[1] = this.jumpSpeed * 0.7
+                this.stamina = Math.max(0, this.stamina - this.lungeCost * 0.5)
+                return
+            }
+            if (this.stamina > this.lungeCost * 0.5 && this.lungeTime <= 0) {
+                this.lungeTime = 0.32
+                this.climbLunge = 1
+                this.stamina = Math.max(0, this.stamina - this.lungeCost)
+            }
+        }
+        if (keys.crouch) {
+            this.stopClimb(1.2)
+            return
+        }
+
+        let speed = this.climbSpeed * (this.stamina < 0.2 ? 0.6 : 1)
+        if (this.lungeTime > 0) {
+            this.lungeTime -= dt
+            this.climbLunge = Math.max(0, this.lungeTime / 0.32)
+            forward = 1
+            side *= 0.3
+            speed = 3.8 * Math.sin(Math.max(0, this.lungeTime) / 0.32 * Math.PI) + 0.4
+        }
+        const moving = forward !== 0 || side !== 0
+        this.stamina = Math.max(0, this.stamina - dt * this.climbDrain * (moving ? 1 : 0.33))
+        if (this.stamina <= 0) {
+            this.exhausted = true
+            this.stopClimb(1.5)
+            return
+        }
+
+        // move along the surface: horizontally, then back onto the terrain
+        const vx = (up[0] * forward + right[0] * side) * speed
+        const vz = (up[2] * forward + right[2] * side) * speed
+        const vy = (up[1] * forward + right[1] * side) * speed
+        p[0] += vx * dt
+        p[2] += vz * dt
+        p[1] = this.groundAt(p[0], p[2])
+        this.state.vegetation?.resolveCollision(p, 0.3)
+        const travelled = Math.hypot(vx, vy, vz) * dt
+        this.climbPhase += travelled / (0.75 * 0.6)       // one limb cycle per 0.75 m... in stance 60 %
+        if (moving) {
+            this.climbMove.up = forward
+            this.climbMove.right = side
+        }
+
+        // facing the rock
+        const horizontal = Math.hypot(n[0], n[2]) || 1
+        const target = Math.atan2(n[0] / horizontal, n[2] / horizontal)
+        let delta = target - this.rotation
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta))
+        this.rotation += delta * Math.min(1, dt * 10)
+
+        // the top: walkable ground just above pulls the climber up over the edge
+        const here = vec3.create()
+        this.sampleGroundNormal(p[0], p[2], here, 0.45)
+        const ux = - n[0] / horizontal, uz = - n[2] / horizontal
+        const top = vec3.create()
+        this.sampleGroundNormal(p[0] + ux * 0.7, p[2] + uz * 0.7, top, 0.45)
+        if (forward > 0 && (top[1] > this.maxWalkSlope + 0.06 || here[1] > this.maxWalkSlope + 0.06)) {
+            const tx = p[0] + ux * 0.85, tz = p[2] + uz * 0.85
+            this.climbing = false
+            this.climbLunge = 0
+            this.mantle = { time: 0, duration: 0.75, from: vec3.clone(p), to: vec3.fromValues(tx, this.groundAt(tx, tz), tz) }
+            return
+        }
+        // the bottom: walkable ground under the feet stands the climber up
+        if (forward < 0 && here[1] > this.maxWalkSlope + 0.04) {
+            this.climbing = false
+            this.grounded = true
+            return
+        }
+        // into deep water
+        if (p[1] < WATER_LEVEL - this.swimDepth) {
+            this.climbing = false
+            return
+        }
+        vec3.set(this.velocity, 0, 0, 0)
+    }
+
+    /** Pulling up over the edge: up first, then forward onto the top. */
+    private mantleStep(dt: number) {
+        const m = this.mantle!
+        m.time += dt
+        const t = Math.min(1, m.time / m.duration)
+        const p = this.position.current
+        const rise = Math.min(1, t / 0.6)
+        const along = Math.max(0, (t - 0.35) / 0.65)
+        const easeRise = 1 - Math.pow(1 - rise, 2)
+        const easeAlong = along * along * (3 - 2 * along)
+        p[0] = m.from[0] + (m.to[0] - m.from[0]) * easeAlong
+        p[2] = m.from[2] + (m.to[2] - m.from[2]) * easeAlong
+        const lift = Math.max(m.to[1], m.from[1]) + 0.12
+        p[1] = Math.max(this.groundAt(p[0], p[2]), m.from[1] + (lift - m.from[1]) * easeRise - (t > 0.8 ? (t - 0.8) / 0.2 * 0.12 : 0))
+        vec3.set(this.velocity, 0, 0, 0)
+        if (t >= 1) {
+            p[1] = this.groundAt(p[0], p[2])
+            this.mantle = null
+            this.grounded = true
+            this.timeSinceGrounded = 0
+        }
+    }
+
     update() {
         const wish = vec3.create()
         this.readInput(wish)
@@ -356,9 +584,19 @@ export default class Player {
             this.accumulator -= this.step
         }
 
+        // stamina comes back on the ground (or swimming at the surface)
+        if (!this.climbing && !this.mantle && (this.grounded || this.swimming)) {
+            this.stamina = Math.min(1, this.stamina + this.time.delta * this.staminaRegen)
+            if (this.stamina > 0.35)
+                this.exhausted = false
+        }
+
         // face the movement direction, smoothly
         const horizontalSpeed = Math.hypot(this.velocity[0], this.velocity[2])
-        if (this.aimYaw !== null) {
+        if (this.climbing || this.mantle) {
+            // the climb turns the player to the rock (climbStep)
+        }
+        else if (this.aimYaw !== null) {
             let delta = this.aimYaw - this.rotation
             delta = Math.atan2(Math.sin(delta), Math.cos(delta))
             this.rotation += delta * Math.min(1, 18 * this.time.delta)
@@ -379,9 +617,11 @@ export default class Player {
         else
             this.breath = Math.min(1, this.breath + this.time.delta / 3)
         const crouchHeld = !!this.controls.keys.down.crouch && this.camera.mode !== Camera.MODE_FLY
-        const crouchTarget = this.sliding ? 1 : crouchHeld && this.grounded && !this.swimming ? 1 : 0
+        const crouchTarget = this.sliding ? 1 : crouchHeld && this.grounded && !this.swimming && !this.climbing ? 1 : 0
         this.crouch += (crouchTarget - this.crouch) * (1 - Math.exp(- this.time.delta * 10))
-        this.movementState = this.swimming ? (this.diving ? Player.STATE_DIVE : Player.STATE_SWIM)
+        this.movementState = this.mantle ? Player.STATE_MANTLE
+            : this.climbing ? Player.STATE_CLIMB
+            : this.swimming ? (this.diving ? Player.STATE_DIVE : Player.STATE_SWIM)
             : !this.grounded ? (this.velocity[1] > 0 ? Player.STATE_JUMP : Player.STATE_FALL)
             : this.sliding || (steep && horizontalSpeed > 1) ? Player.STATE_SLIDE
             : this.crouch > 0.5 ? Player.STATE_CROUCH

@@ -47,6 +47,8 @@ export default class Vegetation {
     radius = RADIUS.medium
     cells = new Map<string, Cell>()
     version = 0                    // changes whenever the set of plants changes
+    // plants cut down or felled (by position): never grown again in this world
+    private removed = new Set<string>()
 
     private seed: string
     private forestNoise: NoiseFunction2D
@@ -97,6 +99,8 @@ export default class Vegetation {
             const e = this.elevation(x, z)
             if (e === undefined)
                 return null                  // terrain not there yet: try again later
+            if (this.removed.has(this.key(x, z)))
+                continue
             const ex = this.elevation(x + 1.5, z) ?? e
             const ez = this.elevation(x, z + 1.5) ?? e
             const slope = 1 - 1.5 / Math.hypot(ex - e, 1.5, ez - e)     // 0 flat .. 1 vertical
@@ -244,6 +248,11 @@ export default class Vegetation {
 
     /** Whether a point is inside a trunk or a boulder (camera line-of-sight checks). */
     isSolid(x: number, y: number, z: number, radius: number) {
+        return this.solidAt(x, y, z, radius) !== null
+    }
+
+    /** The trunk or boulder a point is inside, if any (tools and arrows hitting things). */
+    solidAt(x: number, y: number, z: number, radius: number): Plant | null {
         const size = this.cellSize
         const cx = Math.floor(x / size), cz = Math.floor(z / size)
         for (let ix = cx - 1; ix <= cx + 1; ix++) {
@@ -252,10 +261,45 @@ export default class Vegetation {
                 if (!cell)
                     continue
                 for (const plant of cell.plants)
-                    if (plant.collision > 0 && y < this.solidTop(plant) + radius && Math.hypot(x - plant.x, z - plant.z) < plant.collision + radius)
-                        return true
+                    if (plant.collision > 0 && y > plant.y - 0.5 && y < this.solidTop(plant) + radius && Math.hypot(x - plant.x, z - plant.z) < plant.collision + radius)
+                        return plant
             }
         }
-        return false
+        return null
+    }
+
+    /** The nearest plant of these kinds within `range` of (x, z), if any. */
+    nearest(x: number, z: number, range: number, kinds: PlantKind[]): Plant | null {
+        const size = this.cellSize
+        const cx = Math.floor(x / size), cz = Math.floor(z / size)
+        let best: Plant | null = null, bestDistance = range
+        for (let ix = cx - 1; ix <= cx + 1; ix++)
+            for (let iz = cz - 1; iz <= cz + 1; iz++)
+                for (const plant of this.cells.get(`${ix}:${iz}`)?.plants ?? []) {
+                    if (!kinds.includes(plant.kind))
+                        continue
+                    const distance = Math.hypot(x - plant.x, z - plant.z)
+                    if (distance < bestDistance) {
+                        bestDistance = distance
+                        best = plant
+                    }
+                }
+        return best
+    }
+
+    private key(x: number, z: number) {
+        return `${Math.round(x * 100)}:${Math.round(z * 100)}`
+    }
+
+    /** Take a plant out of the world for good (a bush cut down, a felled tree cleared away). */
+    remove(plant: Plant) {
+        this.removed.add(this.key(plant.x, plant.z))
+        const cell = this.cells.get(`${Math.floor(plant.x / this.cellSize)}:${Math.floor(plant.z / this.cellSize)}`)
+        if (cell) {
+            const index = cell.plants.indexOf(plant)
+            if (index >= 0)
+                cell.plants.splice(index, 1)
+        }
+        this.version++
     }
 }

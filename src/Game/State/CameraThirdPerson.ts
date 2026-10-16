@@ -13,7 +13,9 @@ import { WATER_LEVEL } from '../Workers/TerrainShape'
  * player's chest (vertical easing is softer so bumps don't shake the view). The terrain is
  * sampled along the line from the anchor to the camera and the camera moves in front of any
  * hill that would hide the player; the orientation is computed last so it always looks at
- * the anchor. Sprinting widens the field of view a little.
+ * the anchor. Sprinting widens the field of view a little. Aiming the bow moves the camera
+ * in over the right shoulder with a narrower view; hits and falling trees shake it (a
+ * smooth, decaying wobble, never more than one at a time).
  */
 export default class CameraThirdPerson {
     state: State
@@ -32,6 +34,10 @@ export default class CameraThirdPerson {
     aboveOffset: number
     phiLimits: { min: number, max: number }
     fovOffset = 0                 // degrees, read by the view camera
+    aim = 0                       // 0 .. 1 over the shoulder (the bow sets it while drawing)
+
+    private aimAmount = 0
+    private trauma = 0
 
     private anchor = vec3.create()
     private anchorReady = false
@@ -70,6 +76,11 @@ export default class CameraThirdPerson {
         this.active = false
     }
 
+    /** A jolt (0..1): adds up to a cap, dies away within half a second or so. */
+    shake(amount: number) {
+        this.trauma = Math.min(1, this.trauma + amount)
+    }
+
     private ground(x: number, z: number, fallback: number) {
         const elevation = this.state.chunks.getElevationForPosition(x, z)
         return typeof elevation === 'number' && !Number.isNaN(elevation) ? elevation : fallback
@@ -87,8 +98,10 @@ export default class CameraThirdPerson {
             const normalisedPointer = this.viewport.normalise(this.controls.pointer.delta)
             this.phi -= normalisedPointer.y * 2
             this.theta -= normalisedPointer.x * 2
-            this.phi = Math.min(this.phiLimits.max, Math.max(this.phiLimits.min, this.phi))
+            this.phi = Math.min(this.phiLimits.max + this.aimAmount * Math.PI * 0.12, Math.max(this.phiLimits.min, this.phi))
         }
+        this.aimAmount += (this.aim - this.aimAmount) * (1 - Math.exp(- dt * 9))
+        const aim = this.aimAmount * this.aimAmount * (3 - 2 * this.aimAmount)
 
         // ── anchor: eased toward the player's chest ──
         // lower with the body when crouching or sliding
@@ -104,6 +117,14 @@ export default class CameraThirdPerson {
         this.anchor[1] += (targetY - this.anchor[1]) * kv
 
         this.distance += (this.targetDistance - this.distance) * (1 - Math.exp(- dt * 10))
+        const orbitDistance = this.distance + (3.1 - this.distance) * aim
+
+        // over the shoulder: the whole orbit slides right (and up a little) of the anchor
+        const rightX = Math.cos(this.theta), rightZ = - Math.sin(this.theta)
+        const center = vec3.fromValues(
+            this.anchor[0] + rightX * 0.58 * aim,
+            this.anchor[1] + 0.12 * aim,
+            this.anchor[2] + rightZ * 0.58 * aim)
 
         // ── desired position on the orbit sphere ──
         const sinPhi = Math.sin(this.phi)
@@ -113,22 +134,22 @@ export default class CameraThirdPerson {
 
         // ── keep the player visible: pull in before terrain that rises above the line, and
         // in front of tree trunks and boulders ──
-        let distance = this.distance
+        let distance = orbitDistance
         const samples = 12
         for (let i = 1; i <= samples; i++) {
-            const d = this.distance * i / samples
-            const x = this.anchor[0] + dirX * d
-            const y = this.anchor[1] + dirY * d
-            const z = this.anchor[2] + dirZ * d
+            const d = orbitDistance * i / samples
+            const x = center[0] + dirX * d
+            const y = center[1] + dirY * d
+            const z = center[2] + dirZ * d
             if (this.ground(x, z, - Infinity) + 0.45 > y || (i > 1 && this.state.vegetation?.isSolid(x, y, z, 0.35))) {
-                distance = Math.max(this.distanceLimits.min * 0.6, this.distance * (i - 1) / samples)
+                distance = Math.max(Math.min(this.distanceLimits.min * 0.6, orbitDistance), orbitDistance * (i - 1) / samples)
                 break
             }
         }
 
-        this.position[0] = this.anchor[0] + dirX * distance
-        this.position[1] = this.anchor[1] + dirY * distance
-        this.position[2] = this.anchor[2] + dirZ * distance
+        this.position[0] = center[0] + dirX * distance
+        this.position[1] = center[1] + dirY * distance
+        this.position[2] = center[2] + dirZ * distance
         const ground = this.ground(this.position[0], this.position[2], this.position[1])
         if (this.player.diving) {
             // follow the diver: under the surface (never straddling it), above the lake bed
@@ -141,13 +162,24 @@ export default class CameraThirdPerson {
                 this.position[1] = floor
         }
 
-        // ── orientation last, so it always looks at the anchor ──
+        // ── orientation last, so it always looks at the anchor (the shoulder point when aiming) ──
         const lookAt = mat4.create()
-        mat4.targetTo(lookAt, this.position, this.anchor, this.gameUp)
+        mat4.targetTo(lookAt, this.position, center, this.gameUp)
         mat4.getRotation(this.quaternion, lookAt)
 
-        // ── sprint: slightly wider field of view ──
+        // ── shake: a smooth wobble, strongest right after the hit ──
+        if (this.trauma > 0.001) {
+            const t = this.state.time.elapsed
+            const amount = this.trauma * this.trauma
+            const wobble = (a: number, b: number) => Math.sin(t * a) * 0.6 + Math.sin(t * b + 1.3) * 0.4
+            this.position[0] += wobble(41, 23) * amount * 0.09
+            this.position[1] += wobble(37, 29) * amount * 0.07
+            this.position[2] += wobble(43, 19) * amount * 0.09
+            this.trauma = Math.max(0, this.trauma - dt * 2.2)
+        }
+
+        // ── sprint: slightly wider field of view; aiming: narrower ──
         const sprintAmount = Math.max(0, Math.min(1, (this.player.speed - this.player.walkSpeed) / (this.player.runSpeed - this.player.walkSpeed)))
-        this.fovOffset += (sprintAmount * 7 - this.fovOffset) * (1 - Math.exp(- dt * 4))
+        this.fovOffset += (sprintAmount * 7 * (1 - aim) - 13 * aim - this.fovOffset) * (1 - Math.exp(- dt * 6))
     }
 }
