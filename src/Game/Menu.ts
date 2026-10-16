@@ -22,7 +22,7 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Climbing',
-        note: 'Walk into a slope too steep to stand on to grab hold. Stamina drains while you hang on; at the top you pull yourself up.',
+        note: 'Walk into a slope too steep to stand on to grab hold. A short one (a couple of metres) you scramble up; a tall face you climb with a pair of axes. Stamina drains while you hang on; at the top you pull yourself up.',
         rows: [
             { keys: ['W', 'S'], label: 'Climb up or down' },
             { keys: ['A', 'D'], label: 'Move across the face' },

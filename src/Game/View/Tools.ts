@@ -5,7 +5,7 @@ import State from '../State/State'
 import Settings from '../Settings'
 import { PLANT, Plant } from '../State/Vegetation'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
-import { createTool, createToolMaterials, createArrowGeometry, ToolName, ToolMaterials } from './ToolModels'
+import { createTool, createToolMaterials, createArrowGeometry, createClimbingAxe, ToolName, ToolMaterials } from './ToolModels'
 import { GRIP_LEFT, GRIP_RIGHT, HandTarget, ToolPose } from './CharacterPose'
 import Trail from './Trail'
 
@@ -339,6 +339,7 @@ export default class Tools {
     private flicker = 0
     private emberTime = 0
     private trail: Trail
+    private climbingAxes: THREE.Group[] = []
 
     constructor() {
         this.view = View.getInstance()
@@ -396,6 +397,13 @@ export default class Tools {
         ui.appendChild(this.crosshair)
         this.buildModels()
         this.renderHotbar()
+        // a pair of climbing axes, in the hands only while climbing a tall face
+        for (let i = 0; i < 2; i++) {
+            const axe = createClimbingAxe(this.materials)
+            axe.visible = false
+            this.group.add(axe)
+            this.climbingAxes.push(axe)
+        }
 
         const controls = this.state.controls
         for (let i = 0; i < 3; i++)
@@ -1249,6 +1257,39 @@ export default class Tools {
         this.placeString()
         this.testHits()
         this.placeTorch()
+        this.placeClimbingAxes()
+    }
+
+    /** The climbing axes in the hands while climbing a tall face. */
+    private placeClimbingAxes() {
+        const player = this.state.player
+        const show = player.climbing && player.climbGear
+        this.climbingAxes.forEach((axe, i) => {
+            axe.visible = show
+            if (!show) return
+            const bone = this.view.player.bone(i === 0 ? 'hand_l' : 'hand_r')
+            if (!bone) return
+            bone.updateWorldMatrix(true, false)
+            const hand = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(bone.matrixWorld))
+            axe.position.setFromMatrixPosition(bone.matrixWorld).add((i === 0 ? GRIP_LEFT : GRIP_RIGHT).clone().applyQuaternion(hand))
+            axe.quaternion.copy(hand).multiply(HAND_IN_TOOL)
+        })
+    }
+
+    /** A hold taken while climbing: the axe's pick bites the rock (dust, a clink), a foot scuffs. */
+    climbPlant(limb: number, at: THREE.Vector3, gear: boolean) {
+        const n = this.state.player.climbNormal
+        const normal = new THREE.Vector3(n[0], n[1], n[2])
+        if (limb < 2 && gear) {
+            const axe = this.climbingAxes[limb]
+            axe.updateMatrixWorld(true)
+            const tip = new THREE.Vector3(0, 0.42, 0.19).applyMatrix4(axe.matrixWorld)
+            this.view.particles.emit('dirt', tip, 4, normal, 1.2, 0.6)
+            this.view.particles.emit('spark', tip, 3, normal, 1.6, 0.8)
+            this.view.audio.play('pick', tip)
+        }
+        else if (limb >= 2)
+            this.view.particles.emit('dirt', at, 2, normal, 0.6, 0.8)
     }
 
     /** The bow's string pulled to the drawing fingers with an arrow nocked, quivering after the shot. */

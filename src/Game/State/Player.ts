@@ -84,6 +84,8 @@ export default class Player {
     climbPhase = 0
     climbMove = { up: 0, right: 0 }
     climbLunge = 0               // 1 at the start of a lunge .. 0
+    climbHeight = 0              // how tall the face is (m), measured when grabbing hold
+    climbGear = false            // a tall face: climbed with a pair of axes; a short one is scrambled up
     mantle: { time: number, duration: number, from: vec3, to: vec3 } | null = null
     stamina = 1                  // 1 full .. 0 spent
     exhausted = false            // ran out: no climbing until it's refilled a bit
@@ -420,6 +422,19 @@ export default class Player {
         const p = this.position.current
         p[1] = this.groundAt(p[0], p[2])
         this.sampleGroundNormal(p[0], p[2], this.climbNormal, 0.45)
+        // how far up the face goes: walk up its steepest line to walkable ground (or 8 m)
+        const n = vec3.create()
+        let x = p[0], z = p[2]
+        for (let walked = 0; walked < 8; walked += 0.5) {
+            this.sampleGroundNormal(x, z, n, 0.45)
+            if (n[1] > this.maxWalkSlope + 0.06 && walked > 0.5)
+                break
+            const horizontal = Math.hypot(n[0], n[2]) || 1
+            x -= n[0] / horizontal * 0.5 * n[1]
+            z -= n[2] / horizontal * 0.5 * n[1]
+        }
+        this.climbHeight = this.groundAt(x, z) - p[1]
+        this.climbGear = this.climbHeight > 2.2
     }
 
     private stopClimb(push: number) {
@@ -477,7 +492,8 @@ export default class Player {
             return
         }
 
-        let speed = this.climbSpeed * (this.stamina < 0.2 ? 0.6 : 1)
+        // a short face (a couple of rocks) is scrambled up quickly, a tall one climbed steadily
+        let speed = this.climbSpeed * (this.stamina < 0.2 ? 0.6 : 1) * (this.climbGear ? 1 : 1.5)
         if (this.lungeTime > 0) {
             this.lungeTime -= dt
             this.climbLunge = Math.max(0, this.lungeTime / 0.32)

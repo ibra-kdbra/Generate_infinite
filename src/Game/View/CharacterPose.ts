@@ -28,6 +28,7 @@ export type PoseInput = {
     climbPhase: number       // the limb cycle
     climbMove: { up: number, right: number }
     climbLunge: number       // 1 .. 0 during a lunge up
+    climbGear: boolean       // climbing a tall face with a pair of axes
     mantle: number           // 0 .. 1 pulling up over an edge (0 when not)
     dt: number               // seconds since the last pose
     tool?: ToolPose
@@ -42,6 +43,11 @@ export const GRIP_RIGHT = new THREE.Vector3(- 0.012, 0.082, 0.018)
 export const GRIP_LEFT = new THREE.Vector3(0.012, 0.082, 0.018)
 
 const up = new THREE.Vector3(0, 1, 0)
+
+// hand space from a held tool's space: the handle through the fist toward the thumb (hand
+// +z), the edge in line with the knuckles (hand +y); the same both ways (Tools.ts too)
+export const HAND_IN_TOOL = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(- 1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)))
 
 /**
  * Procedural poses layered over the animation clips, applied after the mixer each frame.
@@ -72,6 +78,7 @@ export default class CharacterPose {
     private footTilt = [new THREE.Quaternion(), new THREE.Quaternion()]
     // climbing: where each hand and foot holds on (left hand, right hand, left foot, right
     // foot), and the step it's taking: from, to, progress
+    onPlant: ((limb: number, at: THREE.Vector3, gear: boolean) => void) | null = null      // a hand or foot taking its hold (0, 1 hands; 2, 3 feet)
     private limbs = Array.from({ length: 4 }, () => ({ anchor: null as THREE.Vector3 | null, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1 }))
 
     // the chest's place in the bind pose, and how far the clip has moved it now (the run
@@ -193,8 +200,12 @@ export default class CharacterPose {
      * travel, in an arc off the rock, while the other pair holds. Holding still, they stay put.
      */
     private climbLimbs(base: THREE.Vector3, surfaceUp: THREE.Vector3, right: THREE.Vector3, normal: THREE.Vector3, move: THREE.Vector3, input: PoseInput) {
-        const reach = 1.62 + input.climbLunge * 0.3
-        const layout: [number, number, number][] = [[reach, - 0.27, 0.06], [reach, 0.27, 0.06], [0.22, - 0.17, 0.08], [0.22, 0.17, 0.08]]
+        // hands up at arm's length (with axes: a little lower and off the rock, the picks
+        // reaching above), feet up under the hips and wide, knees out like a climber's
+        const gear = input.climbGear
+        const reach = (gear ? 1.5 : 1.62) + input.climbLunge * 0.3
+        const handClear = gear ? 0.17 : 0.06
+        const layout: [number, number, number][] = [[reach, - 0.3, handClear], [reach, 0.3, handClear], [0.45, - 0.3, 0.1], [0.45, 0.3, 0.1]]
         const pairOf = [0, 1, 1, 0]
         const ideal = layout.map(([height, sideways, clearance]) =>
             this.onGround(base.clone().addScaledVector(surfaceUp, height).addScaledVector(right, sideways), input.ground, clearance, normal))
@@ -225,8 +236,10 @@ export default class CharacterPose {
                 limb.t = Math.min(1, limb.t + input.dt / duration)
                 const u = limb.t * limb.t * (3 - 2 * limb.t)
                 const point = limb.from.clone().lerp(limb.to, u).addScaledVector(normal, Math.sin(limb.t * Math.PI) * 0.1)
-                if (limb.t >= 1)
+                if (limb.t >= 1) {
                     limb.anchor!.copy(limb.to)
+                    this.onPlant?.(this.limbs.indexOf(limb), limb.to, gear)
+                }
                 return point
             }
             return limb.anchor!.clone()
@@ -266,7 +279,7 @@ export default class CharacterPose {
             const lean = (Math.PI / 2 - steepness) * input.climb
             const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(yaw)
             root = new THREE.Quaternion().setFromAxisAngle(axis, lean).multiply(root)
-            model.position.addScaledVector(normal, 0.36 * input.climb)
+            model.position.addScaledVector(normal, 0.3 * input.climb)
         }
         model.quaternion.copy(root).multiply(yaw)
         model.updateMatrixWorld(true)
@@ -410,6 +423,44 @@ export default class CharacterPose {
         }
         if (tool)
             this.hands(model, tool)
+        if (input.climb > 0.05)
+            this.climbGrip(input)
+    }
+
+    /**
+     * On the rock: the hands either flat on it, fingers up the face (scrambling), or holding
+     * the axes upright with the picks into the rock (a tall face); the toes pointed into it.
+     */
+    private climbGrip(input: PoseInput) {
+        const n = input.climbNormal
+        const surfaceUp = new THREE.Vector3(- n.x * n.y, 1 - n.y * n.y, - n.z * n.y).normalize()
+        for (const side of ['l', 'r'] as const) {
+            const hand = this.bones[`hand_${side}`]
+            if (!hand) continue
+            let x: THREE.Vector3, y: THREE.Vector3
+            if (input.climbGear) {
+                // the axe: handle up the face and a little out, the pick (its edge) into the rock
+                const handle = surfaceUp.clone().addScaledVector(n, 0.3).normalize()
+                const pick = n.clone().negate()
+                pick.addScaledVector(handle, - pick.dot(handle)).normalize()
+                const tool = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(handle, pick), handle, pick))
+                this.orientWorld(hand, tool.multiply(HAND_IN_TOOL), input.climb)
+                continue
+            }
+            // flat: fingers up the face, the palm on the rock (the right palm faces -x, the left +x)
+            y = surfaceUp.clone()
+            x = side === 'r' ? n.clone() : n.clone().negate()
+            const z = new THREE.Vector3().crossVectors(x, y).normalize()
+            x = new THREE.Vector3().crossVectors(y, z)
+            this.orientWorld(hand, new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)), input.climb)
+        }
+        for (const side of ['l', 'r'] as const) {
+            const foot = this.bones[`foot_${side}`]
+            if (!foot) continue
+            const toes = new THREE.Vector3(0, 1, 0).applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()))
+            const into = n.clone().negate().addScaledVector(surfaceUp, - 0.3).normalize()
+            this.rotateWorld(foot, new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(toes, into), input.climb))
+        }
     }
 
     /** Hands to a tool's grips: the wrist where the grip lands in the palm, the hand turned to hold it. */

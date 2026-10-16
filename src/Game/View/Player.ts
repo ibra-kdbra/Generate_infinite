@@ -139,6 +139,7 @@ export default class Player {
         this.group.add(model)
         this.model = model
         this.pose = new CharacterPose(model)
+        this.pose.onPlant = (limb, at, gear) => this.view.tools?.climbPlant(limb, at, gear)
         this.boneCache.clear()
 
         // Clips were made on the mannequin; only rotations and the pelvis translation are
@@ -488,6 +489,7 @@ export default class Player {
             climbPhase: player.climbPhase,
             climbMove: player.climbMove,
             climbLunge: player.climbLunge,
+            climbGear: player.climbGear,
             mantle,
             dt,
             tool: this.view.tools?.pose

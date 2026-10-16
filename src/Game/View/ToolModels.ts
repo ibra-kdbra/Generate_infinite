@@ -135,6 +135,34 @@ export function createTool(name: ToolName, m: ToolMaterials): THREE.Group {
     return group
 }
 
+/**
+ * A climbing axe (an ice axe's shape): a short handle with a grip, a curved pick reaching
+ * forward (+Z) and drooping to a point, a small adze behind. Grip at the origin, head up +Y.
+ */
+export function createClimbingAxe(m: ToolMaterials): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'climbing-axe'
+    group.add(cylinder(0.014, 0.016, 0.5, - 0.08, m.darkWood))
+    group.add(cylinder(0.019, 0.019, 0.12, - 0.06, m.leather))
+    // the pick: a curved blade forward and down, its edge on the underside
+    const shape = new THREE.Shape()
+    shape.moveTo(0, - 0.012)
+    shape.quadraticCurveTo(0.12, - 0.01, 0.2, - 0.075)
+    shape.lineTo(0.205, - 0.06)
+    shape.quadraticCurveTo(0.12, 0.012, 0, 0.022)
+    shape.lineTo(- 0.05, 0.02)
+    shape.lineTo(- 0.07, - 0.01)       // the adze behind
+    shape.lineTo(- 0.05, - 0.012)
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.008, bevelEnabled: false, curveSegments: 12 })
+    geometry.translate(0, 0, - 0.004)
+    const head = new THREE.Mesh(geometry, m.darkSteel)
+    head.rotation.y = - Math.PI / 2        // the shape's x along +Z
+    head.position.y = 0.42
+    group.add(head)
+    group.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) mesh.castShadow = false })
+    return group
+}
+
 /** One arrow as a single geometry (shaft, steel head, three vanes), pointing +Y, centred. */
 export function createArrowGeometry() {
     const parts: THREE.BufferGeometry[] = []

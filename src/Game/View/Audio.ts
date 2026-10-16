@@ -9,7 +9,7 @@ export type Category = 'ambience' | 'nature' | 'body' | 'tools' | 'weather'
 const CATEGORY_SETTING = { ambience: 'volumeAmbience', nature: 'volumeNature', body: 'volumeBody', tools: 'volumeTools', weather: 'volumeWeather' } as const
 
 export type Sound = 'swing' | 'heavySwing' | 'hitWood' | 'hitRock' | 'dig' | 'reap' | 'bowDraw' | 'bowRelease' | 'arrowHit'
-    | 'treeFall' | 'step' | 'land' | 'splash' | 'equip' | 'jump' | 'snort'
+    | 'treeFall' | 'step' | 'land' | 'splash' | 'equip' | 'jump' | 'snort' | 'pick'
 
 /**
  * Every sound is made here, from oscillators and filtered noise (WebAudio): nothing to
@@ -308,6 +308,12 @@ export default class Audio {
             case 'splash':
                 this.noise(out, { type: 'bandpass', frequency: 700, toFrequency: 2400, q: 0.8, gain: 0.4 * k, attack: 0.01, duration: 0.35 })
                 this.noise(out, { brown: true, type: 'lowpass', frequency: 600, gain: 0.3 * k, duration: 0.25 })
+                break
+            case 'pick':
+                // steel into rock: a bright clink and a crunch
+                this.tone(out, { frequency: 2300 * vary(), gain: 0.07 * k, duration: 0.12 })
+                this.tone(out, { frequency: 3500 * vary(), gain: 0.04 * k, duration: 0.08 })
+                this.noise(out, { type: 'bandpass', frequency: 1800, q: 1.2, gain: 0.16 * k, duration: 0.07 })
                 break
             case 'snort':
                 // a deer's alarm: a sharp nasal blow, then the hooves drumming away
