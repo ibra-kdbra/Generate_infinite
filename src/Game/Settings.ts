@@ -64,6 +64,7 @@ type Values = {
     dayLength: DayLength
     resolution: Resolution
     weather: Weather
+    volume: number
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -74,7 +75,8 @@ const defaults: Values = {
     grass: 'meadow',
     dayLength: '20',
     resolution: 'auto',
-    weather: 'auto'
+    weather: 'auto',
+    volume: 0.6
 }
 
 /**
@@ -143,6 +145,7 @@ export default class Settings {
             if (stored.dayLength in DAY_LENGTHS) valid.dayLength = stored.dayLength
             if (stored.resolution in RESOLUTIONS) valid.resolution = stored.resolution
             if (stored.weather in WEATHERS) valid.weather = stored.weather
+            if (typeof stored.volume === 'number' && stored.volume >= 0 && stored.volume <= 1) valid.volume = stored.volume
             return valid
         }
         catch {

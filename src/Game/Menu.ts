@@ -3,6 +3,7 @@ import Game from './Game'
 import Settings, { CHARACTERS, GRASS_STYLES, QUALITIES, RESOLUTIONS, CharacterName, GrassStyle, Quality, Resolution } from './Settings'
 import State from './State/State'
 import View from './View/View'
+import Ui from './Ui'
 
 export type Tab = 'game' | 'sky' | 'world' | 'visuals' | 'player' | 'stats' | 'controls' | 'about'
 type Row = { keys: string[], label: string, combo?: boolean }   // combo: pressed together, else any of them
@@ -263,6 +264,12 @@ export default class Menu {
             }
         }
         catch { /* storage blocked: no tip */ }
+
+        // sound
+        const kit = new Ui()
+        const sound = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Sound', 'All of it is made as you play: wind, rain, birds and crickets, footsteps, tools, thunder.')
+        kit.slider(sound, { label: 'Volume', min: 0, max: 1, step: 0.01, get: () => this.settings.get('volume'), set: (v) => this.settings.set('volume', v), format: (v) => v === 0 ? 'Off' : `${Math.round(v * 100)} %` })
+        this.events.on('show', () => kit.refresh())
 
         for (const key of ['character', 'quality', 'grass', 'resolution'])
             this.settings.events.on(`change:${key}`, () => this.refresh())

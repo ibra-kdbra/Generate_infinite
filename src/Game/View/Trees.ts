@@ -556,6 +556,7 @@ export default class Trees {
         const ground = this.state.player.groundAt(plant.x + Math.cos(direction) * reach, plant.z + Math.sin(direction) * reach)
         const rest = THREE.MathUtils.clamp(Math.PI / 2 - Math.atan2(ground - plant.y, reach), 1.15, 1.95)
         plant.collision = 0
+        this.view.audio?.play('treeFall', new THREE.Vector3(plant.x, plant.y + 2, plant.z), 1.4)
         this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false })
     }
 

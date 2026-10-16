@@ -20,6 +20,8 @@ import Ferns from './Ferns'
 import Tools from './Tools'
 import Particles from './Particles'
 import Weather from './Weather'
+import Birds from './Birds'
+import Audio from './Audio'
 
 import * as THREE from 'three'
 
@@ -43,6 +45,8 @@ export default class View {
     tools!: Tools
     particles!: Particles
     weather!: Weather
+    birds!: Birds
+    audio!: Audio
     terrains!: Terrains
     chunks!: Chunks
     player!: Player
@@ -81,6 +85,8 @@ export default class View {
         this.groundWetness = new GroundWetness(this.splashes)
         this.particles = new Particles()
         this.weather = new Weather()
+        this.birds = new Birds()
+        this.audio = new Audio()
         this.tools = new Tools()
         this.terrains.material.uniforms.uWetMap.value = this.groundWetness.texture
         this.terrains.material.uniforms.uWetOrigin.value = this.groundWetness.origin
@@ -115,6 +121,8 @@ export default class View {
         this.ferns.update()
         this.splashes.update()
         this.weather.update()
+        this.birds.update()
+        this.audio.update()
         this.particles.update()
         this.groundWetness.update()
         this.terrains.material.uniforms.uWetMap.value = this.groundWetness.texture

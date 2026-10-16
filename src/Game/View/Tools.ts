@@ -155,7 +155,7 @@ type Arrow = {
     position: THREE.Vector3, velocity: THREE.Vector3, quaternion: THREE.Quaternion
     stuck: boolean, age: number, stuckAt: number, wobbleAxis: THREE.Vector3, floating: boolean
 }
-type SwingState = { tool: ToolName, def: Swing, keys: Key[], time: number, hits: Set<unknown>, queued: boolean, recoil: boolean, stepped: boolean }
+type SwingState = { tool: ToolName, def: Swing, keys: Key[], time: number, hits: Set<unknown>, queued: boolean, recoil: boolean, stepped: boolean, whooshed: boolean }
 
 const vector = (v: V3) => new THREE.Vector3(v[0], v[1], v[2])
 const smooth = (t: number) => t * t * (3 - 2 * t)
@@ -405,8 +405,10 @@ export default class Tools {
         if (!tool || player.swimming || player.climbing || player.mantle || this.transition || !this.inHand.has(tool))
             return
         if (tool === 'bow') {
-            if (!this.aiming)
+            if (!this.aiming) {
                 this.aimLift = 0.3        // raise a downward-looking camera to the horizon
+                this.view.audio.play('bowDraw')
+            }
             this.aiming = true
             return
         }
@@ -437,7 +439,7 @@ export default class Tools {
         const from = this.last ?? this.carryPose(tool)
         keys[0] = keyOf(from, 0)
         keys[keys.length - 1] = { ...keyOf(this.carryPose(tool), keys[keys.length - 1].t), ease: 'inout' }
-        this.swing = { tool, def, keys, time: 0, hits: new Set(), queued: false, recoil: false, stepped: false }
+        this.swing = { tool, def, keys, time: 0, hits: new Set(), queued: false, recoil: false, stepped: false, whooshed: false }
         this.trail.clear()
     }
 
@@ -580,6 +582,7 @@ export default class Tools {
                 swing.hits.add(plant)
                 const normal = new THREE.Vector3(point.x - plant.x, 0.3, point.z - plant.z).normalize()
                 if (plant.kind === PLANT.ROCK) {
+                    this.view.audio.play('hitRock', point)
                     particles.emit('spark', point, 14, normal, 5, 0.7)
                     particles.emit('dust', point, 2, normal, 0.6, 0.8)
                     this.freeze = 0.09
@@ -587,6 +590,7 @@ export default class Tools {
                     this.rebound(0.06, 0.4)
                     return
                 }
+                this.view.audio.play('hitWood', point, tool === 'axe' ? 1 : 0.6)
                 particles.emit('chip', point, tool === 'axe' ? 12 : 6, normal, tool === 'axe' ? 3.2 : 2.2, 0.65)
                 this.view.trees.strike(plant.x, plant.z, plant.x - p[0], plant.z - p[2], tool === 'axe' ? 1 : 0.45)
                 if (tool === 'axe') {
@@ -613,11 +617,13 @@ export default class Tools {
             // the hoe digs in; any other blade striking the ground stops
             if (point.y < ground + (def.kind === 'dig' ? 0.04 : - 0.02)) {
                 if (ground < WATER_LEVEL) {
+                    this.view.audio.play('splash', point, 0.6)
                     particles.emit('splash', new THREE.Vector3(point.x, WATER_LEVEL, point.z), 10, UP, 2.6, 0.5)
                     this.rebound(0.05, 0.4)
                     return
                 }
                 const at = new THREE.Vector3(point.x, ground + 0.03, point.z)
+                this.view.audio.play(def.kind === 'dig' ? 'dig' : 'hitWood', at, def.kind === 'dig' ? 1 : 0.4)
                 particles.emit('dirt', at, def.kind === 'dig' ? 16 : 7, away.clone().negate().setY(1.2), 2.6, 0.55)
                 particles.emit('dust', at, 2, UP, 0.5, 0.8)
                 if (def.kind === 'dig') {
@@ -645,6 +651,7 @@ export default class Tools {
                 if (bush && !swing.hits.has(bush) && Math.hypot(point.x - bush.x, point.z - bush.z) < bush.scale * 0.55 && point.y < bush.y + bush.scale * 1.1) {
                     swing.hits.add(bush)
                     this.view.trees.strike(bush.x, bush.z, bush.x - p[0], bush.z - p[2], 1.2)
+                    this.view.audio.play('reap', point, 1.4)
                     particles.emit('leaf', point, 8, UP, 2.2, 0.9)
                     const cuts = (this.cuts.get(bush) ?? 0) + 1
                     this.cuts.set(bush, cuts)
@@ -661,6 +668,10 @@ export default class Tools {
         const low = tip.y - this.ground(tip.x, tip.z)
         if ((def.kind === 'reap' || def.kind === 'blade') && low < 0.75 && low > - 0.1 && tip.y > WATER_LEVEL) {
             this.view.grass.trail.cut(tip.x, tip.z, def.kind === 'reap' ? 0.7 : 0.5, def.kind === 'reap' ? 1 : 0.85)
+            if (!swing.hits.has('grass')) {
+                swing.hits.add('grass')
+                this.view.audio.play('reap', tip)
+            }
             if (Math.random() < (def.kind === 'reap' ? 0.9 : 0.5))
                 particles.emit('grass', tip, def.kind === 'reap' ? 5 : 3, away.clone().setY(0.8), 2.2, 0.8)
         }
@@ -722,6 +733,7 @@ export default class Tools {
         this.recover = 0.38
         this.stringTime = 0
         this.jolt(0.05)
+        this.view.audio.play('bowRelease')
     }
 
     private updateArrows(dt: number) {
@@ -785,6 +797,7 @@ export default class Tools {
                     arrow.stuck = true
                     arrow.stuckAt = arrow.age
                     this.hitMarker = 0.3
+                    this.view.audio.play('arrowHit', contact)
                     arrow.wobbleAxis.crossVectors(along, UP)
                     if (arrow.wobbleAxis.lengthSq() < 1e-3) arrow.wobbleAxis.set(1, 0, 0)
                     arrow.wobbleAxis.normalize()
@@ -887,6 +900,8 @@ export default class Tools {
             this.last = pose
         }
         // the tool changes hands at the holster
+        if (t >= half && (transition.kind === 'draw') !== this.inHand.has(tool))
+            this.view.audio.play('equip')
         if (t >= half) {
             if (transition.kind === 'draw') this.inHand.add(tool)
             else this.inHand.delete(tool)
@@ -907,6 +922,11 @@ export default class Tools {
         const pose = this.strokePose(swing.tool, swing.keys, Math.min(swing.time, end))
         this.holdPose(swing.tool, pose, 1)
         this.last = pose
+        // the whoosh as the stroke comes through
+        if (!swing.whooshed && !swing.recoil && swing.time >= def.active[0] - 0.04) {
+            swing.whooshed = true
+            this.view.audio.play(swing.tool === 'axe' || swing.tool === 'hoe' ? 'heavySwing' : 'swing')
+        }
         // a step into the strike
         if (def.step && !swing.stepped && swing.time >= def.step[0] && player.grounded) {
             swing.stepped = true
