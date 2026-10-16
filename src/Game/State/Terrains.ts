@@ -13,8 +13,8 @@ import Settings, { Quality } from '../Settings'
 const SUBDIVISIONS: Record<Quality, Record<number, number>> = {
     low: { 64: 56, 128: 48, 256: 36, 512: 28, 1024: 20 },
     medium: { 64: 72, 128: 64, 256: 48, 512: 36, 1024: 28 },
-    high: { 64: 96, 128: 80, 256: 64, 512: 48, 1024: 36 },
-    ultra: { 64: 128, 128: 104, 256: 80, 512: 64, 1024: 48 }
+    high: { 64: 96, 128: 88, 256: 80, 512: 72, 1024: 64 },
+    ultra: { 64: 128, 128: 112, 256: 104, 512: 96, 1024: 96 }
 }
 
 export default class Terrains {
@@ -40,6 +40,7 @@ export default class Terrains {
     events: EventEmitter
     iterationsOffsets: [number, number][]
     workers: Worker[]
+    stats = { count: 0, milliseconds: 0 }      // chunks generated, worker time spent
     workerIndex: number
 
     constructor() {
@@ -105,6 +106,8 @@ export default class Terrains {
 
             worker.onmessage = (event) => {
                 const terrain = this.terrains.get(event.data.id)
+                this.stats.count++
+                this.stats.milliseconds += event.data.milliseconds ?? 0
 
                 if (terrain) {
                     terrain.create(event.data)

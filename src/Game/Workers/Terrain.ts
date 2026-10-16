@@ -8,6 +8,7 @@ const linearStep = (edgeMin: number, edgeMax: number, value: number) => {
 }
 
 onmessage = function (event) {
+    const started = performance.now()
     const id = event.data.id
     const size = event.data.size
     const baseX = event.data.x
@@ -402,7 +403,8 @@ onmessage = function (event) {
     }
 
     // Post
-    postMessage({
+    ;(self as unknown as Worker).postMessage({
+        milliseconds: performance.now() - started,
         id: id,
         positions: positions,
         normals: normals,
@@ -410,5 +412,5 @@ onmessage = function (event) {
         texture: texture,
         uv: uv,
         forest: forest
-    })
+    }, [positions.buffer, normals.buffer, indices.buffer, texture.buffer, uv.buffer, forest.buffer] as Transferable[])     // handed over, not copied
 }

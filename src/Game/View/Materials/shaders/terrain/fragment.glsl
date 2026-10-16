@@ -153,6 +153,17 @@ void main()
     // ── layers ──
     vec3 color = getGrassColor(getGrassDryness(p), elevation) * (1.0 + speck * 0.16);
     float grassWeight = (1.0 - soilMask) * (1.0 - rockMask) * (1.0 - snowMask) * (1.0 - shoreMask);
+    // ── meadows in patches, so open land isn't one even green from afar: lusher in hollows and
+    // low ground, drier and paler on sunny faces and up the slopes, darker and lighter swathes ──
+    {
+        float far = smoothstep(40.0, 500.0, vDepth);
+        float patches = noise3(p * 0.0023).g * 0.65 + noise3(p * 0.0091).b * 0.35;
+        float sunny = clamp(dot(normal.xz, sunDirection.xz) * 2.5, - 1.0, 1.0);
+        float dry = clamp(0.5 + patches * 1.6 + sunny * 0.18 + slope * 0.6 + smoothstep(20.0, 140.0, height) * 0.15, 0.0, 1.0);
+        vec3 tone = mix(vec3(0.82, 1.0, 0.8), vec3(1.16, 1.07, 0.78), dry);
+        float swathes = 1.0 + (noise3(p * 0.0047).r * 0.9 + noise3(p * 0.013).g * 0.35) * 0.24;
+        color *= mix(vec3(1.0), tone * swathes, grassWeight * mix(0.4, 1.0, far));
+    }
     if (textured > 0.0) {
         vec4 detail = groundDetail(p / 5.0, 0.0, largeScale);
         color *= mix(vec3(1.0), detail.rgb, 0.8 * textured);
@@ -247,6 +258,13 @@ void main()
         float cover = smoothstep(0.15, 0.55, canopy + crowns * 0.35);
         vec3 leaves = mix(vec3(0.10, 0.15, 0.07), vec3(0.19, 0.25, 0.11), smoothstep(- 0.35, 0.35, crowns));
         leaves = mix(leaves, vec3(0.09, 0.13, 0.09), smoothstep(60.0, 150.0, elevation) * 0.6);     // conifers higher up
+        // single crowns (about 8 m across): sunlit tops and shaded gaps, the lit side toward
+        // the sun; the contrast fades far out where it would only shimmer
+        float crown = noise3(p * 0.11).r * 0.65 + noise3(p * 0.29).g * 0.35;
+        float toward = noise3((p - sunDirection.xz * 2.5) * 0.11).r - noise3(p * 0.11).r;
+        float contrast = 1.0 - smoothstep(900.0, 2600.0, vDepth);
+        leaves *= mix(1.0, clamp(0.95 + crown * 1.6 + toward * 1.8, 0.35, 1.6), contrast);
+        leaves = mix(leaves, leaves * vec3(1.2, 1.05, 0.7), smoothstep(0.25, 0.45, noise3(p * 0.0061).b) * 0.35);     // a few yellowing stands
         color = mix(color, leaves, cover);
         canopy = cover;
     }
@@ -264,6 +282,18 @@ void main()
         float strength = mix(0.35, 1.8, rockMask) * (1.0 - snowMask * 0.7) * detailFade * (1.0 - textured * 0.8);
         detailNormal = normalize(normal + vec3(relief.x, 0.0, relief.y) * strength * 2.4 + bump * textured);
         cavity = clamp(- relief.z * 1.5, 0.0, 0.5) * 0.35 * detailFade;
+    }
+
+    // ── relief at a distance: the far terrain's mesh is coarse, so small ridges and gullies
+    // are added to its shading (more on rock), fading in where the photo detail fades out ──
+    if (vDepth > 90.0) {
+        float e = 5.0;
+        vec2 q = p;
+        float h0 = noise3(q * 0.009).r + noise3(q * 0.031).g * 0.35;
+        float hx = noise3((q + vec2(e, 0.0)) * 0.009).r + noise3((q + vec2(e, 0.0)) * 0.031).g * 0.35;
+        float hz = noise3((q + vec2(0.0, e)) * 0.009).r + noise3((q + vec2(0.0, e)) * 0.031).g * 0.35;
+        float strength = smoothstep(90.0, 400.0, vDepth) * mix(0.55, 3.0, rockMask) * (1.0 - snowMask * 0.5);
+        detailNormal = normalize(detailNormal + vec3(h0 - hx, 0.0, h0 - hz) * strength);
     }
 
     // ── lighting ──
