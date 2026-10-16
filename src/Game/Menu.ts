@@ -1,26 +1,109 @@
+import Game from './Game'
 import Settings, { CHARACTERS, DAY_LENGTHS, GRASS_STYLES, QUALITIES, CharacterName, DayLength, GrassStyle, Quality } from './Settings'
 import State from './State/State'
 import View from './View/View'
 
+type Tab = 'settings' | 'controls' | 'about'
+type Row = { keys: string[], label: string, combo?: boolean }   // combo: pressed together, else any of them
+type Group = { title: string, rows: Row[], note?: string }
+
+const CONTROLS: Group[] = [
+    {
+        title: 'Moving',
+        rows: [
+            { keys: ['W', 'A', 'S', 'D'], label: 'Move' },
+            { keys: ['Shift'], label: 'Sprint (hold)' },
+            { keys: ['Space'], label: 'Jump' },
+            { keys: ['C'], label: 'Crouch (hold)' },
+            { keys: ['Shift', 'C'], label: 'Slide, while sprinting', combo: true }
+        ]
+    },
+    {
+        title: 'Climbing',
+        note: 'Walk into a slope too steep to stand on to grab hold. Stamina drains while you hang on; at the top you pull yourself up.',
+        rows: [
+            { keys: ['W', 'S'], label: 'Climb up or down' },
+            { keys: ['A', 'D'], label: 'Move across the face' },
+            { keys: ['Space'], label: 'Lunge up (costs stamina)' },
+            { keys: ['S', 'Space'], label: 'Jump away from the face', combo: true },
+            { keys: ['C'], label: 'Let go' }
+        ]
+    },
+    {
+        title: 'Water',
+        note: 'Your air lasts about 30 seconds under water.',
+        rows: [
+            { keys: ['C'], label: 'Dive (hold)' },
+            { keys: ['Space'], label: 'Swim up' }
+        ]
+    },
+    {
+        title: 'Tools',
+        note: 'Ranger: sword (click again in time to chain three strokes), bow (hold to draw, release to shoot), torch. Villager: axe (enough chops fell a tree), hoe, sickle.',
+        rows: [
+            { keys: ['1', '2', '3'], label: 'Take out a tool (again: put it away)' },
+            { keys: ['E'], label: 'Use the tool' },
+            { keys: ['Click'], label: 'Use the tool (the bow: hold)' }
+        ]
+    },
+    {
+        title: 'Camera',
+        rows: [
+            { keys: ['Drag'], label: 'Look around' },
+            { keys: ['P'], label: 'Lock the pointer (mouse look)' },
+            { keys: ['Wheel'], label: 'Zoom' },
+            { keys: ['V'], label: 'Free camera' }
+        ]
+    },
+    {
+        title: 'Interface',
+        rows: [
+            { keys: ['Esc'], label: 'Menu' },
+            { keys: ['H'], label: 'Controls' },
+            { keys: ['F'], label: 'Full screen' },
+            { keys: ['B'], label: 'Developer panel' }
+        ]
+    }
+]
+
+const ICON = {
+    gear: '<path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14.1 2.6h-4.2l-.4 2.4a7.5 7.5 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.4h4.2l.4-2.4a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4z"/>',
+    keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9 10h.01M12 10h.01M15 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>'
+}
+const svg = (paths: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`
+const keycaps = (keys: string[], combo = false) => `<span class="keycaps">${keys.map((key) => `<kbd>${key}</kbd>`).join(combo ? '<span class="plus">+</span>' : '')}</span>`
+
 /**
- * Settings menu (gear button or Esc): character, graphics quality, grass style, day length,
- * plus a live frame rate / resolution / graphics card readout; and the clock in the corner.
+ * The game's interface around the view.
+ *
+ *  - a drawer on the right (gear button or Esc; H opens it on the controls): settings
+ *    (character, graphics, grass, day length, with a live frame rate / resolution / graphics
+ *    card readout), every control grouped by what it's for, and about the world
+ *  - the heads-up display: the clock, what the keys do right now (climbing, swimming), the
+ *    stamina ring while climbing, the air bar under water, the free camera's keys, and a
+ *    one-time pointer to the controls on the first visit
  */
 export default class Menu {
     settings: Settings
     state: State
     view: View
-    element: HTMLElement
-    panel: HTMLElement
+    drawer: HTMLElement
     stats: HTMLElement
     clock: HTMLElement
     flyHint: HTMLElement
     breath: HTMLElement
+    hint: HTMLElement
+    stamina: HTMLElement
+    toast: HTMLElement
     private open = false
+    private tab: Tab = 'settings'
     private frames = 0
     private elapsed = 0
     private startQuality: Quality
     private gpu: string
+    private hintText = ''
+    private lastFocus: HTMLElement | null = null
 
     constructor() {
         this.settings = Settings.getInstance()
@@ -28,49 +111,98 @@ export default class Menu {
         this.view = View.getInstance()
         this.startQuality = this.settings.get('quality')
         this.gpu = this.gpuName()
+        const ui = document.querySelector('.ui')!
 
-        this.element = document.createElement('div')
-        this.element.className = 'menu'
-        this.element.innerHTML = `
-            <button class="menu-toggle" aria-label="Settings" title="Settings (Esc)">
-                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
-            </button>
-            <div class="menu-panel" role="dialog" aria-label="Settings" hidden>
-                <h2>Settings</h2>
-                ${this.section('character', 'Character', CHARACTERS)}
-                ${this.section('quality', 'Graphics', QUALITIES)}
-                <p class="menu-note" data-note hidden>Anti-aliasing changes after a reload.</p>
-                ${this.section('grass', 'Grass', GRASS_STYLES)}
-                ${this.section('dayLength', 'Day length', DAY_LENGTHS)}
-                <p class="menu-stats" data-stats>…</p>
-                <p class="menu-hint">Esc closes</p>
-            </div>`
-        document.querySelector('.ui')!.appendChild(this.element)
-
-        this.clock = document.createElement('div')
-        this.clock.className = 'clock'
-        document.querySelector('.ui')!.appendChild(this.clock)
-
-        this.flyHint = document.createElement('div')
-        this.flyHint.className = 'fly-hint'
-        this.flyHint.hidden = true
-        document.querySelector('.ui')!.appendChild(this.flyHint)
-
-        // air left while diving
-        this.breath = document.createElement('div')
-        this.breath.className = 'breath'
-        this.breath.hidden = true
-        this.breath.innerHTML = '<span class="breath-label">Air</span><span class="breath-bar"><span></span></span>'
-        document.querySelector('.ui')!.appendChild(this.breath)
-        this.panel = this.element.querySelector('.menu-panel')!
-        this.stats = this.element.querySelector('[data-stats]')!
-
-        this.element.querySelector('.menu-toggle')!.addEventListener('click', () => this.toggle())
-        window.addEventListener('keydown', (event) => {
-            if (event.code === 'Escape')
-                this.toggle()
+        // ── corner buttons ──
+        const corner = document.createElement('div')
+        corner.className = 'hud-corner'
+        corner.innerHTML = `
+            <button class="icon-button" data-open="controls" aria-label="Controls" title="Controls (H)">${svg(ICON.keyboard)}</button>
+            <button class="icon-button" data-open="settings" aria-label="Settings" title="Settings (Esc)">${svg(ICON.gear)}</button>`
+        ui.appendChild(corner)
+        corner.addEventListener('click', (event) => {
+            const button = (event.target as HTMLElement).closest('[data-open]') as HTMLElement | null
+            if (button)
+                this.show(button.dataset.open as Tab, true)
         })
-        this.panel.addEventListener('click', (event) => {
+
+        // ── the drawer ──
+        this.drawer = document.createElement('aside')
+        this.drawer.className = 'drawer'
+        this.drawer.setAttribute('role', 'dialog')
+        this.drawer.setAttribute('aria-labelledby', 'drawer-title')
+        this.drawer.hidden = true
+        this.drawer.innerHTML = `
+            <header class="drawer-header">
+                <div>
+                    <p class="drawer-eyebrow">Infinite world</p>
+                    <h2 id="drawer-title">Generate Infinite</h2>
+                </div>
+                <button class="icon-button is-quiet" data-close aria-label="Close" title="Close (Esc)">${svg(ICON.close)}</button>
+            </header>
+            <nav class="tabs" role="tablist" aria-label="Menu">
+                ${(['settings', 'controls', 'about'] as Tab[]).map((tab) =>
+                    `<button role="tab" id="tab-${tab}" data-tab="${tab}" aria-controls="panel-${tab}">${tab[0].toUpperCase() + tab.slice(1)}</button>`).join('')}
+            </nav>
+            <div class="drawer-body">
+                <section class="tab-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings">
+                    ${this.field('character', 'Character', CHARACTERS, 'choice-grid')}
+                    ${this.field('quality', 'Graphics', QUALITIES)}
+                    <p class="field-note" data-note hidden>Anti-aliasing changes after a reload.</p>
+                    ${this.field('grass', 'Grass', GRASS_STYLES, 'choice-wrap')}
+                    ${this.field('dayLength', 'Day length', DAY_LENGTHS)}
+                    <dl class="readout" data-stats>
+                        <div><dt>Frame rate</dt><dd data-stat="fps">…</dd></div>
+                        <div><dt>Resolution</dt><dd data-stat="resolution">…</dd></div>
+                        <div><dt>Graphics card</dt><dd data-stat="gpu">${this.gpu}</dd></div>
+                    </dl>
+                </section>
+                <section class="tab-panel" role="tabpanel" id="panel-controls" aria-labelledby="tab-controls" hidden>
+                    ${CONTROLS.map((group) => `
+                        <div class="control-group">
+                            <h3>${group.title}</h3>
+                            <ul>${group.rows.map((row) => `<li><span class="keys">${keycaps(row.keys, row.combo)}</span><span class="label">${row.label}</span></li>`).join('')}</ul>
+                            ${group.note ? `<p class="field-note">${group.note}</p>` : ''}
+                        </div>`).join('')}
+                    <button class="text-button show-keyboard" data-keyboard>Show the on-screen keyboard</button>
+                </section>
+                <section class="tab-panel" role="tabpanel" id="panel-about" aria-labelledby="tab-about" hidden>
+                    <p class="about-lead">An endless landscape generated as you walk: hills, lakes, forests and mountains grown from a seed, with a full day and night, weather and living grass.</p>
+                    <dl class="readout">
+                        <div><dt>World seed</dt><dd>${this.escape(Game.getInstance().seed)}</dd></div>
+                    </dl>
+                    <h3>Made with</h3>
+                    <ul class="credits">
+                        <li>Characters and animations: <a href="https://quaternius.com" target="_blank" rel="noopener">Quaternius</a> (CC0)</li>
+                        <li>Terrain, bark, rocks and ferns: <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a>, <a href="https://www.texturecan.com" target="_blank" rel="noopener">TextureCan</a> (CC0)</li>
+                        <li>Trees: <a href="https://github.com/dgreenheck/ez-tree" target="_blank" rel="noopener">EZ-Tree</a> by Daniel Greenheck (MIT)</li>
+                        <li>Rendering: <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>, postprocessing, N8AO</li>
+                    </ul>
+                    <a class="text-button" href="https://github.com/ibra-kdbra/Generate_infinite" target="_blank" rel="noopener">Source on GitHub</a>
+                </section>
+            </div>
+            <footer class="drawer-footer"><span><kbd>Esc</kbd> close</span><span><kbd>H</kbd> controls</span></footer>`
+        ui.appendChild(this.drawer)
+        this.stats = this.drawer.querySelector('[data-stats]')!
+
+        this.drawer.querySelector('[data-close]')!.addEventListener('click', () => this.hide())
+        this.drawer.querySelector('.tabs')!.addEventListener('click', (event) => {
+            const tab = (event.target as HTMLElement).closest('[data-tab]') as HTMLElement | null
+            if (tab) this.select(tab.dataset.tab as Tab)
+        })
+        this.drawer.querySelector('.tabs')!.addEventListener('keydown', (event) => {
+            const e = event as KeyboardEvent
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+            const tabs: Tab[] = ['settings', 'controls', 'about']
+            const next = tabs[(tabs.indexOf(this.tab) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]
+            this.select(next)
+            this.drawer.querySelector<HTMLElement>(`#tab-${next}`)!.focus()
+        })
+        this.drawer.querySelector('[data-keyboard]')!.addEventListener('click', () => {
+            this.hide()
+            document.querySelector<HTMLInputElement>('.keyboard-input')?.focus()
+        })
+        this.drawer.querySelector('#panel-settings')!.addEventListener('click', (event) => {
             const button = (event.target as HTMLElement).closest('button[data-key]') as HTMLButtonElement | null
             if (!button)
                 return
@@ -82,7 +214,56 @@ export default class Menu {
             if (key === 'dayLength') this.settings.set('dayLength', value as DayLength)
             this.refresh()
         })
+        window.addEventListener('keydown', (event) => {
+            const typing = (event.target as HTMLElement)?.matches?.('input[type="text"], textarea') && !(event.target as HTMLElement).classList.contains('keyboard-input')
+            if (event.code === 'Escape') {
+                if (this.open) this.hide()
+                else this.show('settings', true)
+            }
+            else if (event.code === 'KeyH' && !typing && !event.repeat) {
+                if (this.open && this.tab === 'controls') this.hide()
+                else this.show('controls', true)
+            }
+        })
+
+        // ── heads-up display ──
+        this.clock = this.element('clock')
+        this.flyHint = this.element('fly-hint', true)
+        this.hint = this.element('context-hint', true)
+        this.hint.setAttribute('aria-live', 'polite')
+        this.breath = this.element('breath', true)
+        this.breath.innerHTML = '<span class="breath-label">Air</span><span class="breath-bar"><span></span></span>'
+        this.stamina = this.element('stamina', true)
+        this.stamina.setAttribute('role', 'img')
+        this.stamina.innerHTML = '<svg viewBox="0 0 44 44" aria-hidden="true"><circle class="stamina-track" cx="22" cy="22" r="17"/><circle class="stamina-fill" cx="22" cy="22" r="17" pathLength="100"/></svg>'
+        this.toast = this.element('toast', true)
+        this.toast.innerHTML = 'Press <kbd>H</kbd> for the controls, <kbd>Esc</kbd> for settings'
+        try {
+            if (!localStorage.getItem('generate-infinite:seen-controls')) {
+                this.toast.hidden = false
+                setTimeout(() => this.toast.classList.add('is-leaving'), 7000)
+                setTimeout(() => { this.toast.hidden = true }, 7600)
+                localStorage.setItem('generate-infinite:seen-controls', '1')
+            }
+        }
+        catch { /* storage blocked: no tip */ }
+
+        for (const key of ['character', 'quality', 'grass', 'dayLength'])
+            this.settings.events.on(`change:${key}`, () => this.refresh())
+        this.select('settings')
         this.refresh()
+    }
+
+    private element(className: string, hidden = false) {
+        const element = document.createElement('div')
+        element.className = className
+        element.hidden = hidden
+        document.querySelector('.ui')!.appendChild(element)
+        return element
+    }
+
+    private escape(text: string) {
+        return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
     }
 
     /** Which graphics card the browser renders with (laptops often default to the integrated one). */
@@ -92,43 +273,115 @@ export default class Menu {
         const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
         // Firefox reports a representative model per vendor instead of the real one (privacy):
         // every NVIDIA card shows up as "GeForce GTX 980", so name the vendor only
-        if (/nvidia|geforce|quadro/i.test(name)) return 'NVIDIA graphics (dedicated)'
-        if (/radeon|amd/i.test(name)) return 'AMD graphics'
-        if (/intel/i.test(name)) return 'Intel graphics (integrated)'
+        if (/nvidia|geforce|quadro/i.test(name)) return 'NVIDIA (dedicated)'
+        if (/radeon|amd/i.test(name)) return 'AMD'
+        if (/intel/i.test(name)) return 'Intel (integrated)'
         return name.replace(/^ANGLE \(([^,]+), /, '').replace(/\s*\(.*$|,.*$/, '').trim()
     }
 
-    private section(key: string, title: string, options: Record<string, string>) {
+    private field(key: string, title: string, options: Record<string, string>, layout = 'segmented') {
         const buttons = Object.entries(options)
             .map(([value, label]) => `<button data-key="${key}" data-value="${value}">${label}</button>`)
             .join('')
-        return `<section><h3>${title}</h3><div class="menu-options">${buttons}</div></section>`
+        return `<div class="field"><h3 id="field-${key}">${title}</h3><div class="${layout}" role="group" aria-labelledby="field-${key}">${buttons}</div></div>`
     }
 
     private refresh() {
-        for (const button of this.panel.querySelectorAll<HTMLButtonElement>('button[data-key]')) {
+        for (const button of this.drawer.querySelectorAll<HTMLButtonElement>('button[data-key]')) {
             const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'dayLength'
             const selected = this.settings.get(key) === button.dataset.value
             button.classList.toggle('is-selected', selected)
             button.setAttribute('aria-pressed', String(selected))
         }
         const lowChanged = (this.settings.get('quality') === 'low') !== (this.startQuality === 'low')
-        this.panel.querySelector<HTMLElement>('[data-note]')!.hidden = !lowChanged
+        this.drawer.querySelector<HTMLElement>('[data-note]')!.hidden = !lowChanged
+    }
+
+    private select(tab: Tab) {
+        this.tab = tab
+        for (const button of this.drawer.querySelectorAll<HTMLElement>('[role="tab"]')) {
+            const selected = button.dataset.tab === tab
+            button.setAttribute('aria-selected', String(selected))
+            button.tabIndex = selected ? 0 : - 1
+        }
+        for (const panel of this.drawer.querySelectorAll<HTMLElement>('[role="tabpanel"]'))
+            panel.hidden = panel.id !== `panel-${tab}`
+    }
+
+    show(tab: Tab, focus = false) {
+        this.select(tab)
+        if (!this.open) {
+            this.open = true
+            this.lastFocus = document.activeElement as HTMLElement | null
+            this.drawer.hidden = false
+            document.querySelector('.ui')!.classList.add('has-drawer')
+            requestAnimationFrame(() => this.drawer.classList.add('is-open'))
+            // the cursor is needed in the menu
+            if (document.pointerLockElement)
+                document.exitPointerLock()
+        }
+        this.toast.hidden = true
+        if (focus)
+            this.drawer.querySelector<HTMLElement>(`#tab-${tab}`)?.focus({ preventScroll: true })
+    }
+
+    hide() {
+        if (!this.open)
+            return
+        this.open = false
+        this.drawer.classList.remove('is-open')
+        document.querySelector('.ui')!.classList.remove('has-drawer')
+        setTimeout(() => { if (!this.open) this.drawer.hidden = true }, 220)
+        this.lastFocus?.focus?.({ preventScroll: true })
     }
 
     toggle() {
-        this.open = !this.open
-        this.panel.hidden = !this.open
-        this.element.classList.toggle('is-open', this.open)
+        if (this.open) this.hide()
+        else this.show('settings')
+    }
+
+    /** What the keys do right now, for the hint above the tools. */
+    private contextHint() {
+        const player = this.state.player
+        if (player.camera.mode === 2)
+            return ''
+        if (player.climbing)
+            return [`${keycaps(['W', 'S'])} climb`, `${keycaps(['A', 'D'])} across`, `${keycaps(['Space'])} lunge`, `${keycaps(['C'])} let go`].map((item) => `<span class="hint-item">${item}</span>`).join('')
+        if (player.diving)
+            return [`${keycaps(['Space'])} swim up`, `${keycaps(['C'])} dive deeper`].map((item) => `<span class="hint-item">${item}</span>`).join('')
+        if (player.swimming)
+            return [`${keycaps(['C'])} dive`, `${keycaps(['Shift'])} swim faster`].map((item) => `<span class="hint-item">${item}</span>`).join('')
+        return ''
     }
 
     update() {
         const player = this.state.player
+
+        // air while diving
         this.breath.hidden = !(player.diving || player.breath < 0.999)
         if (!this.breath.hidden) {
             const bar = this.breath.querySelector('.breath-bar span') as HTMLElement
             bar.style.width = `${Math.round(player.breath * 100)}%`
-            this.breath.classList.toggle('low', player.breath < 0.25)
+            this.breath.classList.toggle('is-low', player.breath < 0.25)
+        }
+
+        // stamina: shown while it's being used or refilling
+        const showStamina = player.climbing || player.mantle !== null || player.stamina < 0.995
+        this.stamina.hidden = !showStamina
+        if (showStamina) {
+            const fill = this.stamina.querySelector('.stamina-fill') as SVGCircleElement
+            fill.style.strokeDashoffset = String(100 - player.stamina * 100)
+            this.stamina.classList.toggle('is-low', player.stamina < 0.3)
+            this.stamina.classList.toggle('is-exhausted', player.exhausted)
+            this.stamina.setAttribute('aria-label', `Stamina ${Math.round(player.stamina * 100)} %`)
+        }
+
+        // what the keys do now
+        const hint = this.contextHint()
+        if (hint !== this.hintText) {
+            this.hintText = hint
+            this.hint.innerHTML = hint
+            this.hint.hidden = !hint
         }
 
         // clock: 0 = noon on the day cycle
@@ -138,28 +391,31 @@ export default class Menu {
         if (this.clock.dataset.time !== text) {
             this.clock.dataset.time = text
             const night = hour < 6 || hour >= 19
-            this.clock.innerHTML = `<span aria-hidden="true">${night ? '☾' : '☀'}</span> ${text}`
+            this.clock.innerHTML = `<span class="clock-icon" aria-hidden="true">${night ? '☾' : '☀'}</span><span>${text}</span>`
         }
 
         // free camera: what the keys do, and the cruising speed
-        const camera = this.state.player.camera
+        const camera = player.camera
         const flying = camera.mode === 2
         this.flyHint.hidden = !flying
         if (flying) {
-            const text = `Free camera · WASD fly · Space up · C down · Shift fast · wheel speed ${Math.round(camera.fly.speed)} m/s · V back`
-            if (this.flyHint.textContent !== text)
-                this.flyHint.textContent = text
+            const text = ['<strong>Free camera</strong>', `${keycaps(['W', 'A', 'S', 'D'])} fly`, `${keycaps(['Space'])} up`, `${keycaps(['C'])} down`, `${keycaps(['Shift'])} fast`, `wheel ${Math.round(camera.fly.speed)} m/s`, `${keycaps(['V'])} back`]
+                .map((item) => `<span class="hint-item">${item}</span>`).join('')
+            if (this.flyHint.dataset.text !== text) {
+                this.flyHint.dataset.text = text
+                this.flyHint.innerHTML = text
+            }
         }
 
         this.frames++
         this.elapsed += this.state.time.delta
         if (this.elapsed < 0.5)
             return
-        if (this.open) {
+        if (this.open && this.tab === 'settings') {
             const canvas = this.view.renderer.instance.domElement
             const scale = this.view.renderer.adaptive.scale
-            this.stats.textContent = `${Math.round(this.frames / this.elapsed)} fps · ${canvas.width} × ${canvas.height} px` +
-                (scale < 0.999 ? ` (auto ${Math.round(scale * 100)} %)` : '') + ` · ${this.gpu}`
+            this.stats.querySelector('[data-stat="fps"]')!.textContent = `${Math.round(this.frames / this.elapsed)} fps`
+            this.stats.querySelector('[data-stat="resolution"]')!.textContent = `${canvas.width} × ${canvas.height}` + (scale < 0.999 ? ` (auto ${Math.round(scale * 100)} %)` : '')
         }
         this.frames = 0
         this.elapsed = 0

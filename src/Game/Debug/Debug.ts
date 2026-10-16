@@ -52,7 +52,11 @@ export default class Debug {
         this.element = document.createElement('div')
         this.element.className = 'dev-panel'
         this.element.hidden = true
-        this.element.innerHTML = `<header><h2>Developer</h2><span>B closes</span></header>`
+        this.element.setAttribute('role', 'dialog')
+        this.element.setAttribute('aria-label', 'Developer panel')
+        this.element.innerHTML = `<header><div><p class="drawer-eyebrow">Tuning</p><h2>Developer</h2></div>`
+            + `<button class="icon-button is-quiet" data-close aria-label="Close" title="Close (B)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>`
+        this.element.querySelector('[data-close]')!.addEventListener('click', () => this.toggle())
         document.querySelector('.ui')!.appendChild(this.element)
 
         this.build()
