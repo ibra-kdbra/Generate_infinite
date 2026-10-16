@@ -20,9 +20,10 @@ const MAX_PIXEL_RATIO: Record<Quality, number> = { low: 0.75, medium: 1, high: 1
 type AoQuality = 'Performance' | 'Low' | 'Medium' | 'High' | 'Ultra'
 const POST: Record<Quality, { ao: AoQuality | null, aoHalfRes: boolean, bloom: boolean, smaa: SMAAPreset | null }> = {
     low: { ao: null, aoHalfRes: true, bloom: false, smaa: null },
-    medium: { ao: 'Low', aoHalfRes: true, bloom: true, smaa: SMAAPreset.MEDIUM },
-    high: { ao: 'Medium', aoHalfRes: true, bloom: true, smaa: SMAAPreset.HIGH },
-    ultra: { ao: 'High', aoHalfRes: false, bloom: true, smaa: SMAAPreset.ULTRA }
+    medium: { ao: 'Performance', aoHalfRes: true, bloom: true, smaa: SMAAPreset.MEDIUM },
+    high: { ao: 'Low', aoHalfRes: true, bloom: true, smaa: SMAAPreset.HIGH },
+    // half resolution even here: at a 4K panel's pixel ratio that's still the full CSS size
+    ultra: { ao: 'Medium', aoHalfRes: true, bloom: true, smaa: SMAAPreset.ULTRA }
 }
 
 export default class Renderer {

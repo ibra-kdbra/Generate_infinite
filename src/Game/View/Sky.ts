@@ -16,9 +16,9 @@ import starsFragment from './Materials/shaders/stars/fragment.glsl'
 // screen's CSS size), by quality
 const CLOUDS: Record<Quality, { steps: number, lightSteps: number, resolution: number }> = {
     low: { steps: 0, lightSteps: 0, resolution: 0.25 },
-    medium: { steps: 40, lightSteps: 4, resolution: 0.4 },
-    high: { steps: 56, lightSteps: 5, resolution: 0.5 },
-    ultra: { steps: 80, lightSteps: 6, resolution: 0.6 }
+    medium: { steps: 36, lightSteps: 4, resolution: 0.38 },
+    high: { steps: 48, lightSteps: 5, resolution: 0.45 },
+    ultra: { steps: 64, lightSteps: 6, resolution: 0.5 }
 }
 
 // Uniforms shared by reference with every material lit by the sky or shadowed by the clouds

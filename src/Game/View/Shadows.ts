@@ -22,7 +22,7 @@ export const SHADOW_LAYER = 1
 // Uniforms shared by reference with every material that receives shadows
 export const SHADOW_UNIFORMS = [
     'uShadowMap0', 'uShadowMap1', 'uShadowMap2', 'uShadowMatrix0', 'uShadowMatrix1', 'uShadowMatrix2',
-    'uShadowSplits', 'uShadowTexel', 'uShadowTexelUv', 'uViewPosition'
+    'uShadowSplits', 'uShadowTexel', 'uShadowTexelUv', 'uViewPosition', 'uShadowCascade'
 ]
 
 type Cascade = {
@@ -49,7 +49,7 @@ export default class Shadows {
     private cascades: Cascade[] = []
     private splits: [number, number, number] = [24, 120, 2200]
     private frame = 0
-    private swapped: { mesh: THREE.Mesh, material: THREE.Material | THREE.Material[] }[] = []
+    private swapped: { mesh: THREE.Mesh, material: THREE.Material | THREE.Material[], drawCount: number }[] = []
 
     constructor() {
         this.view = View.getInstance()
@@ -65,7 +65,8 @@ export default class Shadows {
             uShadowSplits: { value: new THREE.Vector4() },
             uShadowTexel: { value: new THREE.Vector3(1, 1, 1) },
             uShadowTexelUv: { value: new THREE.Vector3(1, 1, 1) },
-            uViewPosition: { value: new THREE.Vector3() }
+            uViewPosition: { value: new THREE.Vector3() },
+            uShadowCascade: { value: 0 }          // which cascade is being drawn (casters may simplify)
         }
 
         this.depthMaterial = new THREE.ShaderMaterial({
@@ -197,27 +198,31 @@ export default class Shadows {
         return texel
     }
 
-    private swapMaterials(terrainOnly: boolean) {
+    private swapMaterials(cascade: number, terrainOnly: boolean) {
         this.swapped.length = 0
         this.view.scene.traverseVisible((object) => {
             const mesh = object as THREE.Mesh
             const material = mesh.userData?.shadowMaterial
             if (!material || !mesh.layers.isEnabled(SHADOW_LAYER))
                 return
+            const drawCount = mesh.geometry.drawRange.count
+            this.swapped.push({ mesh, material: mesh.material, drawCount })
             if (terrainOnly && !mesh.userData.terrainCaster) {
-                this.swapped.push({ mesh, material: mesh.material })
                 mesh.visible = false
                 return
             }
-            this.swapped.push({ mesh, material: mesh.material })
             mesh.material = material
+            // past the first cascade, casters that offer it draw a lighter version (thinned crowns)
+            if (cascade > 0 && mesh.userData.shadowDrawCount)
+                mesh.geometry.setDrawRange(0, mesh.userData.shadowDrawCount)
         })
     }
 
     private restoreMaterials() {
-        for (const { mesh, material } of this.swapped) {
+        for (const { mesh, material, drawCount } of this.swapped) {
             mesh.material = material
             mesh.visible = true
+            mesh.geometry.setDrawRange(0, drawCount)
         }
         this.swapped.length = 0
     }
@@ -247,7 +252,8 @@ export default class Shadows {
             texels.setComponent(i, texel)
             texelsUv.setComponent(i, 1 / cascade.size)
             cascade.camera.layers.set(SHADOW_LAYER)
-            this.swapMaterials(cascade.terrainOnly)
+            this.uniforms.uShadowCascade.value = i
+            this.swapMaterials(i, cascade.terrainOnly)
             renderer.setRenderTarget(cascade.target)
             renderer.clear(false, true, false)
             renderer.render(this.view.scene, cascade.camera)

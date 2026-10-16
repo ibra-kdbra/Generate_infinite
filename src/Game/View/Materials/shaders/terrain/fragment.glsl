@@ -255,7 +255,9 @@ void main()
     // ── lighting ──
     // shadow maps near by; beyond them, the soft blobs under distant trees
     float treeShadow = treeShade * (uShadowSplits.w > 0.5 ? smoothstep(uShadowSplits.y * 0.8, uShadowSplits.y, vDepth) : 1.0);
-    float sunVisibility = (1.0 - vCloudShadow) * (1.0 - treeShadow) * getSunShadow(vWorldPosition, normal, sunDirection);
+    // ground facing away from the sun is in its own shadow: no need to look it up
+    float sunShadow = dot(normal, sunDirection) > - 0.05 ? getSunShadow(vWorldPosition, normal, sunDirection) : 0.0;
+    float sunVisibility = (1.0 - vCloudShadow) * (1.0 - treeShadow) * sunShadow;
     vec3 albedo = toLinear(color);
     occlusion = mix(1.0, occlusion, textured);
     vec3 lit = albedo * getTerrainLight(detailNormal, sunDirection, sunVisibility) * (1.0 - cavity) * (1.0 - treeShade * 0.3) * mix(1.0, occlusion, 0.8);

@@ -43,6 +43,10 @@ const SWAY: Record<PlantKind, number> = { [PLANT.CONIFER]: 0.012, [PLANT.BROADLE
 // Full trees up to this distance, billboards beyond (a dithered hand-over across BAND m)
 const NEAR: Record<Quality, number> = { low: 28, medium: 50, high: 80, ultra: 125 }
 const BAND = 10
+// Every leaf card up to this share of NEAR; beyond, the crowns thin to LEAF_KEEP of their
+// cards (each grown to keep the crown as full) and a lighter copy draws only those
+const FULL = 0.4
+const LEAF_KEEP = 0.4
 const VIEWS = 8
 // billboard atlas cell (pixels per baked view), by quality when the trees are built
 const CELLS: Record<Quality, number> = { low: 192, medium: 256, high: 384, ultra: 448 }
@@ -54,6 +58,33 @@ type Variant = {
     bark: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>
     leaves: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>
     instances: Instances
+    // the same tree with its crown thinned (mid distance)
+    barkMid: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>
+    leavesMid: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>
+    midInstances: Instances
+}
+
+/**
+ * Reorders a branch geometry's triangles by branch level (trunk first) and returns how many
+ * indices cover every level but the finest (twigs), the bark of the mid-distance trees.
+ */
+function sortByLevel(geometry: THREE.BufferGeometry, levels: number) {
+    const index = geometry.index!
+    const triangleLevels = geometry.userData.triangleLevels as Uint8Array | undefined
+    if (!triangleLevels || triangleLevels.length !== index.count / 3)
+        return index.count
+    const order = Array.from({ length: triangleLevels.length }, (_, i) => i).sort((a, b) => triangleLevels[a] - triangleLevels[b])
+    const source = index.array
+    const sorted = new (source.constructor as Uint16ArrayConstructor)(source.length)
+    let prefix = 0
+    const keepBelow = Math.max(1, levels)          // drop only the last level
+    order.forEach((triangle, slot) => {
+        sorted.set([source[triangle * 3], source[triangle * 3 + 1], source[triangle * 3 + 2]], slot * 3)
+        if (triangleLevels[triangle] < keepBelow)
+            prefix = (slot + 1) * 3
+    })
+    geometry.setIndex(new THREE.BufferAttribute(sorted, 1))
+    return Math.max(prefix, Math.min(index.count, 3))
 }
 
 // yield between variants so loading never stalls (a timer: keeps going in background tabs)
@@ -76,7 +107,7 @@ export default class Trees {
     near = NEAR.medium
     uniforms: Record<string, THREE.IUniform>
     impostor!: { mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>, instances: Instances }
-    counts = { near: 0, far: 0 }
+    counts = { near: 0, mid: 0, far: 0 }
 
     private loader = new THREE.TextureLoader()
     private textures = new Map<string, THREE.Texture>()
@@ -101,6 +132,7 @@ export default class Trees {
             this.uniforms[name] = this.view.sky.uniforms[name]
         for (const name of SHADOW_UNIFORMS)
             this.uniforms[name] = this.view.shadows.uniforms[name]
+        this.uniforms.uLodCenter = { value: new THREE.Vector3() }
 
         this.applyQuality()
         this.settings.events.on('change:quality', () => this.applyQuality())
@@ -110,7 +142,14 @@ export default class Trees {
     private applyQuality() {
         this.near = NEAR[this.settings.get('quality')]
         this.uniforms.uFade.value.set(this.near, this.near + BAND)
+        // the full trees thin their crowns over the last stretch before the lighter copies
+        for (const variant of this.variants)
+            variant.leaves.material.uniforms.uLeafLod.value.set(this.fullEnd - 8, this.fullEnd, LEAF_KEEP)
         this.version = -1
+    }
+
+    private get fullEnd() {
+        return this.near * FULL
     }
 
     private texture(name: string, repeat: boolean) {
@@ -139,7 +178,8 @@ export default class Trees {
                     uNormalMap: { value: leaves ? null : this.texture(`bark_${name}_normal`, true) },
                     uTint: { value: new THREE.Color().setStyle(leaves ? LEAF_TINT[name as Leaves] : '#d8d0c4', THREE.LinearSRGBColorSpace) },
                     uSway: { value: SWAY[kindOfPlant] },
-                    uTranslucency: { value: leaves ? 0.45 : 0 }
+                    uTranslucency: { value: leaves ? 0.45 : 0 },
+                    uLeafLod: { value: new THREE.Vector3(0, 0, 1) }       // all cards (set per mesh)
                 },
                 side: leaves ? THREE.DoubleSide : THREE.FrontSide
             })
@@ -167,6 +207,8 @@ export default class Trees {
 
         const barkGeometry = tree.branchesMesh.geometry as THREE.BufferGeometry
         const leafGeometry = tree.leavesMesh.geometry as THREE.BufferGeometry
+        // bark triangles sorted trunk first: a prefix is the tree without its finest twigs
+        const barkPrefix = sortByLevel(barkGeometry, tree.options.branch.levels)
         barkGeometry.computeBoundingBox()
         leafGeometry.computeBoundingBox()
         const box = barkGeometry.boundingBox!.clone().union(leafGeometry.boundingBox!)
@@ -211,6 +253,36 @@ export default class Trees {
             }
             geometry.setAttribute('aSway', new THREE.BufferAttribute(sway, 1))
             geometry.setAttribute('aAo', new THREE.BufferAttribute(ao, 1))
+            if (leaves) {
+                // leaf cards are quads (4 vertices, 6 indices): their centres, and the cards
+                // in a random order, so the first part of the index buffer is an even sample
+                // of the crown (the levels of detail draw a prefix)
+                const quads = position.count / 4
+                const center = new Float32Array(position.count * 3)
+                const rank = new Float32Array(position.count)
+                const order = Array.from({ length: quads }, (_, i) => i)
+                let seed = species.seed * 9301 + 49297
+                const random = () => (seed = (seed * 9301 + 49297) % 233280) / 233280
+                for (let i = quads - 1; i > 0; i--) {
+                    const j = Math.floor(random() * (i + 1))
+                    ;[order[i], order[j]] = [order[j], order[i]]
+                }
+                const index = new (position.count > 65535 ? Uint32Array : Uint16Array)(quads * 6)
+                order.forEach((quad, slot) => {
+                    const v = quad * 4
+                    const cx = (position.getX(v) + position.getX(v + 1) + position.getX(v + 2) + position.getX(v + 3)) / 4
+                    const cy = (position.getY(v) + position.getY(v + 1) + position.getY(v + 2) + position.getY(v + 3)) / 4
+                    const cz = (position.getZ(v) + position.getZ(v + 1) + position.getZ(v + 2) + position.getZ(v + 3)) / 4
+                    for (let k = 0; k < 4; k++) {
+                        center.set([cx, cy, cz], (v + k) * 3)
+                        rank[v + k] = (slot + 0.5) / quads
+                    }
+                    index.set([v, v + 1, v + 2, v, v + 2, v + 3], slot * 6)
+                })
+                geometry.setAttribute('aLeafCenter', new THREE.BufferAttribute(center, 3))
+                geometry.setAttribute('aLeafRank', new THREE.BufferAttribute(rank, 1))
+                geometry.setIndex(new THREE.BufferAttribute(index, 1))
+            }
             const instanced = new THREE.InstancedBufferGeometry()
             instanced.index = geometry.index
             for (const name of Object.keys(geometry.attributes))
@@ -220,15 +292,47 @@ export default class Trees {
         }
 
         const instances = this.instances(64)
+        const leavesMaterial = this.material('leaves', species.leaves, species.kind)
         const bark = new THREE.Mesh(decorate(barkGeometry, false), this.material('bark', species.bark, species.kind))
-        const leaves = new THREE.Mesh(decorate(leafGeometry, true), this.material('leaves', species.leaves, species.kind))
-        for (const mesh of [bark, leaves]) {
-            this.attach(mesh.geometry, instances)
+        // its own copy of the material: the full trees' level-of-detail distances
+        const leaves = new THREE.Mesh(decorate(leafGeometry, true), this.lodMaterial(leavesMaterial, this.fullEnd - 8, this.fullEnd))
+        // mid distance: the same buffers, their own instances, the crown's first LEAF_KEEP only
+        const midInstances = this.instances(64)
+        const share = (geometry: THREE.InstancedBufferGeometry) => {
+            const copy = new THREE.InstancedBufferGeometry()
+            copy.index = geometry.index
+            for (const name of Object.keys(geometry.attributes))
+                if (!name.startsWith('aInstance'))
+                    copy.setAttribute(name, geometry.getAttribute(name))
+            copy.boundingSphere = geometry.boundingSphere
+            return copy
+        }
+        const barkMid = new THREE.Mesh(share(bark.geometry), bark.material)
+        barkMid.geometry.setDrawRange(0, barkPrefix)
+        const leavesMid = new THREE.Mesh(share(leaves.geometry), this.lodMaterial(leavesMaterial, 0, 0))
+        const keptIndices = Math.ceil(leaves.geometry.index!.count / 6 * LEAF_KEEP) * 6
+        leavesMid.geometry.setDrawRange(0, keptIndices)
+        // the wider shadow cascades draw the near crowns thinned too
+        leaves.userData.shadowDrawCount = keptIndices
+        bark.userData.shadowDrawCount = barkPrefix
+        for (const [mesh, set] of [[bark, instances], [leaves, instances], [barkMid, midInstances], [leavesMid, midInstances]] as const) {
+            this.attach(mesh.geometry, set)
             mesh.geometry.instanceCount = 0
             mesh.frustumCulled = false
             this.view.shadows.addCaster(mesh, Shadows.shadowVariant(mesh.material))
         }
-        return { species, radius: crownRadius, bark, leaves, instances }
+        return { species, radius: crownRadius, bark, leaves, instances, barkMid, leavesMid, midInstances }
+    }
+
+    /** A leaf material with its own level-of-detail range (from, to: thinning distances; equal = thinned). */
+    private lodMaterial(material: THREE.ShaderMaterial, from: number, to: number) {
+        return new THREE.ShaderMaterial({
+            vertexShader: material.vertexShader,
+            fragmentShader: material.fragmentShader,
+            defines: { ...material.defines },
+            uniforms: { ...material.uniforms, uLeafLod: { value: new THREE.Vector3(from, to, LEAF_KEEP) } },
+            side: material.side
+        })
     }
 
     private instances(capacity: number): Instances {
@@ -249,10 +353,8 @@ export default class Trees {
             await nextFrame()          // spread the generation so loading doesn't stall
         }
         this.bakeImpostors()
-        for (const variant of this.variants) {
-            this.scene.add(variant.bark)
-            this.scene.add(variant.leaves)
-        }
+        for (const variant of this.variants)
+            this.scene.add(variant.bark, variant.leaves, variant.barkMid, variant.leavesMid)
         this.scene.add(this.impostor.mesh)
         this.ready = true
         this.version = -1
@@ -360,7 +462,9 @@ export default class Trees {
         })
 
         const near: number[][] = this.variants.map(() => [])
+        const mid: number[][] = this.variants.map(() => [])
         const far: number[] = []
+        const fullEnd = this.fullEnd
         for (const cell of this.state.vegetation.cells.values()) {
             for (const plant of cell.plants) {
                 const options = byKind.get(plant.kind)
@@ -368,8 +472,10 @@ export default class Trees {
                     continue
                 const index = options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))]
                 const distance = Math.hypot(plant.x - p[0], plant.z - p[2])
-                if (distance < this.near + BAND)
+                if (distance < fullEnd)
                     near[index].push(plant.x, plant.y, plant.z, plant.scale, plant.rotation)
+                else if (distance < this.near + BAND)
+                    mid[index].push(plant.x, plant.y, plant.z, plant.scale, plant.rotation)
                 if (distance > this.near)
                     far.push(plant.x, plant.y, plant.z, plant.scale, plant.rotation, index)
             }
@@ -389,6 +495,7 @@ export default class Trees {
         }
 
         this.counts.near = 0
+        this.counts.mid = 0
         this.variants.forEach((variant, index) => {
             const count = near[index].length / 5
             variant.instances = this.reserve(variant.instances, count, [variant.bark.geometry, variant.leaves.geometry])
@@ -396,7 +503,15 @@ export default class Trees {
             variant.bark.geometry.instanceCount = count
             variant.leaves.geometry.instanceCount = count
             this.counts.near += count
+            const midCount = mid[index].length / 5
+            variant.midInstances = this.reserve(variant.midInstances, midCount, [variant.barkMid.geometry, variant.leavesMid.geometry])
+            fill(variant.midInstances, mid[index], 5)
+            variant.barkMid.geometry.instanceCount = midCount
+            variant.leavesMid.geometry.instanceCount = midCount
+            this.counts.mid += midCount
         })
+        // the thinning is measured from where the bands were split (the player then)
+        this.uniforms.uLodCenter.value.set(p[0], p[1], p[2])
         const farCount = far.length / 6
         this.impostor.instances = this.reserve(this.impostor.instances, farCount, [this.impostor.mesh.geometry])
         fill(this.impostor.instances, far, 6)

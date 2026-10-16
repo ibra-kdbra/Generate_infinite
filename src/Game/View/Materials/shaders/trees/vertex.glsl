@@ -12,6 +12,15 @@ attribute vec4 aInstance;        // x, y, z, scale (height in metres)
 attribute vec2 aInstanceExtra;   // rotation, unused
 attribute float aSway;           // 0 trunk base .. 1 branch tips (Trees.ts)
 attribute float aAo;             // ambient occlusion: dark inside the crown (Trees.ts)
+#ifdef LEAVES
+    // level of detail: the leaf cards in a random order (aLeafRank 0..1); farther away the
+    // later ones shrink away and the rest grow to keep the crown as full
+    attribute vec3 aLeafCenter;
+    attribute float aLeafRank;
+    uniform vec3 uLeafLod;       // start, end (m from uLodCenter), share of the cards kept from the end on
+    uniform vec3 uLodCenter;
+    uniform float uShadowCascade;
+#endif
 
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -35,6 +44,16 @@ void main()
     mat2 turn = mat2(c, - s, s, c);
 
     vec3 local = position;
+    #ifdef LEAVES
+        float lod = uLeafLod.y > uLeafLod.x ? smoothstep(uLeafLod.x, uLeafLod.y, distance(uLodCenter.xz, aInstance.xz)) : 1.0;
+        #ifdef SHADOW
+            if (uShadowCascade > 0.5)
+                lod = 1.0;          // the wider shadow cascades: the reduced crown
+        #endif
+        float keep = mix(1.0, uLeafLod.z, lod);
+        float grow = (keep > 0.999 ? 1.0 : clamp((keep - aLeafRank) * 25.0, 0.0, 1.0)) * mix(1.0, inversesqrt(uLeafLod.z), lod);
+        local = aLeafCenter + (position - aLeafCenter) * grow;
+    #endif
     vec3 n = normal;       // leaves: already leaning out of the crown (soft canopy lighting)
     vAo = aAo;
     vObjectNormal = n;

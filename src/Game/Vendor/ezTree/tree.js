@@ -55,7 +55,8 @@ export class Tree extends THREE.Group {
       normals: [],
       indices: [],
       uvs: [],
-      windFactor: []
+      windFactor: [],
+      levels: [] // branch level of each triangle (Generate Infinite: levels of detail)
     };
 
     this.leaves = {
@@ -500,6 +501,7 @@ export class Tree extends THREE.Group {
         v3 = v1 + N;
         v4 = v2 + N;
         this.branches.indices.push(v1, v3, v2, v2, v3, v4);
+        this.branches.levels.push(branch.level, branch.level);
       }
     }
   }
@@ -524,6 +526,7 @@ export class Tree extends THREE.Group {
     g.setIndex(
       new THREE.BufferAttribute(new Uint16Array(this.branches.indices), 1),
     );
+    g.userData.triangleLevels = Uint8Array.from(this.branches.levels);
     g.computeBoundingSphere();
 
     this.branchesMesh.geometry.dispose();

@@ -224,7 +224,7 @@ export default class Debug {
         const layers = this.section('Layers', true)
         this.toggleControl(layers, 'Grass', () => view.grass.group.visible, (on) => { view.grass.group.visible = on })
         this.toggleControl(layers, 'Trees', () => true, (on) => {
-            for (const variant of view.trees.variants) { variant.bark.visible = on; variant.leaves.visible = on }
+            for (const variant of view.trees.variants) for (const mesh of [variant.bark, variant.leaves, variant.barkMid, variant.leavesMid]) mesh.visible = on
             if (view.trees.impostor) view.trees.impostor.mesh.visible = on
         })
         this.toggleControl(layers, 'Boulders', () => true, (on) => { for (const layer of view.vegetation.layers.values()) layer.mesh.visible = on })
