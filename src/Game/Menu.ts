@@ -432,7 +432,7 @@ export default class Menu {
         this.breath.hidden = !(player.diving || player.breath < 0.999)
         if (!this.breath.hidden) {
             const bar = this.breath.querySelector('.breath-bar span') as HTMLElement
-            bar.style.width = `${Math.round(player.breath * 100)}%`
+            bar.style.transform = `scaleX(${player.breath.toFixed(3)})`
             this.breath.classList.toggle('is-low', player.breath < 0.25)
         }
 

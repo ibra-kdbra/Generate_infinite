@@ -63,7 +63,7 @@ export default class Loading {
         if (this.phase === 'world') {
             const [ready, waiting] = this.progress()
             this.shown += (ready - this.shown) * 0.15
-            this.bar.style.width = `${Math.round(this.shown * 100)}%`
+            this.bar.style.transform = `scaleX(${this.shown.toFixed(3)})`
             this.status.textContent = waiting ? `${waiting}… ${Math.round(ready * 100)} %` : 'Almost there…'
             if ((ready >= 1 && elapsed > 1) || elapsed > 45) {
                 // stand the player on the ground before anything is seen
@@ -81,7 +81,7 @@ export default class Loading {
             }
         }
         else if (this.phase === 'settle') {
-            this.bar.style.width = '100%'
+            this.bar.style.transform = 'scaleX(1)'
             // a few frames for the shadows, the clouds' history and the exposure to settle
             if (++this.settleFrames > 20) {
                 this.phase = 'fade'
