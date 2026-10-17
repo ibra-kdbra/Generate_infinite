@@ -204,8 +204,7 @@ export default class Menu {
                         <dl class="readout">
                             <div><dt>World seed</dt><dd>${this.escape(Game.getInstance().seed)}</dd></div>
                         </dl>
-                        <h3>Created by</h3>
-                        <p class="about-credit">Saruma</p>
+                        <p class="about-credit">Created for saruma.</p>
                         <h3>Made with</h3>
                         <ul class="credits">
                             <li>Characters and animations: <a href="https://quaternius.com" target="_blank" rel="noopener">Quaternius</a> (CC0)</li>
