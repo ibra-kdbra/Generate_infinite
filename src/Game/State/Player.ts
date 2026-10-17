@@ -64,7 +64,7 @@ export default class Player {
     slideEndSpeed = 2.6
     diveSpeed = 2.4              // swimming down (C) or up (Space) under water
     breathTime = 30              // seconds under water before having to come up
-    climbSpeed = 1.5             // along the rock face
+    climbSpeed = 0.85            // along the rock face (a climber's pace: one limb at a time)
     climbDrain = 1 / 22          // stamina per second while climbing (a third of that holding still)
     lungeCost = 0.14             // stamina for a lunge up the face
     staminaRegen = 1 / 3.5       // per second on the ground
@@ -493,7 +493,7 @@ export default class Player {
         }
 
         // a short face (a couple of rocks) is scrambled up quickly, a tall one climbed steadily
-        let speed = this.climbSpeed * (this.stamina < 0.2 ? 0.6 : 1) * (this.climbGear ? 1 : 1.5)
+        let speed = this.climbSpeed * (this.stamina < 0.2 ? 0.6 : 1) * (this.climbGear ? 1 : 1.6)
         if (this.lungeTime > 0) {
             this.lungeTime -= dt
             this.climbLunge = Math.max(0, this.lungeTime / 0.32)

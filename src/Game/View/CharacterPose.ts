@@ -60,8 +60,9 @@ export const HAND_IN_TOOL = new THREE.Quaternion().setFromRotationMatrix(new THR
  *  - sliding feet first: hips on the ground and pitched back, torso leaning back, the lead
  *    leg reaching ahead, the trailing leg folded under it with the knee out, the trailing
  *    hand planted behind, the other arm forward for balance; the whole body on the slope
- *  - climbing: the body flat to the rock at arm's length, hands and feet on the surface,
- *    moving in diagonal pairs (left hand with right foot) as the climber moves; pulling up
+ *  - climbing: hips close to the rock, hanging off nearly straight arms, feet under the
+ *    hips with the knees turned in; one limb moves at a time in a climber's order while the
+ *    hips shift over the holding foot and the head follows the reaching hand; pulling up
  *    over the top
  *  - diving: the swim stroke pitched head-down or head-up
  *  - tool actions: the hands to the tool's grip (position and orientation), the chest
@@ -79,7 +80,12 @@ export default class CharacterPose {
     // climbing: where each hand and foot holds on (left hand, right hand, left foot, right
     // foot), and the step it's taking: from, to, progress
     onPlant: ((limb: number, at: THREE.Vector3, gear: boolean) => void) | null = null      // a hand or foot taking its hold (0, 1 hands; 2, 3 feet)
-    private limbs = Array.from({ length: 4 }, () => ({ anchor: null as THREE.Vector3 | null, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1 }))
+    private limbs = Array.from({ length: 4 }, () => ({ anchor: null as THREE.Vector3 | null, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1, duration: 0.25 }))
+    private climbTurn = 0               // whose turn it is in the climber's order
+    private climbBase: THREE.Vector3 | null = null
+    private climbSpeed = 0
+    private climbSway = 0               // metres: the hips over the holding foot (+ to the climber's right)
+    private climbLook = 0               // -1 .. 1: the head turned to the reaching hand
 
     // the chest's place in the bind pose, and how far the clip has moved it now (the run
     // leans it forward): held tools move with the chest, not with the feet
@@ -194,56 +200,90 @@ export default class CharacterPose {
     }
 
     /**
-     * Hands and feet on the rock: each holds where it was placed while the body moves past;
-     * when a diagonal pair (left hand with right foot, or the other two) has fallen too far
-     * behind where it should be, it lets go and reaches a little ahead along the way of
-     * travel, in an arc off the rock, while the other pair holds. Holding still, they stay put.
+     * Hands and feet on the rock, moved the way a climber moves them: one limb at a time
+     * (three always holding), in a climber's order (going up: a hand, the opposite foot,
+     * the other hand, the other foot), each placed where the body will be by its next turn.
+     * Hands reach in an arc off the rock, a foot lifts its knee and steps up close under the
+     * hips. Holding still, they stay put.
      */
     private climbLimbs(base: THREE.Vector3, surfaceUp: THREE.Vector3, right: THREE.Vector3, normal: THREE.Vector3, move: THREE.Vector3, input: PoseInput) {
-        // hands up at arm's length (with axes: a little lower and off the rock, the picks
-        // reaching above), feet up under the hips and wide, knees out like a climber's
+        // hands about shoulder width, one reaching higher than the other as they take turns
+        // (with axes: a little lower and off the rock, the picks reaching above); feet under
+        // the hips, about hip width, toes on the rock
         const gear = input.climbGear
-        const reach = (gear ? 1.5 : 1.62) + input.climbLunge * 0.3
+        const reach = (gear ? 1.5 : 1.58) + input.climbLunge * 0.3
         const handClear = gear ? 0.17 : 0.06
-        const layout: [number, number, number][] = [[reach, - 0.3, handClear], [reach, 0.3, handClear], [0.45, - 0.3, 0.1], [0.45, 0.3, 0.1]]
-        const pairOf = [0, 1, 1, 0]
+        const layout: [number, number, number][] = [[reach, - 0.24, handClear], [reach, 0.24, handClear], [0.3, - 0.16, 0.11], [0.3, 0.16, 0.11]]
         const ideal = layout.map(([height, sideways, clearance]) =>
             this.onGround(base.clone().addScaledVector(surfaceUp, height).addScaledVector(right, sideways), input.ground, clearance, normal))
+
+        // how fast the body moves along the face (where the next holds must be)
+        const dt = Math.max(input.dt, 1e-3)
+        const speed = this.climbBase ? Math.min(4, this.climbBase.distanceTo(base) / dt) : 0
+        this.climbBase = (this.climbBase ?? new THREE.Vector3()).copy(base)
+        this.climbSpeed += (speed - this.climbSpeed) * Math.min(1, dt * 8)
+
         const limbs = this.limbs
         limbs.forEach((limb, i) => {
-            // first frame on the rock, or flung far off (a lunge): straight to the hold
-            if (!limb.anchor || limb.anchor.distanceTo(ideal[i]) > 0.75) {
-                limb.anchor = ideal[i].clone()
+            // first frame on the rock, or flung far off (a lunge): straight to a hold, the
+            // right hand and left foot a little higher so the first moves are staggered
+            if (!limb.anchor || limb.anchor.distanceTo(ideal[i]) > 0.9) {
+                limb.anchor = ideal[i].clone().addScaledVector(surfaceUp, i === 1 || i === 2 ? 0.1 : - 0.04)
                 limb.t = 1
             }
         })
-        const stepping = limbs.some((limb) => limb.t < 1)
-        if (!stepping) {
-            const lag = [0, 1].map((pair) => Math.max(...limbs.map((limb, i) => pairOf[i] === pair ? limb.anchor!.distanceTo(ideal[i]) : 0)))
-            const pair = lag[0] >= lag[1] ? 0 : 1
-            if (lag[pair] > 0.2) {
-                limbs.forEach((limb, i) => {
-                    if (pairOf[i] !== pair) return
-                    limb.from.copy(limb.anchor!)
-                    limb.to.copy(this.onGround(ideal[i].clone().addScaledVector(move, 0.14), input.ground, layout[i][2], normal))
-                    limb.t = 0
-                })
+
+        // the climber's order for the way of travel: up a hand then the opposite foot; down
+        // the feet lead; sideways the leading side first
+        const upward = move.dot(surfaceUp), across = move.dot(right)
+        const order = Math.abs(across) > Math.abs(upward) * 1.2
+            ? (across > 0 ? [1, 3, 0, 2] : [0, 2, 1, 3])
+            : (upward >= 0 ? [1, 2, 0, 3] : [3, 0, 2, 1])
+        const lunge = input.climbLunge > 0.05
+        const busy = limbs.filter((limb) => limb.t < 1)
+        // the next limb may start as the last one is settling (never more than two off the rock)
+        if (busy.length === 0 || (busy.length === 1 && busy[0].t > 0.65)) {
+            const ahead = THREE.MathUtils.clamp(this.climbSpeed * 0.4, 0.05, lunge ? 0.6 : 0.42)
+            for (let k = 0; k < 4; k++) {
+                const i = order[(this.climbTurn + k) % 4]
+                const limb = limbs[i]
+                if (limb.t < 1)
+                    continue
+                if (limb.anchor!.distanceTo(ideal[i]) < (lunge ? 0.05 : 0.1))
+                    continue        // not behind: its turn passes to the next
+                limb.from.copy(limb.anchor!)
+                limb.to.copy(this.onGround(ideal[i].clone().addScaledVector(move, ahead), input.ground, layout[i][2], normal))
+                limb.t = 0
+                limb.duration = (lunge ? 0.13 : i < 2 ? 0.27 : 0.24) * (gear ? 1 : 0.8)
+                this.climbTurn = (order.indexOf(i) + 1) % 4
+                break
             }
         }
-        const duration = input.climbLunge > 0.05 ? 0.13 : 0.2
-        return limbs.map((limb) => {
+
+        // the body: the hips shift over the holding foot while a hand reaches or a foot steps
+        let sway = 0, turn = 0
+        const points = limbs.map((limb, i) => {
             if (limb.t < 1) {
-                limb.t = Math.min(1, limb.t + input.dt / duration)
+                limb.t = Math.min(1, limb.t + dt / limb.duration)
                 const u = limb.t * limb.t * (3 - 2 * limb.t)
-                const point = limb.from.clone().lerp(limb.to, u).addScaledVector(normal, Math.sin(limb.t * Math.PI) * 0.1)
+                const arc = Math.sin(limb.t * Math.PI)
+                const side = i % 2 === 0 ? - 1 : 1
+                sway += - side * arc * (i < 2 ? 0.05 : 0.04)
+                if (i < 2) turn += side * arc
+                // a hand comes off the rock and reaches; a foot lifts its knee and steps in
+                const point = limb.from.clone().lerp(limb.to, u).addScaledVector(normal, arc * (i < 2 ? 0.12 : 0.16))
+                if (i >= 2) point.addScaledVector(surfaceUp, arc * 0.06)
                 if (limb.t >= 1) {
                     limb.anchor!.copy(limb.to)
-                    this.onPlant?.(this.limbs.indexOf(limb), limb.to, gear)
+                    this.onPlant?.(i, limb.to, gear)
                 }
                 return point
             }
             return limb.anchor!.clone()
         })
+        this.climbSway += (sway - this.climbSway) * Math.min(1, dt * 12)
+        this.climbLook += (turn - this.climbLook) * Math.min(1, dt * 8)
+        return points
     }
 
     apply(model: THREE.Object3D, group: THREE.Object3D, input: PoseInput) {
@@ -279,7 +319,9 @@ export default class CharacterPose {
             const lean = (Math.PI / 2 - steepness) * input.climb
             const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(yaw)
             root = new THREE.Quaternion().setFromAxisAngle(axis, lean).multiply(root)
-            model.position.addScaledVector(normal, 0.3 * input.climb)
+            // hips close to the rock, shifted over the holding foot
+            const surfaceRight = new THREE.Vector3(- normal.x * normal.y, 1 - normal.y * normal.y, - normal.z * normal.y).normalize().cross(normal).normalize()
+            model.position.addScaledVector(normal, 0.24 * input.climb).addScaledVector(surfaceRight, this.climbSway * input.climb)
         }
         model.quaternion.copy(root).multiply(yaw)
         model.updateMatrixWorld(true)
@@ -336,9 +378,12 @@ export default class CharacterPose {
             this.rotateWorld(bones.spine_02, new THREE.Quaternion().setFromAxisAngle(chestLeft, tool.pitch * tool.weight))
         }
         if (bones.neck_01) {
-            const look = input.slide * 0.5 - input.climb * 0.6 - (tool ? tool.lean * tool.weight * 0.4 : 0)
+            const look = input.slide * 0.5 - input.climb * (0.45 + Math.abs(this.climbLook) * 0.25) - (tool ? tool.lean * tool.weight * 0.4 : 0)
             if (Math.abs(look) > 1e-4)
                 this.rotateWorld(bones.neck_01, new THREE.Quaternion().setFromAxisAngle(left, look))
+            // on the rock the head turns to the hand that's reaching
+            if (input.climb > 0.001 && Math.abs(this.climbLook) > 1e-3)
+                this.rotateWorld(bones.neck_01, new THREE.Quaternion().setFromAxisAngle(bodyUp, - this.climbLook * 0.45 * input.climb))
         }
 
         // ── legs and arms by pose ──
@@ -376,13 +421,18 @@ export default class CharacterPose {
             const positions = this.climbLimbs(base, surfaceUp, right, n, move, input)
             footL.lerp(positions[2], c)
             footR.lerp(positions[3], c)
-            poleL = right.clone().negate().addScaledVector(n, 0.6).addScaledVector(surfaceUp, - 0.2)
-            poleR = right.clone().addScaledVector(n, 0.6).addScaledVector(surfaceUp, - 0.2)
-            arms.push({ side: 'l', target: positions[0], pole: surfaceUp.clone().negate().addScaledVector(right, - 0.6).addScaledVector(n, 0.4), weight: c })
-            arms.push({ side: 'r', target: positions[1], pole: surfaceUp.clone().negate().addScaledVector(right, 0.6).addScaledVector(n, 0.4), weight: c })
+            // knees turned out only as far as the rock makes them, pointing up the face (not out
+            // from it like a spider's); elbows down and a little out
+            poleL = right.clone().multiplyScalar(- 0.55).addScaledVector(surfaceUp, 0.6).addScaledVector(n, - 0.25)
+            poleR = right.clone().multiplyScalar(0.55).addScaledVector(surfaceUp, 0.6).addScaledVector(n, - 0.25)
+            arms.push({ side: 'l', target: positions[0], pole: surfaceUp.clone().negate().addScaledVector(right, - 0.35).addScaledVector(n, 0.25), weight: c })
+            arms.push({ side: 'r', target: positions[1], pole: surfaceUp.clone().negate().addScaledVector(right, 0.35).addScaledVector(n, 0.25), weight: c })
         }
-        else
+        else {
             this.limbs.forEach((limb) => { limb.anchor = null; limb.t = 1 })
+            this.climbBase = null
+            this.climbSway = this.climbLook = 0
+        }
 
         if (input.mantle > 0.001) {
             // hands pressing down on the top, ahead of the body
