@@ -90,7 +90,7 @@ export default class CharacterPose {
     // the chest's place in the bind pose, and how far the clip has moved it now (the run
     // leans it forward): held tools move with the chest, not with the feet
     private chestRest = new THREE.Vector3(0, 1.27, - 0.05)
-    private chestShift = new THREE.Vector3()
+    readonly chestShift = new THREE.Vector3()
 
     constructor(model: THREE.Object3D) {
         for (const name of BONES)

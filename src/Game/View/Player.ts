@@ -19,6 +19,8 @@ const HAIR_COLORS: Record<CharacterName, string> = {
     female_peasant: '#3a2820'        // near black
 }
 
+const ZERO = new THREE.Vector3()
+
 const LOCOMOTION = ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop'] as const
 const ONE_SHOTS = ['Jump_Start', 'Jump_Land', 'Roll']
 
@@ -350,6 +352,11 @@ export default class Player {
     /** The walk cycle (0..1, shared by the gaits) and how much the character is walking (0..1). */
     get gait() {
         return { phase: this.phase, moving: THREE.MathUtils.smoothstep(this.state.player.speed, 0.3, 1.5) * (this.state.player.grounded ? 1 : 0) }
+    }
+
+    /** How far the clip has moved the chest from its rest (held tools move with it). */
+    get chestShift() {
+        return this.pose ? this.pose.chestShift : ZERO
     }
 
     /** A bone of the current model (tools hold on to the hands). */

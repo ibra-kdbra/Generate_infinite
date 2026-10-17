@@ -51,6 +51,26 @@ type Swing = {
     special?: 'plunge' | 'spin' | 'leap' | 'hop'   // the body does more than step (see updateSwing)
 }
 
+/**
+ * A direction turned from `from` to `to` (unit vectors) by u along a great circle: the short
+ * way, except when they're nearly opposite and the short way passes below (a blade raised
+ * from the hip to over the shoulder goes up in front, not down between the legs).
+ */
+function arcBetween(from: THREE.Vector3, to: THREE.Vector3, u: number) {
+    const turn = (a: THREE.Vector3, b: THREE.Vector3, x: number) => a.clone().applyQuaternion(new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(a, b), x))
+    if (from.angleTo(to) < 2.6)
+        return turn(from, to, u)
+    const mid = from.clone().add(to)
+    if (mid.lengthSq() < 1e-6)
+        mid.copy(UP).addScaledVector(from, - UP.dot(from))       // exactly opposite: over the top
+    else if (mid.y < - 0.05)
+        mid.negate()                                             // the long way round, above
+    if (mid.lengthSq() < 1e-6)
+        mid.set(0, 0, 1)
+    mid.normalize()
+    return u < 0.5 ? turn(from, mid, u * 2) : turn(mid, to, u * 2 - 1)
+}
+
 const START: Key = { t: 0, grip: [0, 0, 0], dir: [0, 1, 0] }
 const END = (t: number): Key => ({ t, grip: [0, 0, 0], dir: [0, 1, 0] })
 
@@ -165,24 +185,33 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 END(0.82)], active: [0.17, 0.4], kind: 'blade', special: 'hop'
         }
     },
-    // two-handed: wound up over the right shoulder, swung level into the trunk
+    // two-handed: wound up behind the right shoulder, brought round the right side and into
+    // the trunk at the waist, a little downward, the way a tree is felled
     axe: {
         chop: {
             keys: [START,
-                { t: 0.34, grip: [- 0.3, 1.52, - 0.02], dir: [- 0.32, 0.6, - 0.73], twist: - 0.65, lean: - 0.1 },
-                { t: 0.45, grip: [- 0.04, 1.18, 0.46], dir: [0.5, 0.1, 0.86], twist: 0.15, lean: 0.15, lower: 0.06, ease: 'in' },
-                { t: 0.54, grip: [0.18, 1.0, 0.34], dir: [0.86, - 0.18, 0.47], twist: 0.5, lean: 0.2, lower: 0.06, ease: 'out' },
-                END(0.98)], active: [0.39, 0.52], kind: 'chop', step: [0.36, 1.2], chain: 0.62, next: 'chop'
+                { t: 0.34, grip: [- 0.3, 1.5, - 0.02], dir: [- 0.32, 0.62, - 0.72], twist: - 0.7, lean: - 0.1 },
+                { t: 0.46, grip: [- 0.34, 1.3, 0.2], dir: [- 0.88, 0.3, 0.36], twist: - 0.3, lean: 0.05, ease: 'in' },
+                { t: 0.56, grip: [- 0.06, 1.08, 0.46], dir: [0.42, - 0.12, 0.9], twist: 0.15, lean: 0.18, lower: 0.08, ease: 'in' },
+                { t: 0.66, grip: [0.16, 0.98, 0.36], dir: [0.85, - 0.22, 0.48], twist: 0.45, lean: 0.2, lower: 0.08, ease: 'out' },
+                // lifted up in front before it goes back on the shoulder (not through the chest)
+                { t: 0.88, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68], twist: 0.1 },
+                END(1.16)], active: [0.45, 0.66], kind: 'chop', step: [0.42, 1.2], chain: 0.74, next: 'chop'
         }
     },
-    // raised high, driven down into the ground a long step ahead
+    // raised high, brought over the top and driven into the ground a long step ahead, then
+    // drawn back through the soil
     hoe: {
         dig: {
             keys: [START,
-                { t: 0.3, grip: [- 0.12, 1.6, 0.12], dir: [- 0.05, 0.8, - 0.6], twist: - 0.15, lean: - 0.15, edge: [0, 0.6, 0.8] },
-                { t: 0.46, grip: [- 0.06, 0.82, 0.46], dir: [0, - 0.62, 0.78], lean: 0.4, lower: 0.12, ease: 'in' },
-                { t: 0.58, grip: [- 0.06, 0.74, 0.44], dir: [0, - 0.7, 0.71], lean: 0.45, lower: 0.14, ease: 'out' },
-                END(0.92)], active: [0.38, 0.58], kind: 'dig', chain: 0.62, next: 'dig'
+                { t: 0.34, grip: [- 0.12, 1.6, 0.12], dir: [- 0.05, 0.8, - 0.6], twist: - 0.15, lean: - 0.15, edge: [0, 0.6, 0.8] },
+                { t: 0.48, grip: [- 0.1, 1.45, 0.3], dir: [0, 0.75, 0.66], lean: 0.05, ease: 'in' },
+                // across the body a little, the end of the handle passing by the right hip
+                { t: 0.64, grip: [- 0.18, 0.8, 0.66], dir: [0.16, - 0.73, 0.66], twist: - 0.1, lean: 0.36, lower: 0.18, ease: 'in' },
+                { t: 0.8, grip: [- 0.18, 0.76, 0.56], dir: [0.15, - 0.79, 0.59], twist: - 0.1, lean: 0.4, lower: 0.18, ease: 'out' },
+                // stood up in front before it goes back on the shoulder
+                { t: 1.0, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
+                END(1.28)], active: [0.5, 0.8], kind: 'dig', chain: 0.84, next: 'dig'
         }
     },
     // bent low, swept from right to left through the grass
@@ -198,12 +227,15 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
 const FIRST: Partial<Record<ToolName, string>> = { sword: 'forehand', axe: 'chop', hoe: 'dig', sickle: 'reap' }
 
 // Carried: how each tool is held while walking about (weight: how much the arm gives up its swing)
-const CARRY: Record<ToolName, { key: Key, weight: number }> = {
+const CARRY: Record<ToolName, { key: Key, weight: number, pole?: V3 }> = {
     sword: { key: { t: 0, grip: [- 0.25, 0.94, 0.16], dir: [0.06, - 0.55, 0.83], edge: [0, - 0.83, - 0.55] }, weight: 1 },
     sickle: { key: { t: 0, grip: [- 0.24, 0.92, 0.1], dir: [0.02, 0.3, 0.95], edge: [0, - 0.95, 0.3] }, weight: 1 },
-    axe: { key: { t: 0, grip: [- 0.2, 1.2, 0.2], dir: [- 0.1, 0.55, - 0.83], edge: [0, 0.83, 0.55] }, weight: 1 },
-    hoe: { key: { t: 0, grip: [- 0.2, 1.2, 0.2], dir: [- 0.12, 0.52, - 0.85], edge: [0, - 0.85, - 0.52] }, weight: 1 },
-    torch: { key: { t: 0, grip: [- 0.24, 1.18, 0.3], dir: [0.05, 1, 0.12], edge: [0, - 0.12, 1] }, weight: 1 },
+    // on the shoulder, the head behind and above it (clear of the arm)
+    // (the elbow out to the side, so the upper arm isn't under the handle)
+    axe: { key: { t: 0, grip: [- 0.24, 1.2, 0.26], dir: [- 0.05, 0.55, - 0.83], edge: [0, 0.83, 0.55] }, weight: 1, pole: [- 1, - 0.45, 0.1] },
+    hoe: { key: { t: 0, grip: [- 0.24, 1.2, 0.26], dir: [- 0.08, 0.52, - 0.85], edge: [0, - 0.85, - 0.52] }, weight: 1, pole: [- 1, - 0.45, 0.1] },
+    // a little out to the side and ahead, leaning forward and away from the face
+    torch: { key: { t: 0, grip: [- 0.3, 1.1, 0.3], dir: [- 0.14, 0.95, 0.26], edge: [0, - 0.26, 0.95] }, weight: 1, pole: [- 0.8, - 0.8, - 0.2] },
     bow: { key: { t: 0, grip: [0.24, 0.95, 0.12], dir: [0, 1, 0.08], edge: [0, - 0.08, 1] }, weight: 0.35 }
 }
 // two-handed tools: where the other (left) hand holds the handle, metres along it from the grip
@@ -227,6 +259,20 @@ const HOLSTER: Record<ToolName, { bone: string, position: V3, dir: V3, edge: V3 
     hoe: { bone: 'spine_03', position: [0.12, - 0.48, - 0.2], dir: [- 0.38, 0.92, 0], edge: [0, 0, - 1] },
     sickle: { bone: 'pelvis', position: [0.2, - 0.02, 0.06], dir: [0.05, - 0.95, 0.3], edge: [0, 0.3, 0.95] }
 }
+// the body, to keep a held tool out of it: capsules from bone to bone (radius, m); the head
+// a capsule up from its bone. The arms holding the tool are left out.
+const BODY: { from: string, to: string | null, radius: number }[] = [
+    { from: 'pelvis', to: 'spine_03', radius: 0.15 },
+    { from: 'spine_03', to: 'neck_01', radius: 0.14 },
+    { from: 'Head', to: null, radius: 0.115 },
+    { from: 'thigh_l', to: 'calf_l', radius: 0.085 },
+    { from: 'thigh_r', to: 'calf_r', radius: 0.085 },
+    { from: 'calf_l', to: 'foot_l', radius: 0.065 },
+    { from: 'calf_r', to: 'foot_r', radius: 0.065 },
+    { from: 'upperarm_l', to: 'lowerarm_l', radius: 0.055 },
+    { from: 'lowerarm_l', to: 'hand_l', radius: 0.045 },
+    { from: 'upperarm_r', to: 'lowerarm_r', radius: 0.05 }
+]
 const DRAW_TIME = 0.36           // taking a tool from the body (or putting it back)
 const MAX_ARROWS = 40
 
@@ -324,7 +370,12 @@ export default class Tools {
     private streaks: THREE.LineSegments
     private stringTime = 10          // since the string was released
     private raised = 0               // the torch held up
+    private torchTilt = 0            // radians forward: the torch lags the arm's swing (a spring)
+    private torchTiltSpeed = 0
     private chops = new Map<Plant, number>()
+    private spans = new Map<ToolName, [number, number]>()
+    private bodyOffset = new THREE.Vector3()          // keeping the held tool out of the body (eased)
+    private bodyTurn = new THREE.Quaternion()
     private cuts = new Map<Plant, number>()
     private handWeight = 0
     private last: Pose | null = null
@@ -433,7 +484,7 @@ export default class Tools {
             if (event.button !== 0 || !pressing) return
             pressing = false
             if (document.pointerLockElement || this.equipped === 'bow') this.useEnd()
-            else if (moved < 6 && performance.now() - downAt < 350) {
+            else if (moved < 14 && performance.now() - downAt < 650) {      // a click, even an unhurried one; a real drag turns the camera
                 this.useStart()
                 this.useEnd()
             }
@@ -604,7 +655,14 @@ export default class Tools {
             spline(pick(a)[2], pick(b)[2], pick(c)[2], pick(d)[2], u))
         const s1 = (pick: (key: Key) => number) => spline(pick(a), pick(b), pick(c), pick(d), u)
         const grip = s3((key) => key.grip)
-        const dir = s3((key) => vector(key.dir).normalize().toArray() as V3).normalize()
+        // the direction: a spline through the keys where they're close, but along the arc
+        // between them where they turn far (a spline of nearly opposite directions passes
+        // close to zero, and the tool would flip through the body in a frame)
+        const from = vector(b.dir).normalize(), to = vector(c.dir).normalize()
+        const angle = from.angleTo(to)
+        const along = arcBetween(from, to, u)
+        const curve = s3((key) => vector(key.dir).normalize().toArray() as V3)
+        const dir = curve.lengthSq() > 1e-6 ? curve.normalize().lerp(along, THREE.MathUtils.smoothstep(angle, 0.7, 1.3)).normalize() : along
         const hintOf = (key: Key) => key.edge ?? [0, - 0.6, 0.8] as V3
         const edge = vector(hintOf(b)).lerp(vector(hintOf(c)), u)
         return { grip, dir, edge, twist: s1((key) => key.twist ?? 0), lean: s1((key) => key.lean ?? 0), lower: Math.max(0, s1((key) => key.lower ?? 0)) }
@@ -647,10 +705,107 @@ export default class Tools {
         return this.state.player.groundAt(x, z)
     }
 
+    /** How far a tool reaches along its handle, below and above the grip (from its model). */
+    private span(tool: ToolName): [number, number] {
+        let span = this.spans.get(tool)
+        if (!span) {
+            const model = this.models.get(tool)!
+            const box = new THREE.Box3()
+            model.updateMatrixWorld(true)
+            const toModel = new THREE.Matrix4()
+            model.traverse((child) => {
+                const mesh = child as THREE.Mesh
+                if (!mesh.isMesh) return
+                mesh.geometry.computeBoundingBox()
+                toModel.copy(model.matrixWorld).invert().multiply(mesh.matrixWorld)
+                box.union(mesh.geometry.boundingBox!.clone().applyMatrix4(toModel))
+            })
+            span = [box.min.y, box.max.y]
+            this.spans.set(tool, span)
+        }
+        return span
+    }
+
+    /**
+     * Keep a held tool out of the body: the handle and head are tested against capsules
+     * around the trunk, head, legs and the free arm (as posed last frame); where they would
+     * pass through, the tool is turned about the hand (and near the hand, the hand moved)
+     * just clear of it. The correction eases in and out so a fast stroke doesn't pop.
+     */
+    private keepOffBody(tool: ToolName, pose: Pose) {
+        const player = this.view.player
+        const model = player.model
+        if (!model)
+            return
+        const shift = player.chestShift
+        const second = SECOND_HAND[tool]
+        const capsules: [THREE.Vector3, THREE.Vector3, number][] = []
+        const position = (name: string) => {
+            const bone = player.bone(name)
+            return bone ? this.toLocal(bone.getWorldPosition(new THREE.Vector3())) : null
+        }
+        for (const part of BODY) {
+            if (second !== undefined && part.from === 'lowerarm_l')
+                continue        // the other hand is on the handle too
+            const a = position(part.from)
+            const b = part.to ? position(part.to) : a && a.clone().add(new THREE.Vector3(0, 0.14, 0.02))
+            if (a && b)
+                capsules.push([a, b, part.radius])
+        }
+        const [low, high] = this.span(tool)
+        const grip = pose.grip.clone().add(shift)
+        const dir = pose.dir.clone()
+        const point = new THREE.Vector3(), closest = new THREE.Vector3(), segment = new THREE.Vector3()
+        for (let pass = 0; pass < 3; pass++) {
+            let depth = 0, at = 0
+            const normal = new THREE.Vector3()
+            for (let s = low; s <= high; s += 0.035) {
+                if (Math.abs(s) < 0.1 || (second !== undefined && Math.abs(s - second) < 0.1))
+                    continue        // in the hands
+                point.copy(grip).addScaledVector(dir, s)
+                for (const [a, b, radius] of capsules) {
+                    segment.subVectors(b, a)
+                    const t = THREE.MathUtils.clamp(point.clone().sub(a).dot(segment) / Math.max(1e-6, segment.lengthSq()), 0, 1)
+                    closest.copy(a).addScaledVector(segment, t)
+                    const distance = point.distanceTo(closest)
+                    const d = radius + 0.015 - distance
+                    if (d > depth && distance > 1e-5) {
+                        depth = d
+                        at = s
+                        normal.subVectors(point, closest).divideScalar(distance)
+                    }
+                }
+            }
+            if (depth <= 0)
+                break
+            // close to the hand the hand gives way, further along the tool turns
+            const move = THREE.MathUtils.clamp(1 - (Math.abs(at) - 0.1) / 0.3, 0, 1) * 0.6
+            grip.addScaledVector(normal, depth * move)
+            dir.addScaledVector(normal, depth * (1 - move) / at).normalize()
+        }
+        // eased: quickly in, slower out
+        const dt = Math.min(this.state.time.delta, 0.05)
+        const offset = grip.sub(shift).sub(pose.grip)
+        const turn = new THREE.Quaternion().setFromUnitVectors(pose.dir, dir)
+        const rate = offset.lengthSq() > this.bodyOffset.lengthSq() || turn.w < this.bodyTurn.w ? 40 : 12
+        const k = 1 - Math.exp(- dt * rate)
+        this.bodyOffset.lerp(offset, k)
+        this.bodyTurn.slerp(turn, k)
+        pose.grip.add(this.bodyOffset)
+        pose.dir.applyQuaternion(this.bodyTurn).normalize()
+        pose.edge.applyQuaternion(this.bodyTurn)
+    }
+
     /** The body's targets for holding a tool in this pose (character space). */
-    private holdPose(tool: ToolName, pose: Pose, weight: number) {
+    private holdPose(tool: ToolName, pose: Pose, weight: number, pole?: V3) {
+        if (tool !== 'bow' && !this.transition)
+            this.keepOffBody(tool, pose)
+        else {
+            this.bodyOffset.set(0, 0, 0)
+            this.bodyTurn.identity()
+        }
         const hand = frame(pose.dir, pose.edge).multiply(HAND_IN_TOOL)
-        const main = { position: pose.grip.clone(), quaternion: hand }
+        const main = { position: pose.grip.clone(), quaternion: hand, pole: pole ? vector(pole) : undefined }
         const second = SECOND_HAND[tool]
         const other = second !== undefined ? { position: pose.grip.clone().addScaledVector(pose.dir, second), quaternion: hand.clone() } : null
         this.pose = tool === 'bow'
@@ -1195,14 +1350,29 @@ export default class Tools {
             const gait = this.view.player.gait
             const swing = Math.sin(gait.phase * Math.PI * 2) * gait.moving
             const bob = Math.abs(Math.cos(gait.phase * Math.PI * 2)) * gait.moving
-            carry.grip.add(new THREE.Vector3(0, bob * 0.02 - gait.moving * 0.01, (tool === 'bow' ? - swing : swing) * (SECOND_HAND[tool] !== undefined ? 0.025 : 0.07)))
-            carry.dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), (tool === 'bow' ? swing : - swing) * 0.08).normalize()
+            if (tool === 'torch') {
+                // the torch arm swings with the stride (bent at the elbow, against the right
+                // leg), higher and pumping when running; the torch leans into the pace and
+                // lags the arm, swinging past and back
+                const run = THREE.MathUtils.smoothstep(player.speed, player.walkSpeed + 0.5, player.walkSpeed + 2.5) * gait.moving
+                const reach = 0.06 + run * 0.08
+                carry.grip.add(new THREE.Vector3(run * 0.04, bob * 0.025 + run * 0.06 + Math.max(0, swing) * run * 0.06, swing * reach - run * 0.06))
+                const target = - swing * (0.16 + run * 0.1) + gait.moving * 0.08 + run * 0.18
+                this.torchTiltSpeed += ((target - this.torchTilt) * 90 - this.torchTiltSpeed * 11) * dt
+                this.torchTilt += this.torchTiltSpeed * dt
+                carry.dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.torchTilt).normalize()
+                carry.edge.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.torchTilt)
+            }
+            else {
+                carry.grip.add(new THREE.Vector3(0, bob * 0.02 - gait.moving * 0.01, (tool === 'bow' ? - swing : swing) * (SECOND_HAND[tool] !== undefined ? 0.025 : 0.07)))
+                carry.dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), (tool === 'bow' ? swing : - swing) * 0.08).normalize()
+            }
             if (tool === 'torch') {
                 this.raised += ((this.useHeld ? 1 : 0) - this.raised) * (1 - Math.exp(- dt * 8))
                 carry.grip.lerp(new THREE.Vector3(- 0.2, 1.68, 0.3), this.raised)
                 carry.dir.lerp(new THREE.Vector3(0, 1, 0.1), this.raised).normalize()
             }
-            this.holdPose(tool, carry, CARRY[tool].weight)
+            this.holdPose(tool, carry, CARRY[tool].weight, CARRY[tool].pole)
             this.last = carry
         }
         else
