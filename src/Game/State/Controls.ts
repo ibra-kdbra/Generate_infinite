@@ -128,6 +128,10 @@ export default class Controls {
             const mapItem = this.keys.findPerCode(event.code)
 
             if (mapItem) {
+                // a game key on a focused button outside the menu (a toolbar slot): the game's,
+                // not a click on the button (Space would put the tool away)
+                if ((event.target as HTMLElement)?.matches?.('button, a, [role="button"]'))
+                    event.preventDefault()
                 this.events.emit('keyDown', mapItem.name)
                 this.events.emit(`${mapItem.name}Down`)
                 this.keys.down[mapItem.name] = true
@@ -138,6 +142,8 @@ export default class Controls {
             const mapItem = this.keys.findPerCode(event.code)
 
             if (mapItem) {
+                if (!Controls.isTyping(event.target) && (event.target as HTMLElement)?.matches?.('button, a, [role="button"]'))
+                    event.preventDefault()
                 this.events.emit('keyUp', mapItem.name)
                 this.events.emit(`${mapItem.name}Up`)
                 this.keys.down[mapItem.name] = false
@@ -148,10 +154,8 @@ export default class Controls {
         window.addEventListener('keydown', keyDownHandler)
         window.addEventListener('keyup', keyUpHandler)
 
-        if (this.keyboardInput) {
-            this.keyboardInput.addEventListener('keydown', keyDownHandler)
-            this.keyboardInput.addEventListener('keyup', keyUpHandler)
-        }
+        // (the hidden keyboard input's keys reach the window too: listening to it as well
+        // counted every key twice, and taking a tool out put it straight back)
     }
 
     setPointer() {
