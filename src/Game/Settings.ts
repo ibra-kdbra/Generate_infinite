@@ -172,6 +172,11 @@ export default class Settings {
         this.events.emit(`change:${key}`, value)
     }
 
+    /** Back to the default value. */
+    reset<K extends keyof Values>(key: K) {
+        this.set(key, defaults[key])
+    }
+
     private load(): Partial<Values> {
         try {
             const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')

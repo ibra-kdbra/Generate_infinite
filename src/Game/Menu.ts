@@ -1,11 +1,11 @@
 import { EventEmitter } from 'events'
 import Game from './Game'
-import Settings, { ANTIALIASING, CHARACTERS, GRASS_STYLES, QUALITIES, RESOLUTIONS, Antialiasing, CharacterName, GrassStyle, Quality, Resolution } from './Settings'
+import Settings, { ANTIALIASING, CHARACTERS, DAY_LENGTHS, GRASS_STYLES, QUALITIES, RESOLUTIONS, WEATHERS, Antialiasing, CharacterName, DayLength, GrassStyle, Quality, Resolution, Weather } from './Settings'
 import State from './State/State'
 import View from './View/View'
 import Ui from './Ui'
 
-export type Tab = 'game' | 'sky' | 'world' | 'visuals' | 'player' | 'stats' | 'controls' | 'about'
+export type Tab = 'game' | 'graphics' | 'sound' | 'sky' | 'world' | 'visuals' | 'player' | 'stats' | 'controls' | 'about'
 type Row = { keys: string[], label: string, combo?: boolean }   // combo: pressed together, else any of them
 type Group = { title: string, rows: Row[], note?: string }
 
@@ -85,16 +85,20 @@ const CONTROLS: Group[] = [
     }
 ]
 
-const SECTIONS: { id: Tab, label: string, icon: string }[] = [
-    { id: 'game', label: 'Game', icon: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>' },
+// the pages: what a player sets first, then the developer's tuning pages (dev)
+const SECTIONS: { id: Tab, label: string, icon: string, dev?: boolean }[] = [
+    { id: 'game', label: 'Game', icon: '<circle cx="12" cy="7.5" r="3.2"/><path d="M5.5 20c.6-3.8 3.2-6 6.5-6s5.9 2.2 6.5 6"/>' },
+    { id: 'graphics', label: 'Graphics', icon: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/><path d="m7 13 3.2-3.6 2.4 2.2L17 7.5"/>' },
+    { id: 'sound', label: 'Sound', icon: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.6 7.6 0 0 1 0 11"/>' },
     { id: 'sky', label: 'Sky', icon: '<circle cx="9" cy="8.5" r="3"/><path d="M9 2.6v1.3M3.4 8.5H2.1M5 4.5l-.9-.9M13 4.5l.9-.9"/><path d="M8.5 19.5h8.8a3.3 3.3 0 0 0 0-6.6 4.3 4.3 0 0 0-8.2 1.3 2.7 2.7 0 0 0-.6 5.3z"/>' },
-    { id: 'world', label: 'World', icon: '<path d="M2.5 19.5 9 8.5l4 6.3 2.6-3.6 5.9 8.3z"/><circle cx="17" cy="6" r="1.6"/>' },
-    { id: 'visuals', label: 'Visuals', icon: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M12 7.5h4.5M12 12h6.2M12 16.5h4.5"/>' },
-    { id: 'player', label: 'Player', icon: '<circle cx="12" cy="5.8" r="2.4"/><path d="M12 8.6v6.2m0 0-3.4 5.4M12 14.8l3.4 5.4M6.8 11.6h10.4"/>' },
-    { id: 'stats', label: 'Stats', icon: '<path d="M4 19.5V4.5M4 19.5h16"/><path d="m7.5 15 3.3-4 3 2.4 5-6.4"/>' },
     { id: 'controls', label: 'Keys', icon: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9 10h.01M12 10h.01M15 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/>' },
-    { id: 'about', label: 'About', icon: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.01"/>' }
+    { id: 'about', label: 'About', icon: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.01"/>' },
+    { id: 'world', label: 'World', icon: '<path d="M2.5 19.5 9 8.5l4 6.3 2.6-3.6 5.9 8.3z"/><circle cx="17" cy="6" r="1.6"/>', dev: true },
+    { id: 'visuals', label: 'Visuals', icon: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M12 7.5h4.5M12 12h6.2M12 16.5h4.5"/>', dev: true },
+    { id: 'player', label: 'Player', icon: '<circle cx="12" cy="5.8" r="2.4"/><path d="M12 8.6v6.2m0 0-3.4 5.4M12 14.8l3.4 5.4M6.8 11.6h10.4"/>', dev: true },
+    { id: 'stats', label: 'Stats', icon: '<path d="M4 19.5V4.5M4 19.5h16"/><path d="m7.5 15 3.3-4 3 2.4 5-6.4"/>', dev: true }
 ]
+const TAB_KEY = 'generate-infinite:menu-tab'
 
 const ICON = {
     gear: '<path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14.1 2.6h-4.2l-.4 2.4a7.5 7.5 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.4h4.2l.4-2.4a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4z"/>',
@@ -107,9 +111,10 @@ const keycaps = (keys: string[], combo = false) => `<span class="keycaps">${keys
 /**
  * The game's interface around the view.
  *
- *  - a drawer on the right (gear button or Esc; H opens it on the controls): settings
- *    (character, graphics, grass, day length, with a live frame rate / resolution / graphics
- *    card readout), every control grouped by what it's for, and about the world
+ *  - a drawer on the right (gear button or Esc, reopening on the page last used; H opens it
+ *    on the controls): Game (character, the Ranger's hood, weather and day length), Graphics,
+ *    Sound, Sky, every control grouped by what it's for, about the world; below them the
+ *    developer's tuning pages (World, Visuals, Player, Stats)
  *  - the heads-up display: the clock, what the keys do right now (climbing, swimming), the
  *    stamina ring while climbing, the air bar under water, the free camera's keys, and a
  *    one-time pointer to the controls on the first visit
@@ -146,7 +151,7 @@ export default class Menu {
         corner.className = 'hud-corner'
         corner.innerHTML = `
             <button class="icon-button" data-open="controls" aria-label="Controls" title="Controls (H)">${svg(ICON.keyboard)}</button>
-            <button class="icon-button" data-open="settings" aria-label="Settings" title="Settings (Esc)">${svg(ICON.gear)}</button>`
+            <button class="icon-button" data-open="game" aria-label="Settings" title="Settings (Esc)">${svg(ICON.gear)}</button>`
         ui.appendChild(corner)
         corner.addEventListener('click', (event) => {
             const button = (event.target as HTMLElement).closest('[data-open]') as HTMLElement | null
@@ -162,30 +167,33 @@ export default class Menu {
         this.drawer.hidden = true
         this.drawer.innerHTML = `
             <header class="drawer-header">
-                <div>
-                    <p class="drawer-eyebrow">Infinite world</p>
-                    <h2 id="drawer-title">Generate Infinite</h2>
-                </div>
+                <h2 id="drawer-title">Settings</h2>
                 <button class="icon-button is-quiet" data-close aria-label="Close" title="Close (Esc)">${svg(ICON.close)}</button>
             </header>
             <div class="drawer-main">
                 <nav class="rail" role="tablist" aria-label="Menu" aria-orientation="vertical">
-                    ${SECTIONS.map((section) =>
-                        `<button role="tab" id="tab-${section.id}" data-tab="${section.id}" aria-controls="panel-${section.id}">${svg(section.icon)}<span>${section.label}</span></button>`).join('')}
+                    ${SECTIONS.map((section, i) =>
+                        (section.dev && !SECTIONS[i - 1].dev ? '<span class="rail-label" aria-hidden="true">Developer</span>' : '')
+                        + `<button role="tab" id="tab-${section.id}" data-tab="${section.id}" aria-controls="panel-${section.id}"${section.dev ? ' class="is-dev"' : ''}>${svg(section.icon)}<span>${section.label}</span></button>`).join('')}
                 </nav>
                 <div class="drawer-body">
                     <section class="tab-panel" role="tabpanel" id="panel-game" aria-labelledby="tab-game">
                         <h2 class="panel-title">Game</h2>
                         ${this.field('character', 'Character', CHARACTERS, 'choice-grid')}
-                        ${this.field('quality', 'Graphics', QUALITIES)}
-                        <p class="field-note" data-note hidden>Anti-aliasing changes after a reload.</p>
-                        ${this.field('resolution', 'Resolution', RESOLUTIONS)}
-                        <p class="field-note">Auto lowers the resolution when frames run slow and raises it again when there's room; below full resolution the image is sharpened.</p>
-                        ${this.field('antialiasing', 'Anti-aliasing', ANTIALIASING)}
-                        <p class="field-note">Temporal builds up detail over frames: steadier edges and grass, and a lower resolution looks almost full. SMAA is crisper in fast motion.</p>
-                        ${this.field('grass', 'Grass', GRASS_STYLES, 'choice-wrap')}
                         <div data-extra="game"></div>
+                    </section>
+                    <section class="tab-panel" role="tabpanel" id="panel-graphics" aria-labelledby="tab-graphics" hidden>
+                        <h2 class="panel-title">Graphics</h2>
+                        ${this.field('quality', 'Quality', QUALITIES)}
+                        <p class="field-note" data-note hidden>Anti-aliasing changes after a reload.</p>
+                        ${this.field('resolution', 'Resolution', RESOLUTIONS, 'segmented', 'Auto lowers it when frames run slow and raises it again when there\'s room.')}
+                        ${this.field('antialiasing', 'Anti-aliasing', ANTIALIASING, 'segmented', 'Temporal: steadier edges and grass. SMAA: crisper in fast motion.')}
+                        ${this.field('grass', 'Grass', GRASS_STYLES, 'choice-wrap')}
                         <dl class="readout"><div><dt>Graphics card</dt><dd>${this.gpu}</dd></div></dl>
+                    </section>
+                    <section class="tab-panel" role="tabpanel" id="panel-sound" aria-labelledby="tab-sound" hidden>
+                        <h2 class="panel-title">Sound</h2>
+                        <div data-extra="sound"></div>
                     </section>
                     ${(['sky', 'world', 'visuals', 'player', 'stats'] as Tab[]).map((id) =>
                         `<section class="tab-panel" role="tabpanel" id="panel-${id}" aria-labelledby="tab-${id}" hidden><h2 class="panel-title">${SECTIONS.find((section) => section.id === id)!.label}</h2></section>`).join('')}
@@ -217,7 +225,7 @@ export default class Menu {
                     </section>
                 </div>
             </div>
-            <footer class="drawer-footer"><span><kbd>Esc</kbd> close</span><span><kbd>H</kbd> keys</span><span><kbd>B</kbd> stats</span></footer>`
+            <footer class="drawer-footer"><span><kbd>Esc</kbd> close</span><span><kbd>H</kbd> keys</span><span><kbd>M</kbd> mute</span><span><kbd>B</kbd> stats</span></footer>`
         ui.appendChild(this.drawer)
 
         this.drawer.querySelector('[data-close]')!.addEventListener('click', () => this.hide())
@@ -239,7 +247,7 @@ export default class Menu {
             this.hide()
             document.querySelector<HTMLInputElement>('.keyboard-input')?.focus()
         })
-        this.drawer.querySelector('#panel-game')!.addEventListener('click', (event) => {
+        this.drawer.querySelector('.drawer-body')!.addEventListener('click', (event) => {
             const button = (event.target as HTMLElement).closest('button[data-key]') as HTMLButtonElement | null
             if (!button)
                 return
@@ -287,27 +295,52 @@ export default class Menu {
         catch { /* storage blocked: no tip */ }
 
         const kit = new Ui()
-        // the Ranger's hood
-        const character = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Ranger', 'G puts the hood up or down.')
-        kit.toggle(character, 'Hood up', () => this.settings.get('hood'), (on) => this.settings.set('hood', on))
+        // the Ranger's hood (only the Rangers wear one)
+        const character = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Appearance')
+        kit.toggle(character, 'Hood up', () => this.settings.get('hood'), (on) => this.settings.set('hood', on), 'Ranger only · G')
+        const showHood = () => { character.parentElement!.hidden = !this.settings.get('character').includes('ranger') }
+        showHood()
+        this.settings.events.on('change:character', showHood)
         this.settings.events.on('change:hood', () => kit.refresh())
 
+        // the world's weather and day, the ones players change most (the Sky page has the rest)
+        const world = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'World', 'Time of day, clouds and wind are on the Sky page.')
+        kit.choice(world, WEATHERS, () => this.settings.get('weather'), (value: Weather) => {
+            this.settings.set('weather', value)
+            this.view.sky.cloudCoverOverride = null
+        }, 'Weather', true)
+        kit.choice(world, DAY_LENGTHS, () => this.settings.get('dayLength'), (value: DayLength) => this.settings.set('dayLength', value), 'Length of a day')
+        this.settings.events.on('change:weather', () => kit.refresh())
+        this.settings.events.on('change:dayLength', () => kit.refresh())
+
         // sound
-        const sound = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Sound', 'All of it is made as you play. M mutes and unmutes.')
+        const sound = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="sound"]')!, 'Volume', 'All of it is made as you play. M mutes and unmutes.')
         const percent = (v: number) => v === 0 ? 'Off' : `${Math.round(v * 100)} %`
         kit.toggle(sound, 'Mute', () => this.settings.get('muted'), (on) => this.settings.set('muted', on))
         kit.slider(sound, { label: 'Volume', min: 0, max: 1, step: 0.01, get: () => this.settings.get('volume'), set: (v) => this.settings.set('volume', v), format: percent })
         const channels: [string, 'volumeAmbience' | 'volumeNature' | 'volumeBody' | 'volumeTools' | 'volumeWeather'][] = [
             ['Wind', 'volumeAmbience'], ['Birds, crickets and animals', 'volumeNature'], ['Footsteps and water', 'volumeBody'], ['Tools and hits', 'volumeTools'], ['Rain and thunder', 'volumeWeather']
         ]
+        const mix = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="sound"]')!, 'Mix')
         for (const [label, key] of channels)
-            kit.slider(sound, { label, min: 0, max: 1, step: 0.01, get: () => this.settings.get(key), set: (v) => this.settings.set(key, v), format: percent })
+            kit.slider(mix, { label, min: 0, max: 1, step: 0.01, get: () => this.settings.get(key), set: (v) => this.settings.set(key, v), format: percent })
+        kit.buttons(mix, [['Reset the mix', () => {
+            for (const [, key] of channels) this.settings.reset(key)
+            this.settings.reset('volume')
+            kit.refresh()
+        }]])
         this.settings.events.on('change:muted', () => kit.refresh())
         this.events.on('show', () => kit.refresh())
 
         for (const key of ['character', 'quality', 'grass', 'resolution', 'antialiasing'])
             this.settings.events.on(`change:${key}`, () => this.refresh())
-        this.select('game')
+        let remembered: Tab = 'game'
+        try {
+            const stored = localStorage.getItem(TAB_KEY) as Tab | null
+            if (stored && SECTIONS.some((section) => section.id === stored)) remembered = stored
+        }
+        catch { /* storage blocked */ }
+        this.select(remembered)
         this.refresh()
     }
 
@@ -336,11 +369,11 @@ export default class Menu {
         return name.replace(/^ANGLE \(([^,]+), /, '').replace(/\s*\(.*$|,.*$/, '').trim()
     }
 
-    private field(key: string, title: string, options: Record<string, string>, layout = 'segmented') {
+    private field(key: string, title: string, options: Record<string, string>, layout = 'segmented', note = '') {
         const buttons = Object.entries(options)
             .map(([value, label]) => `<button data-key="${key}" data-value="${value}">${label}</button>`)
             .join('')
-        return `<div class="field"><h3 id="field-${key}">${title}</h3><div class="${layout}" role="group" aria-labelledby="field-${key}">${buttons}</div></div>`
+        return `<div class="field"><h3 id="field-${key}">${title}</h3><div class="${layout}" role="group" aria-labelledby="field-${key}">${buttons}</div>${note ? `<p class="field-note">${note}</p>` : ''}</div>`
     }
 
     private refresh() {
@@ -355,7 +388,12 @@ export default class Menu {
     }
 
     private select(tab: Tab) {
+        // a page that doesn't exist (an old link, a stale name) opens the first one, never an empty drawer
+        if (!SECTIONS.some((section) => section.id === tab))
+            tab = 'game'
         this.tab = tab
+        try { localStorage.setItem(TAB_KEY, tab) }
+        catch { /* storage blocked */ }
         for (const button of this.drawer.querySelectorAll<HTMLElement>('[role="tab"]')) {
             const selected = button.dataset.tab === tab
             button.setAttribute('aria-selected', String(selected))

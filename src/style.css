@@ -268,7 +268,7 @@ body
     bottom: var(--gutter);
     display: flex;
     flex-direction: column;
-    width: min(500px, calc(100vw - var(--gutter) * 2));
+    width: min(540px, calc(100vw - var(--gutter) * 2));
     border: 1px solid var(--line);
     border-radius: 18px;
     background: var(--surface-strong);
@@ -292,10 +292,10 @@ body
 .ui .drawer-header
 {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 18px 18px 12px 20px;
+    padding: 8px 10px 8px 20px;
 }
 
 .ui .drawer-eyebrow
@@ -311,7 +311,9 @@ body
 .ui .drawer-header h2
 {
     margin: 0;
-    font-size: 18px;
+    color: var(--text-soft);
+    font-size: 13px;
+    letter-spacing: 0.04em;
     font-weight: 650;
     letter-spacing: 0.005em;
 }
@@ -343,8 +345,8 @@ body
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 9px 2px 8px;
+    gap: 3px;
+    padding: 7px 2px 6px;
     border: 0;
     border-radius: 11px;
     background: transparent;
@@ -366,6 +368,33 @@ body
     stroke-linejoin: round;
 }
 
+.ui .rail-label
+{
+    margin: 6px 0 2px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    color: var(--text-faint);
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+/* the developer's pages: smaller, quieter */
+.ui .rail [role="tab"].is-dev
+{
+    gap: 2px;
+    padding: 5px 2px 4px;
+    font-size: 10.5px;
+}
+
+.ui .rail [role="tab"].is-dev svg
+{
+    width: 18px;
+    height: 18px;
+}
+
 .ui .rail [role="tab"]:hover
 {
     color: var(--text);
@@ -380,7 +409,7 @@ body
 
 .ui .panel-title
 {
-    margin: 14px 0 0;
+    margin: 12px 0 0;
     font-size: 20px;
     font-weight: 650;
     letter-spacing: 0.005em;
@@ -397,7 +426,7 @@ body
 
 .ui .drawer h3
 {
-    margin: 22px 0 10px;
+    margin: 18px 0 8px;
     color: var(--text-soft);
     font-size: 11px;
     font-weight: 650;
@@ -407,7 +436,7 @@ body
 
 .ui .field-note
 {
-    margin: 10px 0 0;
+    margin: 7px 0 0;
     color: var(--text-faint);
     font-size: 12px;
     line-height: 1.5;
@@ -416,8 +445,9 @@ body
 .ui .drawer-footer
 {
     display: flex;
-    gap: 18px;
-    padding: 12px 20px 16px;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    padding: 10px 20px 12px;
     border-top: 1px solid var(--line);
     color: var(--text-faint);
     font-size: 12px;
@@ -523,7 +553,7 @@ body
 
 .ui .readout
 {
-    margin: 24px 0 0;
+    margin: 20px 0 0;
     padding: 4px 14px;
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -1388,6 +1418,15 @@ body
     {
         flex: none;
         min-width: 58px;
+    }
+
+    .ui .rail-label
+    {
+        align-self: center;
+        margin: 0 2px;
+        padding: 0 0 0 8px;
+        border-top: 0;
+        border-left: 1px solid var(--line);
     }
 }
 
