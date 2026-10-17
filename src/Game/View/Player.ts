@@ -11,6 +11,14 @@ import { SHADOW_UNIFORMS } from './Shadows'
 import sunShadowShader from './Materials/shaders/partials/getSunShadow.glsl'
 import CharacterPose from './CharacterPose'
 
+// the packs' hair is a neutral grey meant to be tinted: each character's colour
+const HAIR_COLORS: Record<CharacterName, string> = {
+    male_ranger: '#5a3d2b',          // dark brown
+    female_ranger: '#7b4529',        // chestnut
+    male_peasant: '#8c6a43',         // sandy
+    female_peasant: '#3a2820'        // near black
+}
+
 const LOCOMOTION = ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop'] as const
 const ONE_SHOTS = ['Jump_Start', 'Jump_Land', 'Roll']
 
@@ -90,6 +98,13 @@ export default class Player {
         this.load()
 
         this.settings.events.on('change:character', (name: CharacterName) => this.loadCharacter(name))
+        // the Ranger's hood: G, or the menu
+        this.settings.events.on('change:hood', () => this.applyHood())
+        const controls = this.state.controls
+        controls.events.on('hoodDown', () => {
+            if (!controls.keys.down.hood && this.settings.get('character').includes('ranger'))      // not on key repeat
+                this.settings.set('hood', !this.settings.get('hood'))
+        })
     }
 
     setLights() {
@@ -133,6 +148,8 @@ export default class Player {
             mesh.frustumCulled = false     // skinned bounds don't follow the animation
             const material = mesh.material as THREE.MeshStandardMaterial
             material.metalness = Math.min(material.metalness, 0.4)     // no reflections to show: bare metal reads black and glints
+            if (/hair/i.test(material.name))
+                material.color.set(HAIR_COLORS[name])
             material.onBeforeCompile = (shader) => this.addUnderwaterTint(shader)
             this.view.shadows.addCaster(mesh, this.depthMaterial)
         })
@@ -164,6 +181,7 @@ export default class Player {
 
         this.calibrate(model)
         this.modelYaw = model.rotation.y
+        this.applyHood()
 
         for (const [clipName, action] of Object.entries(this.actions)) {
             this.weights[clipName] = clipName === 'Idle_Loop' ? 1 : 0
@@ -174,6 +192,17 @@ export default class Player {
         for (const gait of this.gaits)
             this.actions[gait.clip].timeScale = 0       // driven by the shared phase
         this.oneShot = null
+    }
+
+    /** The Ranger's hood up (the hair tucked under it) or down. */
+    private applyHood() {
+        if (!this.model)
+            return
+        const up = this.settings.get('hood')
+        this.model.traverse((child) => {
+            if (/_Hood$/.test(child.name))
+                child.visible = up
+        })
     }
 
     /**

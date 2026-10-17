@@ -79,6 +79,7 @@ const CONTROLS: Group[] = [
             { keys: ['H'], label: 'Controls' },
             { keys: ['F'], label: 'Full screen' },
             { keys: ['M'], label: 'Mute sound' },
+            { keys: ['G'], label: 'Hood up or down (Ranger)' },
             { keys: ['B'], label: 'Developer panel' }
         ]
     }
@@ -285,8 +286,13 @@ export default class Menu {
         }
         catch { /* storage blocked: no tip */ }
 
-        // sound
         const kit = new Ui()
+        // the Ranger's hood
+        const character = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Ranger', 'G puts the hood up or down.')
+        kit.toggle(character, 'Hood up', () => this.settings.get('hood'), (on) => this.settings.set('hood', on))
+        this.settings.events.on('change:hood', () => kit.refresh())
+
+        // sound
         const sound = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Sound', 'All of it is made as you play. M mutes and unmutes.')
         const percent = (v: number) => v === 0 ? 'Off' : `${Math.round(v * 100)} %`
         kit.toggle(sound, 'Mute', () => this.settings.get('muted'), (on) => this.settings.set('muted', on))

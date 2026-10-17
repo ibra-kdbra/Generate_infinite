@@ -33,8 +33,8 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)
 const tmp = mkdtempSync(path.join(tmpdir(), 'characters-'))
 
 const CHARACTERS = [
-    { name: 'male_ranger', gender: 'Male', outfit: 'Ranger', extras: ['Hair_Beard'] },          // hood up
-    { name: 'female_ranger', gender: 'Female', outfit: 'Ranger', extras: [] },                 // hood up
+    { name: 'male_ranger', gender: 'Male', outfit: 'Ranger', extras: ['Hair_Beard', 'Hair_SimpleParted'] },   // hair under the hood (G takes it down)
+    { name: 'female_ranger', gender: 'Female', outfit: 'Ranger', extras: ['Hair_Long'] },
     { name: 'male_peasant', gender: 'Male', outfit: 'Peasant', extras: ['Hair_SimpleParted'] },
     { name: 'female_peasant', gender: 'Female', outfit: 'Peasant', extras: ['Hair_Long'] }
 ]

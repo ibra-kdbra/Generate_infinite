@@ -90,6 +90,7 @@ type Values = {
     hideHidden: boolean
     antialiasing: Antialiasing
     threads: Threads
+    hood: boolean
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -111,7 +112,8 @@ const defaults: Values = {
     textureCompression: true,
     hideHidden: true,
     antialiasing: 'smaa',
-    threads: 'auto'
+    threads: 'auto',
+    hood: true
 }
 
 /**
@@ -185,6 +187,7 @@ export default class Settings {
             if (stored.antialiasing in ANTIALIASING) valid.antialiasing = stored.antialiasing
             if (stored.threads in THREADS) valid.threads = stored.threads
             if (typeof stored.muted === 'boolean') valid.muted = stored.muted
+            if (typeof stored.hood === 'boolean') valid.hood = stored.hood
             for (const key of ['volumeAmbience', 'volumeNature', 'volumeBody', 'volumeTools', 'volumeWeather'] as const)
                 if (typeof stored[key] === 'number' && stored[key] >= 0 && stored[key] <= 1) valid[key] = stored[key]
             if (typeof stored.volume === 'number' && stored.volume >= 0 && stored.volume <= 1) valid.volume = stored.volume
