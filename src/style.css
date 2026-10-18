@@ -1063,6 +1063,14 @@ body
     text-align: center;
 }
 
+.ui .loading-help
+{
+    margin: 10px 0 0;
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
 .ui .loading h1
 {
     margin: 0 0 26px;
@@ -1418,6 +1426,12 @@ body
     {
         flex: none;
         min-width: 58px;
+    }
+
+    /* no keyboard on a phone: no key hints */
+    .ui .drawer-footer
+    {
+        display: none;
     }
 
     .ui .rail-label
