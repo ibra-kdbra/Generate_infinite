@@ -75,6 +75,9 @@ export default class Player {
     diving = false               // under the surface
     breath = 1                   // 1 full .. 0 out of air
     aimYaw: number | null = null // set while aiming or striking with a tool: face this way
+    stance = false               // a tool in hand: facing the way the camera looks, stepping back and to the sides
+    stanceBack = 0.6             // backing away: this much of the walking pace
+    stanceSide = 0.85            // stepping sideways
     forcedRotation: number | null = null   // set by a spinning stroke: face exactly this way
 
     // climbing: the rock face's normal (out of the rock), the limb cycle and the way the
@@ -242,6 +245,13 @@ export default class Player {
         const targetSpeed = this.swimming
             ? (running ? this.swimSprintSpeed : this.swimSpeed) * (0.85 + stroke * stroke * 0.6)
             : (running && !crouching ? this.runSpeed : crouching ? this.crouchSpeed : this.walkSpeed) * (1 - 0.5 * wading)
+        // with a tool in hand the body keeps facing ahead: backing away and side-steps are slower
+        let paceLimit = Infinity
+        if (this.stance && !this.swimming && (wish[0] !== 0 || wish[2] !== 0)) {
+            const along = - (wish[0] * Math.sin(this.rotation) + wish[2] * Math.cos(this.rotation)) / Math.hypot(wish[0], wish[2])
+            if (along < - 0.3) paceLimit = this.walkSpeed * this.stanceBack
+            else if (along < 0.5) paceLimit = this.walkSpeed * this.stanceSide
+        }
 
         // ── horizontal movement ──
         const hasInput = wish[0] !== 0 || wish[2] !== 0
@@ -260,7 +270,8 @@ export default class Player {
             }
         }
         else if (hasInput) {
-            let wx = wish[0] * targetSpeed, wz = wish[2] * targetSpeed
+            const pace = Math.min(targetSpeed, paceLimit)
+            let wx = wish[0] * pace, wz = wish[2] * pace
             if (this.grounded && steep) {
                 // no climbing a too-steep slope: drop the uphill part of the wish
                 const nx = this.groundNormal[0], nz = this.groundNormal[2]

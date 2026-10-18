@@ -72,6 +72,8 @@ export default class Player {
     private swimOffset = 0
     private pose: CharacterPose | null = null
     private slideAmount = 0
+    private strideDirection = 1                 // 1 walking forward, -1 backing away
+    private strideYaw = 0                       // radians: the hips turned toward a side-step
     private diveAmount = 0
     private divePitch = 0
     private climbAmount = 0
@@ -392,7 +394,8 @@ export default class Player {
         const natural = THREE.MathUtils.lerp(a.speed, b.speed, t)
         const duration = THREE.MathUtils.lerp(a.duration, b.duration, t)
         const rate = THREE.MathUtils.clamp(speed / natural, 0.55, 1.6)
-        this.phase = (this.phase + rate * dt / duration) % 1
+        // stepping backward: the cycle runs in reverse (the feet still match the ground)
+        this.phase = (this.phase + this.strideDirection * rate * dt / duration + 1) % 1
 
         const moving = THREE.MathUtils.smoothstep(speed, 0.15, 0.7)
         this.targets.Idle_Loop = 1 - moving
@@ -402,9 +405,38 @@ export default class Player {
             this.actions[gait.clip].time = ((this.phase + gait.offset) % 1) * gait.duration
     }
 
+    /**
+     * Which way the body moves relative to where it faces: forward or backward (the walk
+     * cycle runs in reverse) and how far the hips turn toward a sideways step, the chest
+     * staying ahead (CharacterPose). Only in the stance with a tool, when facing and moving
+     * can differ; otherwise the body turns to the way it goes.
+     */
+    private updateStride(dt: number) {
+        const player = this.state.player
+        const v = player.velocity
+        const speed = Math.hypot(v[0], v[2])
+        let direction = 1, yaw = 0
+        if (player.stance && speed > 0.4) {
+            const forward = - (v[0] * Math.sin(player.rotation) + v[2] * Math.cos(player.rotation)) / speed
+            const right = (v[0] * Math.cos(player.rotation) - v[2] * Math.sin(player.rotation)) / speed
+            const angle = Math.atan2(right, forward)           // 0 ahead, + to the right
+            if (Math.abs(angle) > Math.PI * 0.58) {
+                direction = - 1
+                yaw = Math.atan2(Math.sin(angle - Math.PI), Math.cos(angle - Math.PI))
+            }
+            else
+                yaw = angle
+            yaw = THREE.MathUtils.clamp(yaw, - 1.15, 1.15)
+        }
+        if (direction !== this.strideDirection && speed > 0.4)
+            this.strideDirection = direction
+        this.strideYaw += (yaw - this.strideYaw) * (1 - Math.exp(- dt * 9))
+    }
+
     private updateAnimation(dt: number) {
         const player = this.state.player
         const speed = player.speed
+        this.updateStride(dt)
         const state = player.movementState
         const swimming = state === PlayerState.STATE_SWIM || state === PlayerState.STATE_DIVE
         const climbing = player.climbing || player.mantle !== null
@@ -528,6 +560,7 @@ export default class Player {
             climbGear: player.climbGear,
             mantle,
             dt,
+            stride: - this.strideYaw * this.footIK,
             tool: this.view.tools?.pose
         })
     }

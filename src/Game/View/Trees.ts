@@ -57,6 +57,7 @@ type Instances = { instance: THREE.InstancedBufferAttribute, extra: THREE.Instan
 type Variant = {
     species: Species
     radius: number                   // crown half width, tree height = 1
+    trunk: [number, number][]        // the trunk's rings near the ground: height, radius (tree height = 1)
     bark: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>
     leaves: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>
     instances: Instances
@@ -236,6 +237,17 @@ export default class Trees {
         }
         crownCenter.y /= Math.max(1, leafPositions.count)
         const crownRadius = Math.max(0.15, radius)
+        // the trunk's lowest rings of bark vertices (the trunk comes first): how thick it is
+        // at each height
+        const barkPositions = barkGeometry.getAttribute('position') as THREE.BufferAttribute
+        const rings = new Map<number, number>()
+        for (let i = 0; i < Math.min(barkPositions.count, 800); i++) {
+            const y = barkPositions.getY(i)
+            if (y > 0.3) continue
+            const key = Math.round(y / 0.004)
+            rings.set(key, Math.max(rings.get(key) ?? 0, Math.hypot(barkPositions.getX(i), barkPositions.getZ(i))))
+        }
+        const trunk = [...rings].sort((a, b) => a[0] - b[0]).map(([key, r]) => [key * 0.004, r] as [number, number])
         const conifer = species.kind === PLANT.CONIFER
 
         const decorate = (geometry: THREE.BufferGeometry, leaves: boolean) => {
@@ -331,7 +343,7 @@ export default class Trees {
             mesh.frustumCulled = false
             this.view.shadows.addCaster(mesh, Shadows.shadowVariant(mesh.material))
         }
-        return { species, radius: crownRadius, bark, leaves, instances, barkMid, leavesMid, midInstances }
+        return { species, radius: crownRadius, trunk: trunk.length ? trunk : [[0, 0.02]] as [number, number][], bark, leaves, instances, barkMid, leavesMid, midInstances }
     }
 
     /** A leaf material with its own level-of-detail range (from, to: thinning distances; equal = thinned). */
@@ -546,6 +558,20 @@ export default class Trees {
         this.uniforms.uTreeHit.value.set(x, z, this.state.time.elapsed, strength)
         const length = Math.hypot(directionX, directionZ) || 1
         this.uniforms.uTreeHitDirection.value.set(directionX / length, directionZ / length)
+    }
+
+    /** How thick a tree's trunk is drawn `height` metres above its foot (its radius, metres). */
+    trunkRadius(plant: Plant, height: number) {
+        const options = this.variants.filter((variant) => variant.species.kind === plant.kind)
+        if (!options.length)
+            return plant.collision * 0.5
+        const rings = options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))].trunk
+        const y = height / plant.scale
+        let i = 0
+        while (i < rings.length - 2 && rings[i + 1][0] < y) i++
+        const [y0, r0] = rings[i], [y1, r1] = rings[Math.min(i + 1, rings.length - 1)]
+        const u = y1 > y0 ? THREE.MathUtils.clamp((y - y0) / (y1 - y0), 0, 1) : 0
+        return (r0 + (r1 - r0) * u) * plant.scale
     }
 
     /**

@@ -5,7 +5,7 @@ import State from '../State/State'
 import Settings from '../Settings'
 import { PLANT, Plant } from '../State/Vegetation'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
-import { createTool, createToolMaterials, createArrowGeometry, createClimbingAxe, ToolName, ToolMaterials } from './ToolModels'
+import { createBag, createCover, createTool, createToolMaterials, createArrowGeometry, createClimbingAxe, ToolName, ToolMaterials } from './ToolModels'
 import { GRIP_LEFT, GRIP_RIGHT, HandTarget, ToolPose } from './CharacterPose'
 import Trail from './Trail'
 
@@ -16,12 +16,12 @@ const SETS: Record<'ranger' | 'peasant', ToolName[]> = {
 }
 export const TOOL_LABELS: Record<ToolName, string> = { sword: 'Sword', bow: 'Bow', torch: 'Torch', axe: 'Axe', hoe: 'Hoe', sickle: 'Sickle' }
 const ACTIONS: Record<ToolName, string> = {
-    sword: 'Slash, press again to chain · Q heavy',
+    sword: 'Strike, again for the next move · Q heavy',
     bow: 'Hold to draw · release to shoot',
     torch: 'Hold to raise the torch',
-    axe: 'Chop · enough chops fell a tree',
-    hoe: 'Till the soil',
-    sickle: 'Reap the grass'
+    axe: 'Chop, again for the next move · Q heavy',
+    hoe: 'Dig, again for the next move · Q heavy',
+    sickle: 'Reap, again for the next move · Q heavy'
 }
 export const TOOL_ICONS: Record<ToolName, string> = {
     sword: '<path d="M19.5 4.5 9.5 14.5"/><path d="M19.5 4.5h-3.2M19.5 4.5v3.2"/><path d="m7 12 5 5"/><path d="m8.5 15.5-4 4"/>',
@@ -47,7 +47,6 @@ type Swing = {
     kind: Kind
     step?: [number, number, Step?]   // a step with the strike: when, speed (m/s), which way (forward)
     chain?: number               // from here a new press (or the held button) goes on to the next stroke
-    next?: string                // the combo's next stroke
     special?: 'plunge' | 'spin' | 'leap' | 'hop'   // the body does more than step (see updateSwing)
 }
 
@@ -91,35 +90,35 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 { t: 0.13, grip: [- 0.38, 1.5, 0.02], dir: [- 0.35, 0.55, - 0.76], twist: - 0.55, lean: - 0.05 },
                 { t: 0.21, grip: [- 0.1, 1.22, 0.52], dir: [0.45, 0.25, 0.86], twist: 0.1, lean: 0.12, ease: 'in' },
                 { t: 0.29, grip: [0.16, 0.98, 0.38], dir: [0.82, - 0.5, 0.28], twist: 0.55, lean: 0.2, ease: 'out' },
-                END(0.6)], active: [0.15, 0.28], kind: 'blade', step: [0.12, 3.2], chain: 0.27, next: 'backhand'
+                END(0.6)], active: [0.15, 0.28], kind: 'blade', step: [0.12, 3.2], chain: 0.27
         },
         backhand: {
             keys: [START,
                 { t: 0.09, grip: [0.26, 1.0, 0.2], dir: [0.75, 0.05, - 0.66], twist: 0.7, lean: 0.15 },
                 { t: 0.17, grip: [0.02, 1.2, 0.55], dir: [- 0.45, 0.3, 0.84], lean: 0.08, ease: 'in' },
                 { t: 0.25, grip: [- 0.34, 1.4, 0.28], dir: [- 0.85, 0.45, - 0.27], twist: - 0.55, lean: - 0.05, ease: 'out' },
-                END(0.58)], active: [0.11, 0.24], kind: 'blade', step: [0.07, 2.6], chain: 0.24, next: 'level'
+                END(0.58)], active: [0.11, 0.24], kind: 'blade', step: [0.07, 2.6], chain: 0.24
         },
         level: {
             keys: [START,
                 { t: 0.11, grip: [- 0.42, 1.12, 0.16], dir: [- 0.78, 0.05, - 0.62], twist: - 0.7, lean: 0.05 },
                 { t: 0.2, grip: [- 0.05, 1.1, 0.55], dir: [0.25, 0, 0.97], lean: 0.12, ease: 'in' },
                 { t: 0.29, grip: [0.3, 1.08, 0.28], dir: [0.9, - 0.05, - 0.42], twist: 0.75, lean: 0.1, ease: 'out' },
-                END(0.58)], active: [0.13, 0.29], kind: 'blade', step: [0.1, 2.4], chain: 0.28, next: 'thrust'
+                END(0.58)], active: [0.13, 0.29], kind: 'blade', step: [0.1, 2.4], chain: 0.28
         },
         thrust: {
             keys: [START,
                 { t: 0.14, grip: [- 0.28, 1.22, - 0.1], dir: [0.05, 0.05, 1], edge: [0, - 1, 0], twist: - 0.45, lean: - 0.08 },
                 { t: 0.22, grip: [- 0.08, 1.28, 0.62], dir: [0.02, 0, 1], edge: [0, - 1, 0], twist: 0.25, lean: 0.25, lower: 0.1, ease: 'in' },
                 { t: 0.31, grip: [- 0.08, 1.27, 0.6], dir: [0.02, 0.02, 1], edge: [0, - 1, 0], twist: 0.25, lean: 0.25, lower: 0.1 },
-                END(0.6)], active: [0.17, 0.31], kind: 'blade', step: [0.15, 4.4], chain: 0.3, next: 'overhead'
+                END(0.6)], active: [0.17, 0.31], kind: 'blade', step: [0.15, 4.4], chain: 0.3
         },
         overhead: {
             keys: [START,
                 { t: 0.2, grip: [- 0.12, 1.76, 0.04], dir: [0, 0.45, - 0.89], twist: - 0.15, lean: - 0.15 },
                 { t: 0.29, grip: [- 0.06, 1.32, 0.56], dir: [0.02, 0.35, 0.94], twist: 0.05, lean: 0.2, lower: 0.08, ease: 'in' },
                 { t: 0.37, grip: [- 0.04, 0.92, 0.48], dir: [0.02, - 0.55, 0.83], twist: 0.08, lean: 0.38, lower: 0.15, ease: 'out' },
-                END(0.76)], active: [0.25, 0.37], kind: 'blade', step: [0.22, 3.8]
+                END(0.76)], active: [0.25, 0.37], kind: 'blade', step: [0.22, 3.8], chain: 0.4
         },
         running: {
             keys: [START,
@@ -183,10 +182,35 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 { t: 0.3, grip: [- 0.1, 1.45, 0.45], dir: [0, 0.85, 0.5], lean: - 0.1, ease: 'in' },
                 { t: 0.42, grip: [- 0.1, 1.75, 0.15], dir: [0, 0.95, - 0.3], lean: - 0.2, ease: 'out' },
                 END(0.82)], active: [0.17, 0.4], kind: 'blade', special: 'hop'
+        },
+        // low on the right, rising across to high on the left
+        rising: {
+            keys: [START,
+                { t: 0.12, grip: [- 0.3, 0.78, 0.25], dir: [- 0.55, - 0.45, 0.7], twist: - 0.5, lean: 0.25, lower: 0.12 },
+                { t: 0.21, grip: [0, 1.15, 0.55], dir: [0.35, 0.4, 0.85], twist: 0.1, lean: 0.1, ease: 'in' },
+                { t: 0.3, grip: [0.25, 1.52, 0.3], dir: [0.6, 0.7, - 0.1], twist: 0.6, lean: - 0.1, ease: 'out' },
+                END(0.62)], active: [0.13, 0.29], kind: 'blade', step: [0.1, 2.6], chain: 0.29
+        },
+        // level, from the left across to the right (the level cut's return)
+        reverse: {
+            keys: [START,
+                { t: 0.11, grip: [0.3, 1.12, 0.2], dir: [0.8, 0.05, - 0.55], twist: 0.75, lean: 0.05 },
+                { t: 0.2, grip: [0, 1.1, 0.55], dir: [- 0.2, 0, 0.98], lean: 0.12, ease: 'in' },
+                { t: 0.29, grip: [- 0.4, 1.08, 0.25], dir: [- 0.9, - 0.05, - 0.4], twist: - 0.7, lean: 0.1, ease: 'out' },
+                END(0.58)], active: [0.13, 0.29], kind: 'blade', step: [0.1, 2.4], chain: 0.28
+        },
+        // from over the right shoulder down to the knees
+        lowCut: {
+            keys: [START,
+                { t: 0.12, grip: [- 0.35, 1.35, 0.1], dir: [- 0.5, 0.5, - 0.7], twist: - 0.5 },
+                { t: 0.22, grip: [- 0.05, 0.85, 0.55], dir: [0.3, - 0.45, 0.84], lean: 0.35, lower: 0.2, ease: 'in' },
+                { t: 0.31, grip: [0.22, 0.74, 0.48], dir: [0.72, - 0.52, 0.46], twist: 0.5, lean: 0.4, lower: 0.22, ease: 'out' },
+                END(0.66)], active: [0.15, 0.31], kind: 'blade', step: [0.12, 2.8], chain: 0.31
         }
     },
     // two-handed: wound up behind the right shoulder, brought round the right side and into
-    // the trunk at the waist, a little downward, the way a tree is felled
+    // the trunk at the waist, a little downward, the way a tree is felled; lifted up in front
+    // before it goes back on the shoulder (not through the chest)
     axe: {
         chop: {
             keys: [START,
@@ -194,37 +218,162 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 { t: 0.46, grip: [- 0.34, 1.3, 0.2], dir: [- 0.88, 0.3, 0.36], twist: - 0.3, lean: 0.05, ease: 'in' },
                 { t: 0.56, grip: [- 0.06, 1.08, 0.46], dir: [0.42, - 0.12, 0.9], twist: 0.15, lean: 0.18, lower: 0.08, ease: 'in' },
                 { t: 0.66, grip: [0.16, 0.98, 0.36], dir: [0.85, - 0.22, 0.48], twist: 0.45, lean: 0.2, lower: 0.08, ease: 'out' },
-                // lifted up in front before it goes back on the shoulder (not through the chest)
                 { t: 0.88, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68], twist: 0.1 },
-                END(1.16)], active: [0.45, 0.66], kind: 'chop', step: [0.42, 1.2], chain: 0.74, next: 'chop'
+                END(1.16)], active: [0.45, 0.66], kind: 'chop', step: [0.42, 1.2], chain: 0.74
+        },
+        // high over the right shoulder, down across into the trunk
+        diagonal: {
+            keys: [START,
+                { t: 0.34, grip: [- 0.28, 1.62, 0.05], dir: [- 0.3, 0.75, - 0.58], twist: - 0.6, lean: - 0.12 },
+                { t: 0.47, grip: [- 0.25, 1.45, 0.3], dir: [- 0.55, 0.6, 0.58], twist: - 0.3, ease: 'in' },
+                { t: 0.56, grip: [- 0.02, 1.05, 0.47], dir: [0.45, - 0.35, 0.82], twist: 0.15, lean: 0.2, lower: 0.1, ease: 'in' },
+                { t: 0.66, grip: [0.15, 0.88, 0.34], dir: [0.75, - 0.55, 0.35], twist: 0.45, lean: 0.25, lower: 0.1, ease: 'out' },
+                { t: 0.88, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(1.16)], active: [0.46, 0.66], kind: 'chop', step: [0.42, 1.2], chain: 0.74
+        },
+        // from the left, back across into the trunk (the other side of the notch)
+        backhand: {
+            keys: [START,
+                { t: 0.2, grip: [0.02, 1.45, 0.46], dir: [0.3, 0.85, 0.42] },                 // up in front, not across the chest
+                { t: 0.38, grip: [0.26, 1.32, 0.3], dir: [0.78, 0.42, - 0.46], twist: 0.65 },
+                { t: 0.5, grip: [0.22, 1.2, 0.36], dir: [0.85, 0.2, 0.45], twist: 0.35, ease: 'in' },
+                { t: 0.59, grip: [0.0, 1.1, 0.56], dir: [- 0.4, - 0.1, 0.9], twist: - 0.1, lean: 0.12, lower: 0.06, ease: 'in' },
+                { t: 0.69, grip: [- 0.2, 1.0, 0.46], dir: [- 0.85, - 0.2, 0.45], twist: - 0.45, lean: 0.14, lower: 0.06, ease: 'out' },
+                { t: 0.9, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(1.16)], active: [0.49, 0.69], kind: 'chop', step: [0.44, 1.0], chain: 0.76
+        },
+        // knees bent, low into the foot of the trunk
+        low: {
+            keys: [START,
+                { t: 0.32, grip: [- 0.3, 1.3, 0.05], dir: [- 0.45, 0.55, - 0.7], twist: - 0.6, lean: 0.1, lower: 0.12 },
+                { t: 0.45, grip: [- 0.3, 0.9, 0.3], dir: [- 0.85, 0.05, 0.5], twist: - 0.3, lean: 0.35, lower: 0.3, ease: 'in' },
+                { t: 0.54, grip: [- 0.04, 0.62, 0.48], dir: [0.45, - 0.2, 0.87], twist: 0.1, lean: 0.45, lower: 0.34, ease: 'in' },
+                { t: 0.64, grip: [0.1, 0.64, 0.52], dir: [0.78, - 0.1, 0.62], twist: 0.4, lean: 0.45, lower: 0.34, ease: 'out' },
+                { t: 0.88, grip: [- 0.06, 1.15, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(1.16)], active: [0.44, 0.64], kind: 'chop', step: [0.4, 1.0], chain: 0.72
+        },
+        // straight down from over the head, splitting
+        overhead: {
+            keys: [START,
+                { t: 0.38, grip: [- 0.1, 1.75, 0.02], dir: [- 0.05, 0.55, - 0.83], twist: - 0.1, lean: - 0.2 },
+                { t: 0.5, grip: [- 0.06, 1.55, 0.35], dir: [0, 0.9, 0.42], ease: 'in' },
+                { t: 0.6, grip: [- 0.12, 0.95, 0.64], dir: [0.12, - 0.35, 0.93], lean: 0.32, lower: 0.14, ease: 'in' },
+                { t: 0.7, grip: [- 0.14, 0.82, 0.56], dir: [0.14, - 0.6, 0.79], lean: 0.36, lower: 0.16, ease: 'out' },
+                { t: 0.92, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(1.2)], active: [0.5, 0.7], kind: 'chop', step: [0.46, 1.0], chain: 0.78
+        },
+        // heavy: the biggest wind-up and the whole body into it (counts twice on a trunk)
+        mighty: {
+            keys: [START,
+                { t: 0.5, grip: [- 0.36, 1.62, - 0.08], dir: [- 0.4, 0.6, - 0.7], twist: - 0.95, lean: - 0.15, lower: 0.05 },
+                { t: 0.62, grip: [- 0.4, 1.32, 0.22], dir: [- 0.9, 0.28, 0.33], twist: - 0.45, lean: 0.05, ease: 'in' },
+                { t: 0.71, grip: [- 0.06, 1.05, 0.5], dir: [0.42, - 0.15, 0.9], twist: 0.2, lean: 0.22, lower: 0.12, ease: 'in' },
+                { t: 0.82, grip: [0.2, 0.94, 0.36], dir: [0.88, - 0.25, 0.42], twist: 0.6, lean: 0.25, lower: 0.12, ease: 'out' },
+                { t: 1.06, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(1.36)], active: [0.6, 0.82], kind: 'chop', step: [0.58, 1.8]
         }
     },
-    // raised high, brought over the top and driven into the ground a long step ahead, then
-    // drawn back through the soil
+    // the hoe: raised high and brought over the top into the ground a long step ahead, the
+    // handle passing by the right hip, then stood up in front before it goes back on the
+    // shoulder; drawn back through the soil; quick short chops; a sweep along the ground
     hoe: {
         dig: {
             keys: [START,
                 { t: 0.34, grip: [- 0.12, 1.6, 0.12], dir: [- 0.05, 0.8, - 0.6], twist: - 0.15, lean: - 0.15, edge: [0, 0.6, 0.8] },
                 { t: 0.48, grip: [- 0.1, 1.45, 0.3], dir: [0, 0.75, 0.66], lean: 0.05, ease: 'in' },
-                // across the body a little, the end of the handle passing by the right hip
                 { t: 0.64, grip: [- 0.18, 0.8, 0.66], dir: [0.16, - 0.73, 0.66], twist: - 0.1, lean: 0.36, lower: 0.18, ease: 'in' },
                 { t: 0.8, grip: [- 0.18, 0.76, 0.56], dir: [0.15, - 0.79, 0.59], twist: - 0.1, lean: 0.4, lower: 0.18, ease: 'out' },
-                // stood up in front before it goes back on the shoulder
                 { t: 1.0, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
-                END(1.28)], active: [0.5, 0.8], kind: 'dig', chain: 0.84, next: 'dig'
+                END(1.28)], active: [0.5, 0.8], kind: 'dig', chain: 0.84
+        },
+        pull: {
+            keys: [START,
+                { t: 0.3, grip: [- 0.1, 1.1, 0.55], dir: [0, 0.2, 0.98], lean: 0.2 },
+                { t: 0.44, grip: [- 0.14, 0.82, 0.74], dir: [0.12, - 0.72, 0.68], lean: 0.42, lower: 0.18, ease: 'in' },
+                { t: 0.72, grip: [- 0.18, 0.8, 0.44], dir: [0.15, - 0.84, 0.52], lean: 0.32, lower: 0.18 },
+                { t: 0.92, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
+                END(1.18)], active: [0.4, 0.72], kind: 'dig', chain: 0.76
+        },
+        chop: {
+            keys: [START,
+                { t: 0.22, grip: [- 0.1, 1.3, 0.25], dir: [0, 0.75, 0.66], lean: 0.05 },
+                { t: 0.36, grip: [- 0.16, 0.8, 0.64], dir: [0.14, - 0.74, 0.66], lean: 0.38, lower: 0.18, ease: 'in' },
+                { t: 0.48, grip: [- 0.16, 0.78, 0.56], dir: [0.15, - 0.8, 0.58], lean: 0.4, lower: 0.18, ease: 'out' },
+                { t: 0.66, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
+                END(0.9)], active: [0.28, 0.48], kind: 'dig', chain: 0.52
+        },
+        side: {
+            keys: [START,
+                { t: 0.28, grip: [- 0.4, 0.78, 0.6], dir: [- 0.58, - 0.6, 0.55], lean: 0.12, lower: 0.26, twist: - 0.45 },
+                { t: 0.52, grip: [0.16, 0.76, 0.66], dir: [0.62, - 0.6, 0.5], lean: 0.14, lower: 0.26, twist: 0.4 },
+                { t: 0.74, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
+                END(1.0)], active: [0.3, 0.52], kind: 'dig', chain: 0.56
+        },
+        // heavy: the highest lift, driven deepest
+        break: {
+            keys: [START,
+                { t: 0.42, grip: [- 0.12, 1.75, 0.05], dir: [- 0.05, 0.75, - 0.65], twist: - 0.2, lean: - 0.2 },
+                { t: 0.56, grip: [- 0.1, 1.55, 0.32], dir: [0, 0.8, 0.6], ease: 'in' },
+                { t: 0.7, grip: [- 0.18, 0.74, 0.68], dir: [0.16, - 0.76, 0.63], lean: 0.42, lower: 0.24, ease: 'in' },
+                { t: 0.86, grip: [- 0.18, 0.7, 0.58], dir: [0.15, - 0.8, 0.58], lean: 0.44, lower: 0.24, ease: 'out' },
+                { t: 1.06, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
+                END(1.34)], active: [0.56, 0.86], kind: 'dig'
         }
     },
-    // bent low, swept from right to left through the grass
+    // the sickle: bent low, swept through the grass from the right, back from the left, at
+    // the roots, a hook pulled toward the body
     sickle: {
         reap: {
             keys: [START,
                 { t: 0.15, grip: [- 0.42, 0.62, 0.3], dir: [- 0.55, 0.08, 0.83], twist: - 0.6, lean: 0.5, lower: 0.28 },
                 { t: 0.36, grip: [0.36, 0.58, 0.42], dir: [0.62, 0.02, 0.78], twist: 0.55, lean: 0.5, lower: 0.28 },
-                END(0.64)], active: [0.15, 0.37], kind: 'reap', chain: 0.38, next: 'reap'
+                END(0.64)], active: [0.15, 0.37], kind: 'reap', chain: 0.4
+        },
+        back: {
+            keys: [START,
+                { t: 0.15, grip: [0.3, 0.62, 0.32], dir: [0.55, 0.08, 0.83], twist: 0.6, lean: 0.5, lower: 0.28 },
+                { t: 0.36, grip: [- 0.4, 0.6, 0.4], dir: [- 0.62, 0.02, 0.78], twist: - 0.55, lean: 0.5, lower: 0.28 },
+                END(0.64)], active: [0.15, 0.37], kind: 'reap', chain: 0.4
+        },
+        low: {
+            keys: [START,
+                { t: 0.17, grip: [- 0.45, 0.46, 0.35], dir: [- 0.55, 0, 0.83], twist: - 0.6, lean: 0.6, lower: 0.42 },
+                { t: 0.4, grip: [0.34, 0.46, 0.58], dir: [0.55, - 0.02, 0.83], twist: 0.55, lean: 0.6, lower: 0.42 },
+                END(0.72)], active: [0.17, 0.41], kind: 'reap', chain: 0.44
+        },
+        hook: {
+            keys: [START,
+                { t: 0.17, grip: [- 0.15, 1.25, 0.6], dir: [0.1, 0.6, 0.8], twist: - 0.2, lean: 0.1 },
+                { t: 0.35, grip: [- 0.2, 0.85, 0.35], dir: [0.1, 0.2, 0.98], twist: 0.1, lean: 0.3, lower: 0.15, ease: 'in' },
+                END(0.64)], active: [0.18, 0.35], kind: 'reap', chain: 0.38
+        },
+        // heavy: there and back in one breath
+        whirl: {
+            keys: [START,
+                { t: 0.15, grip: [- 0.42, 0.62, 0.3], dir: [- 0.55, 0.08, 0.83], twist: - 0.6, lean: 0.5, lower: 0.3 },
+                { t: 0.34, grip: [0.36, 0.58, 0.42], dir: [0.62, 0.02, 0.78], twist: 0.55, lean: 0.5, lower: 0.3 },
+                { t: 0.52, grip: [- 0.4, 0.6, 0.4], dir: [- 0.62, 0.02, 0.78], twist: - 0.55, lean: 0.5, lower: 0.3 },
+                END(0.84)], active: [0.15, 0.52], kind: 'reap'
         }
     }
 }
-const FIRST: Partial<Record<ToolName, string>> = { sword: 'forehand', axe: 'chop', hoe: 'dig', sickle: 'reap' }
+// each press goes on to the next of these (back to the first after a pause)
+const SEQUENCE: Partial<Record<ToolName, string[]>> = {
+    sword: ['forehand', 'backhand', 'level', 'thrust', 'rising', 'reverse', 'lowCut', 'overhead'],
+    axe: ['chop', 'diagonal', 'backhand', 'low', 'overhead'],
+    hoe: ['dig', 'pull', 'chop', 'side'],
+    sickle: ['reap', 'back', 'low', 'hook']
+}
+// Q (or the right button) goes through these
+const HEAVY: Partial<Record<ToolName, string[]>> = { sword: ['spin', 'leap', 'uppercut'], axe: ['mighty'], hoe: ['break'], sickle: ['whirl'] }
+const MOVE_LABELS: Record<string, string> = {
+    forehand: 'Forehand', backhand: 'Backhand', level: 'Level cut', thrust: 'Thrust', rising: 'Rising cut', reverse: 'Return cut',
+    lowCut: 'Low cut', overhead: 'Overhead', running: 'Running cut', plunge: 'Plunging cut', sweep: 'Low sweep', retreat: 'Step back and slash',
+    sideLeft: 'Side-step cut', sideRight: 'Side-step cut', spin: 'Spin', leap: 'Leaping slam', uppercut: 'Uppercut',
+    chop: 'Chop', diagonal: 'Diagonal chop', low: 'Low', mighty: 'Mighty chop',
+    dig: 'Dig', pull: 'Draw back', side: 'Sweep', break: 'Break the ground',
+    reap: 'Reap', back: 'Reap back', hook: 'Hook', whirl: 'Whirl'
+}
 
 // Carried: how each tool is held while walking about (weight: how much the arm gives up its swing)
 const CARRY: Record<ToolName, { key: Key, weight: number, pole?: V3 }> = {
@@ -244,21 +393,42 @@ const SECOND_HAND: Partial<Record<ToolName, number>> = { axe: - 0.27, hoe: - 0.3
 const BLADE: Record<ToolName, V3[]> = {
     sword: [[0, 0.35, 0], [0, 0.6, 0], [0, 0.84, 0]],
     axe: [[0, 0.42, 0.12], [0, 0.46, 0.06]],
-    hoe: [[0, 0.95, 0.12], [0, 1.0, 0.08]],
+    hoe: [[0, 0.95, 0.17], [0, 0.97, 0.11]],
     sickle: [[0, 0.2, 0.16], [0, 0.3, 0.1], [0, 0.12, 0.17]],
     torch: [[0, 0.44, 0]],
     bow: [[0, 0.7, 0]]
 }
 const TIP: Record<ToolName, number> = { sword: 0.86, axe: 0.45, hoe: 1.0, sickle: 0.3, torch: 0.45, bow: 0.7 }
-// on the body when not in hand (bone space: x left, y up, z forward)
+// put away: in or on the bag on the back, covered (chest bone space: x left, y up, z
+// forward; the bag's back face is at about z = -0.29). The sword's hilt and the axe's and
+// hoe's handles stand over the right shoulder, the torch and the sickle sit in the sack
+// handle up, the bow lies across the bag.
 const HOLSTER: Record<ToolName, { bone: string, position: V3, dir: V3, edge: V3 }> = {
-    sword: { bone: 'pelvis', position: [0.21, - 0.06, 0.05], dir: [0.1, - 0.86, - 0.5], edge: [0, - 0.5, 0.86] },
-    bow: { bone: 'spine_03', position: [0, 0.02, - 0.17], dir: [0.55, 0.83, 0], edge: [0, 0, - 1] },
-    torch: { bone: 'pelvis', position: [- 0.19, - 0.14, - 0.1], dir: [- 0.15, 0.8, - 0.58], edge: [0, 0.58, 0.8] },
-    axe: { bone: 'spine_03', position: [0.1, - 0.22, - 0.17], dir: [- 0.45, 0.89, 0], edge: [0.89, 0.45, 0] },
-    hoe: { bone: 'spine_03', position: [0.12, - 0.48, - 0.2], dir: [- 0.38, 0.92, 0], edge: [0, 0, - 1] },
-    sickle: { bone: 'pelvis', position: [0.2, - 0.02, 0.06], dir: [0.05, - 0.95, 0.3], edge: [0, 0.3, 0.95] }
+    sword: { bone: 'spine_03', position: [- 0.17, 0.26, - 0.28], dir: [0.42, - 0.9, 0], edge: [0, 0, - 1] },
+    bow: { bone: 'spine_03', position: [0.02, - 0.06, - 0.33], dir: [- 0.5, 0.86, 0], edge: [0, 0, - 1] },
+    torch: { bone: 'spine_03', position: [0.07, 0.25, - 0.22], dir: [0, - 1, 0.04], edge: [0, 0, 1] },
+    axe: { bone: 'spine_03', position: [- 0.16, 0.22, - 0.27], dir: [0.06, - 1, 0], edge: [0, 0, - 1] },
+    hoe: { bone: 'spine_03', position: [- 0.08, - 0.12, - 0.32], dir: [0.3, 0.95, 0], edge: [0, 0, - 1] },
+    sickle: { bone: 'spine_03', position: [0.08, 0.23, - 0.22], dir: [0, - 1, 0.04], edge: [0, 0, 1] }
 }
+// held up in front while the cover comes off or goes on (character space, as the keys)
+const PRESENT: Record<ToolName, Key> = {
+    sword: { t: 0, grip: [- 0.12, 1.2, 0.34], dir: [0.32, 0.72, 0.62], edge: [0, - 0.65, 0.76] },
+    axe: { t: 0, grip: [- 0.1, 1.15, 0.34], dir: [0.4, 0.62, 0.68], edge: [0.2, - 0.75, 0.6] },
+    hoe: { t: 0, grip: [- 0.12, 0.8, 0.3], dir: [0.22, 0.95, 0.22], edge: [0, - 0.22, 0.97] },          // upright like a staff, the blade at head height
+    sickle: { t: 0, grip: [- 0.1, 1.2, 0.36], dir: [0.3, 0.66, 0.69], edge: [0, - 0.72, 0.69] },
+    torch: { t: 0, grip: [- 0.13, 1.15, 0.34], dir: [0.2, 0.95, 0.25], edge: [0, - 0.25, 0.97] },
+    bow: { t: 0, grip: [0.14, 1.02, 0.38], dir: [0, 1, 0.1], edge: [0, - 0.1, 1] }       // held up in the left hand
+}
+// where the other hand puts a cover into the bag (or takes it out): its top corner, on the
+// side of that hand (chest bone space)
+const BAG_MOUTH = { l: new THREE.Vector3(0.13, 0.16, - 0.24), r: new THREE.Vector3(- 0.13, 0.16, - 0.24) }
+// taking a tool out (seconds, cumulative): reach for it, pull it out, the other hand to the
+// cover, slide the cover off, put the cover in the bag, settle into the carry
+const DRAW = { reach: 0.32, pull: 0.8, cover: 1.08, slide: 1.4, stash: 1.78, end: 2.1 }
+// putting it away: up in front while the other hand fetches the cover, the cover to the
+// tool, slide it on, the tool into the bag, let go
+const STOW = { present: 0.34, bring: 0.68, slide: 1.0, put: 1.46, end: 1.74 }
 // the body, to keep a held tool out of it: capsules from bone to bone (radius, m); the head
 // a capsule up from its bone. The arms holding the tool are left out.
 const BODY: { from: string, to: string | null, radius: number }[] = [
@@ -273,7 +443,6 @@ const BODY: { from: string, to: string | null, radius: number }[] = [
     { from: 'lowerarm_l', to: 'hand_l', radius: 0.045 },
     { from: 'upperarm_r', to: 'lowerarm_r', radius: 0.05 }
 ]
-const DRAW_TIME = 0.36           // taking a tool from the body (or putting it back)
 const MAX_ARROWS = 40
 
 // hand space from tool space: the handle runs through the fist toward the thumb (hand +z),
@@ -302,6 +471,17 @@ function frame(dir: THREE.Vector3, edge: THREE.Vector3) {
     z.normalize()
     const x = new THREE.Vector3().crossVectors(y, z)
     return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z))
+}
+
+/** How many chops fell a tree: 5 for the thinnest trunks, 20 for the thickest. */
+export function chopsToFell(plant: Plant) {
+    return Math.round(THREE.MathUtils.clamp(5 + (plant.collision - 0.25) / 0.31 * 15, 5, 20))
+}
+
+/** A quadratic Bézier from a through (toward) b to c. */
+function bezier(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, u: number) {
+    const v = 1 - u
+    return a.clone().multiplyScalar(v * v).addScaledVector(b, 2 * v * u).addScaledVector(c, u * u)
 }
 
 /** Catmull-Rom through four values. */
@@ -362,7 +542,17 @@ export default class Tools {
     private inHand = new Set<ToolName>()
     private swing: SwingState | null = null
     private freeze = 0               // hit-stop
-    private transition: { tool: ToolName, kind: 'draw' | 'stow', time: number, then: ToolName | null, from: Pose | null } | null = null
+    private transition: { tool: ToolName, kind: 'draw' | 'stow', time: number, from: Pose | null, grabbed: boolean, sounded: boolean } | null = null
+    private covers = new Map<ToolName, THREE.Group>()
+    // where each cover is: on its tool (slid `slide` metres along its way off), in the other
+    // hand, or put away in the bag
+    private coverState = new Map<ToolName, { at: 'tool' | 'hand' | 'bag', slide: number }>()
+    private bags: Record<'ranger' | 'peasant', THREE.Group>
+    private sequence = new Map<string, number>()     // the next move of each tool's sequence (and its heavies)
+    private lastStroke = - 10                         // when the last stroke ended (the sequence starts again after a pause)
+    private moveLabel: HTMLElement
+    private moveLabelTime = 0
+    private notches = new Map<Plant, THREE.Group>()   // the cut in a trunk being felled
     private useHeld = false
     private recover = 0              // after a shot
     private aimLift = 0              // the camera rising to aim level as the draw starts
@@ -376,7 +566,6 @@ export default class Tools {
     private spans = new Map<ToolName, [number, number]>()
     private bodyOffset = new THREE.Vector3()          // keeping the held tool out of the body (eased)
     private bodyTurn = new THREE.Quaternion()
-    private hang = new Map<ToolName, THREE.Quaternion>()     // hip tools swung aside by the legs (eased)
     private cuts = new Map<Plant, number>()
     private handWeight = 0
     private last: Pose | null = null
@@ -447,6 +636,18 @@ export default class Tools {
         this.crosshair.hidden = true
         this.crosshair.innerHTML = '<span class="crosshair-dot"></span><span class="crosshair-ring"></span><span class="crosshair-hit"></span>'
         ui.appendChild(this.crosshair)
+        this.moveLabel = document.createElement('p')
+        this.moveLabel.className = 'move-label'
+        this.moveLabel.setAttribute('aria-live', 'polite')
+        ui.appendChild(this.moveLabel)
+        this.bags = { ranger: createBag('ranger', this.materials), peasant: createBag('peasant', this.materials) }
+        this.group.add(this.bags.ranger, this.bags.peasant)
+        for (const tool of [...SETS.ranger, ...SETS.peasant]) {
+            const cover = createCover(tool, this.materials)
+            this.covers.set(tool, cover)
+            this.group.add(cover)
+            this.coverState.set(tool, { at: 'tool', slide: 0 })
+        }
         this.buildModels()
         this.renderHotbar()
         // a pair of climbing axes, in the hands only while climbing a tall face
@@ -495,6 +696,7 @@ export default class Tools {
             this.inHand.clear()
             this.swing = null
             this.transition = null
+            for (const state of this.coverState.values()) { state.at = 'tool'; state.slide = 0 }
             this.aiming = false
             this.buildModels()
             this.renderHotbar()
@@ -519,6 +721,11 @@ export default class Tools {
             if (tool === 'torch')
                 model.add(this.flame)
         }
+        for (const [tool, cover] of this.covers)
+            cover.visible = this.set.includes(tool)
+        const kind = this.set === SETS.peasant ? 'peasant' : 'ranger'
+        this.bags.ranger.visible = kind === 'ranger'
+        this.bags.peasant.visible = kind === 'peasant'
     }
 
     private renderHotbar() {
@@ -534,23 +741,34 @@ export default class Tools {
         this.hud.innerHTML = `<div class="hotbar-slots">${slots}</div>${hint}`
     }
 
-    /** Take out the tool in this slot (the same slot again puts it away). */
+    /**
+     * Take out the tool in this slot (the same slot again puts it away). Putting one away and
+     * taking another out are actions the body goes through step by step (updateTransition);
+     * a choice made meanwhile is taken up when the current one is done.
+     */
     select(slot: number | null) {
         const player = this.state.player
         if (player.swimming || player.climbing || player.mantle)
             return
         const tool = slot === null ? null : this.set[slot]
-        const target = tool === this.equipped ? null : tool
+        this.equipped = tool === this.equipped ? null : tool
         this.swing = null
         this.aiming = false
         this.draw = 0
-        const from = this.last
-        if (this.equipped && this.inHand.has(this.equipped))
-            this.transition = { tool: this.equipped, kind: 'stow', time: 0, then: target, from }
-        else if (target)
-            this.transition = { tool: target, kind: 'draw', time: 0, then: null, from: null }
-        this.equipped = target
+        if (!this.transition)
+            this.advance()
         this.renderHotbar()
+    }
+
+    /** The next action toward the chosen tool: put away the one in hand, or take out the chosen one. */
+    private advance() {
+        const held = [...this.inHand][0] ?? null
+        if (held && held !== this.equipped)
+            this.transition = { tool: held, kind: 'stow', time: 0, from: this.last, grabbed: true, sounded: false }
+        else if (!held && this.equipped)
+            this.transition = { tool: this.equipped, kind: 'draw', time: 0, from: null, grabbed: false, sounded: false }
+        else
+            this.transition = null
     }
 
     private useStart() {
@@ -575,31 +793,47 @@ export default class Tools {
             this.swing.queued = true
     }
 
-    /** Which light stroke to start, from what the body is doing (the sword's set; the others have one). */
+    /**
+     * Which stroke a press starts: with the sword, what the body is doing picks some (in the
+     * air, sprinting, crouched, backing away, side-stepping); otherwise each press goes on to
+     * the next move of the tool's sequence, back to the first after a pause.
+     */
     private lightStroke(tool: ToolName) {
-        if (tool !== 'sword')
-            return FIRST[tool]!
-        const player = this.state.player
-        const keys = this.state.controls.keys.down
-        if (!player.grounded) return 'plunge'
-        if (player.speed > player.walkSpeed + 1) return 'running'
-        if (keys.crouch) return 'sweep'
-        if (keys.backward && !keys.forward) return 'retreat'
-        if (keys.strafeLeft && !keys.strafeRight && !keys.forward) return 'sideLeft'
-        if (keys.strafeRight && !keys.strafeLeft && !keys.forward) return 'sideRight'
-        return 'forehand'
+        if (tool === 'sword') {
+            const player = this.state.player
+            const keys = this.state.controls.keys.down
+            if (!player.grounded) return 'plunge'
+            if (player.speed > player.walkSpeed + 1) return 'running'
+            if (keys.crouch) return 'sweep'
+            if (keys.backward && !keys.forward) return 'retreat'
+            if (keys.strafeLeft && !keys.strafeRight && !keys.forward) return 'sideLeft'
+            if (keys.strafeRight && !keys.strafeLeft && !keys.forward) return 'sideRight'
+        }
+        return this.nextOf(tool, SEQUENCE[tool]!, 'light')
     }
 
-    /** The heavy attack (Q or the right button): the sword's spin, leap or uppercut. */
+    /** The next move of a list (each list keeps its place; a pause starts it again). */
+    private nextOf(tool: ToolName, list: string[], kind: string) {
+        const key = `${tool}:${kind}`
+        const elapsed = this.state.time.elapsed
+        let index = this.sequence.get(key) ?? 0
+        if (elapsed - this.lastStroke > 2.5 && !this.swing)
+            index = 0
+        this.sequence.set(key, index + 1)
+        return list[index % list.length]
+    }
+
+    /** The heavy attack (Q or the right button): each tool's own; the sword goes through three. */
     heavy() {
         const tool = this.equipped
         const player = this.state.player
-        if (tool !== 'sword' || !this.inHand.has(tool) || player.swimming || player.climbing || player.mantle || this.transition)
+        if (!tool || !HEAVY[tool] || !this.inHand.has(tool) || player.swimming || player.climbing || player.mantle || this.transition)
             return
         if (this.swing && !(this.swing.def.chain !== undefined && this.swing.time >= this.swing.def.chain))
             return
         const keys = this.state.controls.keys.down
-        this.startSwing(tool, keys.crouch ? 'uppercut' : keys.forward && player.grounded ? 'leap' : 'spin')
+        const name = tool === 'sword' && keys.crouch ? 'uppercut' : tool === 'sword' && keys.forward && player.grounded ? 'leap' : this.nextOf(tool, HEAVY[tool]!, 'heavy')
+        this.startSwing(tool, name)
     }
 
     private useEnd() {
@@ -623,6 +857,11 @@ export default class Tools {
         keys[keys.length - 1] = { ...keyOf(this.carryPose(tool), keys[keys.length - 1].t), ease: 'inout' }
         this.swing = { tool, def, keys, time: 0, hits: new Set(), queued: false, recoil: false, stepped: false, whooshed: false, name, spinFrom: this.state.player.rotation, landed: false }
         this.trail.clear()
+        // the move's name by the toolbar, and where it is in the tool's sequence
+        const list = SEQUENCE[tool] ?? []
+        const heavy = HEAVY[tool]?.includes(name)
+        const place = list.indexOf(name)
+        this.showLabel(heavy ? `Heavy · ${MOVE_LABELS[name] ?? name}` : place >= 0 ? `${MOVE_LABELS[name] ?? name}<span>${place + 1} / ${list.length}</span>` : MOVE_LABELS[name] ?? name)
         const player = this.state.player
         if (def.special === 'plunge')
             player.velocity[1] = Math.min(player.velocity[1], - 7)       // dropping onto the cut
@@ -639,7 +878,7 @@ export default class Tools {
         const tool = this.swing.tool
         const at = { ...this.last, grip: this.last.grip.clone().addScaledVector(this.last.dir, - 0.05) }
         const keys: Key[] = [keyOf(at, 0), keyOf(at, hold), { ...keyOf(this.carryPose(tool), hold + recover), ease: 'inout' }]
-        this.swing = { ...this.swing, keys, time: 0, recoil: true, queued: false, def: { ...this.swing.def, active: [- 1, - 1], step: undefined, chain: undefined, next: undefined } }
+        this.swing = { ...this.swing, keys, time: 0, recoil: true, queued: false, def: { ...this.swing.def, active: [- 1, - 1], step: undefined, chain: undefined } }
     }
 
     /** The stroke's pose at time t (before the edge is worked out). */
@@ -797,60 +1036,6 @@ export default class Tools {
         pose.edge.applyQuaternion(this.bodyTurn)
     }
 
-    /**
-     * A tool hanging at the hip swings on its belt: turned about where it hangs just clear
-     * of the legs (the thigh pushes it aside as it comes forward), easing back as the leg
-     * goes by, instead of the stride passing through it.
-     */
-    private hangClear(tool: ToolName, model: THREE.Object3D) {
-        const player = this.view.player
-        const legs: [THREE.Vector3, THREE.Vector3, number][] = []
-        for (const [from, to, radius] of [['thigh_l', 'calf_l', 0.095], ['calf_l', 'foot_l', 0.075], ['thigh_r', 'calf_r', 0.095], ['calf_r', 'foot_r', 0.075]] as const) {
-            const a = player.bone(from), b = player.bone(to)
-            if (a && b)
-                legs.push([a.getWorldPosition(new THREE.Vector3()), b.getWorldPosition(new THREE.Vector3()), radius])
-        }
-        const [low, high] = this.span(tool)
-        const origin = model.position
-        const rest = new THREE.Vector3(0, 1, 0).applyQuaternion(model.quaternion)
-        const dir = rest.clone()
-        const point = new THREE.Vector3(), closest = new THREE.Vector3(), segment = new THREE.Vector3()
-        for (let pass = 0; pass < 3; pass++) {
-            let depth = 0, at = 0
-            const normal = new THREE.Vector3()
-            for (let s = low; s <= high; s += 0.04) {
-                if (Math.abs(s) < 0.08)
-                    continue        // where it hangs
-                point.copy(origin).addScaledVector(dir, s)
-                for (const [a, b, radius] of legs) {
-                    segment.subVectors(b, a)
-                    const t = THREE.MathUtils.clamp(point.clone().sub(a).dot(segment) / Math.max(1e-6, segment.lengthSq()), 0, 1)
-                    closest.copy(a).addScaledVector(segment, t)
-                    const distance = point.distanceTo(closest)
-                    const d = radius + 0.012 - distance
-                    if (d > depth && distance > 1e-5) {
-                        depth = d
-                        at = s
-                        normal.subVectors(point, closest).divideScalar(distance)
-                    }
-                }
-            }
-            if (depth <= 0)
-                break
-            dir.addScaledVector(normal, depth / at).normalize()
-        }
-        // pushed aside at once, swinging back more slowly
-        const dt = Math.min(this.state.time.delta, 0.05)
-        const turn = new THREE.Quaternion().setFromUnitVectors(rest, dir)
-        let eased = this.hang.get(tool)
-        if (!eased) {
-            eased = new THREE.Quaternion()
-            this.hang.set(tool, eased)
-        }
-        eased.slerp(turn, 1 - Math.exp(- dt * (turn.w < eased.w ? 45 : 7)))
-        model.quaternion.premultiply(eased)
-    }
-
     /** The body's targets for holding a tool in this pose (character space). */
     private holdPose(tool: ToolName, pose: Pose, weight: number, pole?: V3) {
         if (tool !== 'bow' && !this.transition)
@@ -890,7 +1075,7 @@ export default class Tools {
         const inverse = model.getWorldQuaternion(new THREE.Quaternion()).invert()
         const quaternion = inverse.multiply(holster.quaternion)
         return {
-            grip: this.toLocal(holster.position),
+            grip: this.toLocal(holster.position).sub(this.view.player.chestShift),
             dir: new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion),
             edge: new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion),
             twist: 0, lean: 0, lower: 0
@@ -948,18 +1133,28 @@ export default class Tools {
                 particles.emit('chip', point, tool === 'axe' ? 12 : 6, normal, tool === 'axe' ? 3.2 : 2.2, 0.65)
                 this.view.trees.strike(plant.x, plant.z, plant.x - p[0], plant.z - p[2], tool === 'axe' ? 1 : 0.45)
                 if (tool === 'axe') {
+                    // the cut deepens with every chop; a thin trunk falls after 5 to 10, a
+                    // thick one takes up to 20 (the heavy chop counts twice)
                     this.freeze = 0.1
                     this.jolt(0.34)
-                    const chops = (this.chops.get(plant) ?? 0) + 1
+                    const needed = chopsToFell(plant)
+                    const chops = (this.chops.get(plant) ?? 0) + (swing.name === 'mighty' ? 2 : 1)
                     this.chops.set(plant, chops)
-                    if (chops >= Math.round(3 + plant.scale / 5)) {
+                    this.notch(plant, point, Math.min(1, chops / needed))
+                    this.showLabel(`${MOVE_LABELS[swing.name] ?? 'Chop'}<span>${Math.min(chops, needed)} / ${needed}</span>`)
+                    particles.emit('chip', point, 8, normal, 2.6, 0.7)
+                    if (chops >= needed) {
                         this.chops.delete(plant)
+                        this.removeNotch(plant)
                         this.view.trees.fell(plant, plant.x - p[0], plant.z - p[2])
                         particles.emit('leaf', new THREE.Vector3(plant.x, plant.y + plant.scale * 0.7, plant.z), 18, UP, 2.5, 0.9)
                     }
                     this.rebound(0.16, 0.42)
                 }
                 else {
+                    // the hoe and the blades nick the bark
+                    if (tool === 'hoe' && !this.notches.has(plant))
+                        this.notch(plant, point, 0.06)
                     this.freeze = 0.07
                     this.jolt(0.2)
                     this.rebound(0.05, 0.38)
@@ -988,6 +1183,9 @@ export default class Tools {
                     this.rebound(0.14, 0.42)
                 }
                 else {
+                    // an axe (or a blade) driven into the ground leaves a cut in it
+                    if (tool === 'axe')
+                        this.view.groundWetness.till(at.x, at.z, 0.22, 0.12, this.facing + Math.PI / 2)
                     this.jolt(0.18)
                     this.freeze = 0.06
                     this.rebound(0.05, 0.4)
@@ -1234,41 +1432,169 @@ export default class Tools {
     // ── per frame ──
 
     /** Taking a tool from the body or putting it back: the hand reaches the holster, the tool changes place there. */
+    /**
+     * Taking a tool out or putting it away, step by step and in plain view.
+     *
+     * Out: the hand reaches back over the shoulder for it, pulls it from the bag and brings it
+     * up in front; the other hand takes hold of the cover, slides it off along the blade (or
+     * the bow), puts it in the bag over the other shoulder and comes back; the tool settles
+     * into the carry. Away: the tool comes up in front while the other hand fetches the cover
+     * from the bag, slides it on; the tool goes back into the bag and the hand lets go.
+     */
     private updateTransition(dt: number) {
         const transition = this.transition!
         transition.time += dt
-        const t = transition.time, half = DRAW_TIME * 0.45
+        const t = transition.time
         const tool = transition.tool
         const holster = this.holsterPose(tool)
+        if (!holster)
+            return
+        const present = this.keyPose(PRESENT[tool])
         const carry = this.carryPose(tool)
-        const carryWeight = CARRY[tool].weight
-        if (holster) {
-            let pose: Pose, weight: number
-            if (t < half) {
-                // toward the holster, from the carry (or the hand's rest by the hip)
-                const u = smooth(t / half)
-                const from = transition.kind === 'stow' ? (transition.from ?? carry) : { ...holster, grip: new THREE.Vector3(tool === 'bow' ? 0.22 : - 0.22, 0.95, 0.06) }
-                pose = lerpPose(from, holster, u)
-                weight = transition.kind === 'draw' ? Math.min(1, t / (half * 0.6)) : carryWeight + (1 - carryWeight) * u
+        const cover = this.coverState.get(tool)!
+        const distance = this.covers.get(tool)!.userData.distance as number
+        const phase = (from: number, to: number) => smooth(THREE.MathUtils.clamp((t - from) / (to - from), 0, 1))
+        let pose: Pose, weight = 1
+        let off: { position: THREE.Vector3, quaternion: THREE.Quaternion | null, weight: number } | null = null
+
+        if (transition.kind === 'draw') {
+            const D = DRAW
+            if (t < D.reach) {
+                // the hand reaches for it where it sits in the bag
+                pose = holster
+                weight = phase(0, D.reach)
             }
             else {
-                // away from the holster: to the carry (drawn) or back to the hand's rest (stowed)
-                const u = smooth(Math.min(1, (t - half) / (DRAW_TIME - half)))
-                pose = transition.kind === 'draw' ? lerpPose(holster, carry, u) : holster
-                weight = transition.kind === 'draw' ? 1 + (carryWeight - 1) * u : 1 - u
+                if (!transition.grabbed) {
+                    transition.grabbed = true
+                    this.inHand.add(tool)
+                    this.view.audio.play('equip')
+                }
+                pose = t < D.pull ? this.pullPath(tool, holster, present, phase(D.reach, D.pull)) : t < D.stash ? present : lerpPose(present, carry, phase(D.stash, D.end))
+                if (t >= D.pull && t < D.end) {
+                    const toCover = phase(D.pull, D.cover)
+                    if (t < D.slide) {
+                        // the other hand to the cover, then sliding it off
+                        cover.at = 'tool'
+                        cover.slide = phase(D.cover, D.slide) * distance
+                        off = { ...this.coverHold(tool, present), weight: toCover }
+                        if (cover.slide > 0.02 && !transition.sounded) {
+                            transition.sounded = true          // the cover coming off
+                            this.view.audio.play('equip', undefined, 0.6)
+                        }
+                    }
+                    else {
+                        // into the bag with it, over the other shoulder, and the hand back
+                        cover.at = t < D.stash ? 'hand' : 'bag'
+                        const into = phase(D.slide, D.stash)
+                        const mouth = this.bagMouth(tool)
+                        const from = this.coverHold(tool, present)
+                        const over = this.overShoulder(tool, true)
+                        const position = t < D.stash ? bezier(from.position, over, mouth, into) : mouth
+                        off = { position, quaternion: null, weight: 1 - phase(D.stash, D.end) }
+                    }
+                }
             }
-            this.holdPose(tool, pose, weight)
-            this.last = pose
+            if (t >= D.end) {
+                cover.at = 'bag'
+                this.transition = null
+            }
         }
-        // the tool changes hands at the holster
-        if (t >= half && (transition.kind === 'draw') !== this.inHand.has(tool))
-            this.view.audio.play('equip')
-        if (t >= half) {
-            if (transition.kind === 'draw') this.inHand.add(tool)
-            else this.inHand.delete(tool)
+        else {
+            const S = STOW
+            const from = transition.from ?? carry
+            if (t < S.present) {
+                // up in front; the other hand reaches into the bag for the cover
+                pose = lerpPose(from, present, phase(0, S.present))
+                cover.at = 'bag'
+                off = { position: this.bagMouth(tool), quaternion: null, weight: phase(0, S.present) }
+            }
+            else if (t < S.slide) {
+                // the cover out of the bag, over the shoulder, onto the blade and slid home
+                pose = present
+                cover.at = t < S.bring ? 'hand' : 'tool'
+                const target = this.coverHold(tool, present, distance)
+                if (t < S.bring) {
+                    off = { position: bezier(this.bagMouth(tool), this.overShoulder(tool, true), target.position, phase(S.present, S.bring)), quaternion: null, weight: 1 }
+                }
+                else {
+                    cover.slide = (1 - phase(S.bring, S.slide)) * distance
+                    off = { ...this.coverHold(tool, present, cover.slide), weight: 1 }
+                }
+            }
+            else {
+                // the tool back into the bag; the other hand lets go of it
+                cover.at = 'tool'
+                cover.slide = 0
+                pose = t < S.put ? this.pullPath(tool, holster, present, 1 - phase(S.slide, S.put)) : holster
+                off = { ...this.coverHold(tool, present), weight: 1 - phase(S.slide, S.slide + 0.25) }
+                weight = 1 - phase(S.put, S.end)
+                if (t >= S.put && this.inHand.has(tool)) {
+                    this.inHand.delete(tool)
+                    this.view.audio.play('equip')
+                }
+            }
+            if (t >= S.end) {
+                this.inHand.delete(tool)
+                this.advance()
+                if (!this.transition)
+                    this.last = null
+            }
         }
-        if (t >= DRAW_TIME)
-            this.transition = transition.then ? { tool: transition.then, kind: 'draw', time: 0, then: null, from: null } : null
+
+        // the main hand (the left for the bow) on the tool, the other on the cover
+        const hand = frame(pose.dir, pose.edge).multiply(HAND_IN_TOOL)
+        const main: HandTarget = { position: pose.grip.clone(), quaternion: hand }
+        const other: HandTarget | null = off && off.weight > 0.001 ? { position: off.position, quaternion: off.quaternion, weight: off.weight } : null
+        this.pose = tool === 'bow'
+            ? { left: main, right: other, weight, twist: 0, lean: 0, lower: 0, pitch: 0 }
+            : { right: main, left: other, weight, twist: 0, lean: 0, lower: 0, pitch: 0 }
+        this.last = pose
+    }
+
+    /** A key's pose (character space). */
+    private keyPose(key: Key): Pose {
+        return { grip: vector(key.grip), dir: vector(key.dir).normalize(), edge: vector(key.edge ?? [0, 0, 1]), twist: 0, lean: 0, lower: 0 }
+    }
+
+    /**
+     * From the bag to in front (u 0 .. 1): up over the shoulder for what sits high on the bag,
+     * round by the hip for what's held low, the tool turning the long way over the top.
+     */
+    private pullPath(tool: ToolName, holster: Pose, present: Pose, u: number): Pose {
+        const high = holster.grip.y > 1.25
+        const side = tool === 'bow' ? 1 : - 1
+        const via = high ? new THREE.Vector3(side * 0.22, Math.max(holster.grip.y, 1.5) + 0.22, 0.02) : new THREE.Vector3(side * 0.42, 1.0, 0.05)
+        return {
+            grip: bezier(holster.grip, via, present.grip, u),
+            dir: arcBetween(holster.dir, present.dir, u),
+            edge: holster.edge.clone().lerp(present.edge, u).normalize(),
+            twist: 0, lean: 0, lower: 0
+        }
+    }
+
+    /** Where the other hand holds the cover, for the tool in this pose with the cover slid `slide` along its way off. */
+    private coverHold(tool: ToolName, pose: Pose, slide = this.coverState.get(tool)!.slide) {
+        const cover = this.covers.get(tool)!
+        const orientation = frame(pose.dir, pose.edge)
+        const local = (cover.userData.grip as THREE.Vector3).clone().addScaledVector(cover.userData.off as THREE.Vector3, slide)
+        return { position: pose.grip.clone().add(local.applyQuaternion(orientation)), quaternion: orientation.clone().multiply(HAND_IN_TOOL) }
+    }
+
+    /** The bag's top corner on the side of the hand that's free (character space). */
+    private bagMouth(tool: ToolName) {
+        const bone = this.view.player.bone('spine_03')
+        const side = tool === 'bow' ? 'r' : 'l'
+        if (!bone)
+            return new THREE.Vector3(side === 'l' ? 0.15 : - 0.15, 1.45, - 0.2)
+        bone.updateWorldMatrix(true, false)
+        return this.toLocal(BAG_MOUTH[side].clone().applyMatrix4(bone.matrixWorld)).sub(this.view.player.chestShift)
+    }
+
+    /** A point up over the shoulder (of the free hand, or the main one), for reaching into the bag. */
+    private overShoulder(tool: ToolName, free: boolean) {
+        const left = (tool === 'bow') !== free
+        return new THREE.Vector3(left ? 0.24 : - 0.24, 1.72, 0.02)
     }
 
     private updateSwing(dt: number) {
@@ -1322,12 +1648,14 @@ export default class Tools {
         }
         // the next stroke when asked for in time (or the button held), else back to the carry
         const wantsMore = swing.queued || this.useHeld
-        if (def.next !== undefined && def.chain !== undefined && swing.time >= def.chain && wantsMore)
-            this.startSwing(swing.tool, def.next)
+        const heavy = HEAVY[swing.tool]?.includes(swing.name)
+        if (!heavy && def.chain !== undefined && swing.time >= def.chain && wantsMore)
+            this.startSwing(swing.tool, this.lightStroke(swing.tool))
         else if (swing.time >= end) {
             this.swing = null
+            this.lastStroke = this.state.time.elapsed
             player.forcedRotation = null
-            if (this.useHeld && (swing.recoil || def.next === undefined))
+            if (this.useHeld)
                 this.startSwing(swing.tool, this.lightStroke(swing.tool))
         }
     }
@@ -1377,12 +1705,18 @@ export default class Tools {
     update() {
         const dt = Math.min(this.state.time.delta, 0.05)
         const player = this.state.player
+        if (this.moveLabelTime > 0) {
+            this.moveLabelTime -= dt
+            if (this.moveLabelTime <= 0) this.moveLabel.classList.remove('is-shown')
+        }
         const previous = this.held
         this.pose = { right: null, left: null, weight: 0, twist: 0, lean: 0, lower: 0, pitch: 0 }
 
         // put the tool away to swim or climb
-        if (this.equipped && (player.swimming || player.climbing || player.mantle)) {
-            this.inHand.delete(this.equipped)
+        if ((this.equipped || this.transition) && (player.swimming || player.climbing || player.mantle)) {
+            if (this.equipped) this.inHand.delete(this.equipped)
+            this.inHand.clear()
+            for (const state of this.coverState.values()) { state.at = 'tool'; state.slide = 0 }
             this.equipped = null
             this.swing = null
             this.aiming = false
@@ -1445,7 +1779,9 @@ export default class Tools {
         this.pose.weight = this.handWeight
 
         // face where the camera looks while aiming or striking
-        player.aimYaw = this.aiming || this.swing !== null ? player.camera.thirdPerson.theta : null
+        // with a tool in hand: face where the camera looks (step back with S, sideways with A/D)
+        player.stance = !!tool && (this.inHand.has(tool) || this.transition !== null) && !player.swimming && !player.climbing && !player.mantle
+        player.aimYaw = this.aiming || this.swing !== null || player.stance ? player.camera.thirdPerson.theta : null
         player.camera.thirdPerson.aim = this.aiming ? 1 : 0
         this.crosshair.hidden = !(this.aiming || (tool === 'bow' && (this.recover > 0 || this.hitMarker > 0)))
         this.crosshair.style.setProperty('--draw', this.draw.toFixed(3))
@@ -1476,15 +1812,126 @@ export default class Tools {
                     continue
                 model.position.copy(holster.position)
                 model.quaternion.copy(holster.quaternion)
-                if (HOLSTER[tool].bone === 'pelvis')
-                    this.hangClear(tool, model)
             }
         }
+        this.placeBag()
+        this.placeCovers()
 
         this.placeString()
         this.testHits()
         this.placeTorch()
         this.placeClimbingAxes()
+    }
+
+    /**
+     * The cut in a trunk being felled: fresh pale wood on the side the chops come from, wider
+     * and deeper as it goes (progress 0 .. 1 of the chops it takes).
+     */
+    private notch(plant: Plant, point: THREE.Vector3, progress: number) {
+        let notch = this.notches.get(plant)
+        if (!notch) {
+            // a felling notch: a level lower cut and a sloping upper one meeting inside the
+            // trunk; unit size, its mouth on the bark (z = 0), reaching in to z = -1
+            const geometry = new THREE.BufferGeometry()
+            const v = [
+                // upper cut: from the top of the mouth down to the back of the notch
+                - 0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, - 0.5, - 1, - 0.5, 0.5, 0, 0.5, - 0.5, - 1, - 0.5, - 0.5, - 1,
+                // lower cut: level, from the mouth to the back
+                - 0.5, - 0.5, 0, - 0.5, - 0.5, - 1, 0.5, - 0.5, - 1, - 0.5, - 0.5, 0, 0.5, - 0.5, - 1, 0.5, - 0.5, 0,
+                // the ends
+                - 0.5, 0.5, 0, - 0.5, - 0.5, - 1, - 0.5, - 0.5, 0, 0.5, 0.5, 0, 0.5, - 0.5, 0, 0.5, - 0.5, - 1
+            ]
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
+            const shade = [0.95, 0.95, 0.72, 0.95, 0.72, 0.72, 1, 0.8, 0.8, 1, 0.8, 1, 0.82, 0.7, 0.82, 0.82, 0.82, 0.7]
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(shade.flatMap((k) => [k, k, k]), 3))
+            geometry.computeVertexNormals()
+            // fresh wood, pale even in the shade; drawn pulled toward the eye by the cut's depth
+            // (along the line of sight, so it stays where it is on screen): the bark it's cut
+            // into doesn't hide it, anything nearer (the woodcutter) still does
+            const material = new THREE.MeshStandardMaterial({ color: '#dcbc8c', roughness: 0.9, vertexColors: true, side: THREE.DoubleSide, emissive: '#3c2c18' })
+            const pull = { value: 0 }
+            material.onBeforeCompile = (shader) => {
+                shader.uniforms.uPull = pull
+                shader.vertexShader = 'uniform float uPull;\n' + shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+                    mvPosition.xyz *= max(0.05, 1.0 - uPull / max(length(mvPosition.xyz), 0.001));
+                    gl_Position = projectionMatrix * mvPosition;`)
+            }
+            const mesh = new THREE.Mesh(geometry, material)
+            mesh.userData.pull = pull
+            notch = new THREE.Group()
+            notch.add(mesh)
+            const toward = new THREE.Vector3(point.x - plant.x, 0, point.z - plant.z)
+            if (toward.lengthSq() < 1e-6) toward.set(1, 0, 0)
+            notch.userData = { toward: toward.normalize(), y: THREE.MathUtils.clamp(point.y, plant.y + 0.35, plant.y + 1.3) }
+            this.notches.set(plant, notch)
+            this.view.scene.add(notch)
+            if (this.notches.size > 16)
+                this.removeNotch(this.notches.keys().next().value!)
+        }
+        const radius = this.view.trees.trunkRadius(plant, notch.userData.y - plant.y)
+        const toward = notch.userData.toward as THREE.Vector3
+        // the mouth just proud of the bark, wider and deeper with each chop
+        notch.position.set(plant.x, notch.userData.y, plant.z).addScaledVector(toward, radius * 0.97)
+        notch.lookAt(notch.position.clone().add(toward))
+        notch.scale.set(radius * (0.9 + progress * 0.6), 0.07 + progress * 0.2, 0.02 + progress * radius * 1.05)
+        ;(notch.children[0].userData.pull as { value: number }).value = notch.scale.z + radius * 0.35
+    }
+
+    private removeNotch(plant: Plant) {
+        const notch = this.notches.get(plant)
+        if (!notch)
+            return
+        this.view.scene.remove(notch)
+        notch.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) { mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose() } })
+        this.notches.delete(plant)
+    }
+
+    /** A short line by the toolbar: the move just started (or a tree's chops). */
+    private showLabel(html: string) {
+        this.moveLabel.innerHTML = html
+        this.moveLabel.classList.add('is-shown')
+        this.moveLabelTime = 1.3
+    }
+
+    /** The bag on the back, from the chest bone. */
+    private placeBag() {
+        const bag = this.set === SETS.peasant ? this.bags.peasant : this.bags.ranger
+        const bone = this.view.player.bone('spine_03')
+        if (!bone)
+            return
+        bone.updateWorldMatrix(true, false)
+        bone.matrixWorld.decompose(bag.position, bag.quaternion, bag.scale)
+        bag.scale.setScalar(1)
+    }
+
+    /**
+     * The covers: on their tools (slid part way off while being taken off or put on), in the
+     * other hand on the way to or from the bag, or out of sight in the bag.
+     */
+    private placeCovers() {
+        for (const tool of this.set) {
+            const cover = this.covers.get(tool)!
+            const state = this.coverState.get(tool)!
+            cover.visible = state.at !== 'bag'
+            if (state.at === 'tool') {
+                const model = this.models.get(tool)!
+                model.updateMatrixWorld(true)
+                cover.position.copy(cover.userData.off as THREE.Vector3).multiplyScalar(state.slide).applyMatrix4(model.matrixWorld)
+                cover.quaternion.copy(model.quaternion)
+            }
+            else if (state.at === 'hand') {
+                // held as a handle is: its grip in the palm, along the hand
+                const bone = this.view.player.bone(tool === 'bow' ? 'hand_r' : 'hand_l')
+                if (!bone)
+                    continue
+                bone.updateWorldMatrix(true, false)
+                const hand = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(bone.matrixWorld))
+                cover.quaternion.copy(hand).multiply(HAND_IN_TOOL)
+                cover.position.setFromMatrixPosition(bone.matrixWorld)
+                    .add((tool === 'bow' ? GRIP_RIGHT : GRIP_LEFT).clone().applyQuaternion(hand))
+                    .sub((cover.userData.grip as THREE.Vector3).clone().applyQuaternion(cover.quaternion))
+            }
+        }
     }
 
     /** The climbing axes in the hands while climbing a tall face. */
@@ -1556,7 +2003,7 @@ export default class Tools {
     /** The torch: a flickering flame and rising embers, lighting the character and the land around. */
     private placeTorch() {
         const torch = this.view.sky.uniforms.uTorch.value as THREE.Vector4
-        const lit = this.equipped === 'torch' && this.inHand.has('torch') && this.set.includes('torch')
+        const lit = this.inHand.has('torch') && this.set.includes('torch') && this.coverState.get('torch')!.at !== 'tool'
         for (const sprite of this.flame.children)
             sprite.visible = lit
         if (!lit) {

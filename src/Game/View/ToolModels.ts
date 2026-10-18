@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 export type ToolName = 'sword' | 'bow' | 'torch' | 'axe' | 'hoe' | 'sickle'
 
@@ -33,6 +34,9 @@ export function createToolMaterials() {
         darkWood: new THREE.MeshStandardMaterial({ color: '#4e3522', roughness: 0.8 }),
         leather: new THREE.MeshStandardMaterial({ color: '#3a2618', roughness: 0.9 }),
         cloth: new THREE.MeshStandardMaterial({ color: '#2b2118', roughness: 1 }),
+        canvas: new THREE.MeshStandardMaterial({ color: '#6f5a3e', roughness: 1 }),
+        burlap: new THREE.MeshStandardMaterial({ color: '#8f7752', roughness: 1 }),
+        tan: new THREE.MeshStandardMaterial({ color: '#7b5332', roughness: 0.85 }),
         steel: new THREE.MeshStandardMaterial({ color: '#c3c7cc', roughness: 0.3, metalness: 0.85, envMap: environment, envMapIntensity: 0.9 }),
         darkSteel: new THREE.MeshStandardMaterial({ color: '#6d7176', roughness: 0.45, metalness: 0.8, envMap: environment, envMapIntensity: 0.7 }),
         string: new THREE.LineBasicMaterial({ color: '#d9d2c0' }),
@@ -55,6 +59,8 @@ function blade(points: [number, number][], thickness: number, material: THREE.Ma
     geometry.translate(0, 0, - thickness / 2)
     return new THREE.Mesh(geometry, material)
 }
+
+const HOE_BLADE_TILT = 0.38      // radians the hoe's blade leans back toward the grip
 
 export function createTool(name: ToolName, m: ToolMaterials): THREE.Group {
     const group = new THREE.Group()
@@ -97,19 +103,23 @@ export function createTool(name: ToolName, m: ToolMaterials): THREE.Group {
         case 'axe': {
             group.add(cylinder(0.017, 0.022, 0.74, - 0.28, m.wood))
             const head = blade([[- 0.03, 0.04], [0.045, 0.05], [0.15, 0.12], [0.165, 0.035], [0.15, - 0.07], [0.045, - 0.03], [- 0.03, - 0.025]], 0.022, m.steel)
-            head.rotation.y = Math.PI / 2          // the edge toward +Z
+            head.rotation.y = - Math.PI / 2        // the edge toward +Z (it chopped with the poll before)
             head.position.y = 0.42
             group.add(head)
             break
         }
         case 'hoe': {
+            // a draw hoe: the blade set across the end of the handle, reaching forward (+Z)
+            // and angled back toward the grip, its edge at the far end
             group.add(cylinder(0.017, 0.019, 1.36, - 0.36, m.wood))
-            const plate = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.13, 0.008), m.darkSteel)
-            plate.position.set(0, 0.95, 0.075)
-            plate.rotation.x = - 0.25
+            group.add(cylinder(0.024, 0.024, 0.07, 0.97, m.darkSteel))
+            const neck = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.016, 0.05), m.darkSteel)
+            neck.position.set(0, 1.0, 0.03)
+            group.add(neck)
+            const plate = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.007, 0.14), m.darkSteel)
+            plate.rotation.x = HOE_BLADE_TILT
+            plate.position.set(0, 1.0 - Math.sin(HOE_BLADE_TILT) * 0.07, 0.05 + Math.cos(HOE_BLADE_TILT) * 0.07)
             group.add(plate)
-            const socket = cylinder(0.024, 0.024, 0.07, 0.97, m.darkSteel)
-            group.add(socket)
             break
         }
         case 'sickle': {
@@ -132,6 +142,124 @@ export function createTool(name: ToolName, m: ToolMaterials): THREE.Group {
         if (mesh.isMesh)
             mesh.castShadow = false
     })
+    return group
+}
+
+/**
+ * A tool's cover (its "hood"): the sword's scabbard, a cloth sleeve over the bow, leather
+ * guards over the axe's head, the hoe's blade, the sickle's crescent and the torch's head.
+ * In the tool's space as worn; `userData.off` is the way it slides off (tool space) and how
+ * far, `userData.grip` where the other hand takes hold of it.
+ */
+export function createCover(name: ToolName, m: ToolMaterials): THREE.Group {
+    const group = new THREE.Group()
+    group.name = `${name}-cover`
+    let off = new THREE.Vector3(0, 1, 0), distance = 0.3, grip = new THREE.Vector3()
+    switch (name) {
+        case 'sword': {
+            const sheath = new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.8, 0.03, 2, 0.012), m.leather)
+            sheath.position.y = 0.5
+            group.add(sheath)
+            for (const [y, h] of [[0.13, 0.04], [0.88, 0.05]] as const) {
+                const band = new THREE.Mesh(new THREE.BoxGeometry(0.076, h, 0.035), m.darkSteel)
+                band.position.y = y
+                group.add(band)
+            }
+            off = new THREE.Vector3(0, 1, 0); distance = 0.86; grip.set(0, 0.5, 0)
+            break
+        }
+        case 'bow': {
+            const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.026, 1.52, 10), m.canvas)
+            sleeve.scale.z = 2.2
+            sleeve.position.z = - 0.055
+            group.add(sleeve)
+            const tie = new THREE.Mesh(new THREE.TorusGeometry(0.033, 0.006, 6, 14), m.leather)
+            tie.rotation.x = Math.PI / 2
+            tie.scale.y = 2.2
+            tie.position.set(0, 0.7, - 0.055)
+            group.add(tie)
+            off = new THREE.Vector3(0, 1, 0); distance = 1.55; grip.set(0, 0.62, - 0.05)
+            break
+        }
+        case 'axe': {
+            const guard = new THREE.Mesh(new RoundedBoxGeometry(0.04, 0.2, 0.2, 2, 0.012), m.tan)
+            guard.position.set(0, 0.43, 0.07)
+            group.add(guard)
+            const strap = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.025, 0.06), m.leather)
+            strap.position.set(0, 0.43, - 0.02)
+            group.add(strap)
+            off = new THREE.Vector3(0, 0, 1); distance = 0.26; grip.set(0, 0.43, 0.12)
+            break
+        }
+        case 'hoe': {
+            const guard = new THREE.Mesh(new RoundedBoxGeometry(0.18, 0.024, 0.16, 2, 0.008), m.tan)
+            guard.rotation.x = HOE_BLADE_TILT
+            guard.position.set(0, 1.0 - Math.sin(HOE_BLADE_TILT) * 0.075, 0.05 + Math.cos(HOE_BLADE_TILT) * 0.075)
+            group.add(guard)
+            off = new THREE.Vector3(0, - Math.sin(HOE_BLADE_TILT), Math.cos(HOE_BLADE_TILT)); distance = 0.22; grip.copy(guard.position)
+            break
+        }
+        case 'sickle': {
+            const shape = new THREE.Shape()
+            shape.absarc(0, 0.17, 0.182, - Math.PI * 0.5, Math.PI * 0.77, false)
+            shape.absarc(- 0.02, 0.16, 0.122, Math.PI * 0.74, - Math.PI * 0.46, true)
+            const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.022, bevelEnabled: false, curveSegments: 20 })
+            geometry.translate(0, 0, - 0.011)
+            const sheath = new THREE.Mesh(geometry, m.tan)
+            sheath.rotation.y = Math.PI / 2
+            sheath.position.y = 0.075
+            group.add(sheath)
+            off = new THREE.Vector3(0, 0.3, 1).normalize(); distance = 0.3; grip.set(0, 0.32, - 0.08)
+            break
+        }
+        case 'torch': {
+            const cap = cylinder(0.044, 0.04, 0.14, 0.37, m.leather)
+            group.add(cap)
+            const tie = cylinder(0.046, 0.046, 0.02, 0.38, m.tan)
+            group.add(tie)
+            off = new THREE.Vector3(0, 1, 0); distance = 0.22; grip.set(0, 0.46, 0)
+            break
+        }
+    }
+    group.userData = { off, distance, grip }
+    group.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) mesh.castShadow = false })
+    return group
+}
+
+/**
+ * The bag worn on the back, the tools' home: a rucksack with a flap, buckled straps and a
+ * rolled blanket (leather for the Ranger, a burlap sack for the Villager). In the chest
+ * bone's space (x left, y up, z forward); the back of the body is at about z = -0.12.
+ */
+export function createBag(kind: 'ranger' | 'peasant', m: ToolMaterials): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'bag'
+    const body = kind === 'ranger' ? m.leather : m.burlap
+    const sack = new THREE.Mesh(new RoundedBoxGeometry(0.32, 0.4, 0.15, 3, 0.06), body)
+    sack.position.set(0, - 0.06, - 0.215)
+    group.add(sack)
+    const flap = new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.16, 0.035, 2, 0.015), kind === 'ranger' ? m.tan : m.canvas)
+    flap.position.set(0, 0.1, - 0.29)
+    flap.rotation.x = 0.12
+    group.add(flap)
+    for (const x of [- 0.08, 0.08]) {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.3, 0.012), m.leather)
+        strap.position.set(x, - 0.02, - 0.295)
+        group.add(strap)
+        const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.026, 0.016), m.darkSteel)
+        buckle.position.set(x, - 0.05, - 0.302)
+        group.add(buckle)
+        // shoulder straps, up over the shoulders
+        const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.18), m.leather)
+        shoulder.position.set(x * 1.35, 0.17, - 0.12)
+        shoulder.rotation.x = 0.35
+        group.add(shoulder)
+    }
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.34, 12), kind === 'ranger' ? m.cloth : m.canvas)
+    roll.rotation.z = Math.PI / 2
+    roll.position.set(0, - 0.3, - 0.215)
+    group.add(roll)
+    group.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) mesh.castShadow = false })
     return group
 }
 

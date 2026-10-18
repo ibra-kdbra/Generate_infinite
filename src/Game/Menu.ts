@@ -41,26 +41,35 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Tools',
-        note: 'Ranger: sword, bow (hold to draw, release to shoot), torch. Villager: axe (enough chops fell a tree), hoe, sickle.',
+        note: 'Tools live in the bag on your back, each under its cover: taking one out, you pull it from the bag and slide the cover off; putting it away, the cover goes back on first. With a tool in hand you keep facing ahead: S backs away, A and D step aside. Each press goes on to the next move (the name shows above the toolbar). A tree takes 5 to 20 chops, more the thicker it is.',
         rows: [
             { keys: ['1', '2', '3'], label: 'Take out a tool (again: put it away)' },
-            { keys: ['E'], label: 'Use the tool' },
-            { keys: ['Click'], label: 'Use the tool (the bow: hold)' }
+            { keys: ['E'], label: 'Use the tool: the next move each press' },
+            { keys: ['Click'], label: 'Use the tool (the bow: hold)' },
+            { keys: ['Q'], label: 'Heavy move (right button too)' }
         ]
     },
     {
         title: 'Sword',
-        note: 'Five strokes chain when you press again in time (or hold): forehand, backhand, level cut, thrust, overhead.',
+        note: 'Eight strokes in turn, one each press: forehand, backhand, level cut, thrust, rising cut, return cut, low cut, overhead. What you do while pressing picks others.',
         rows: [
-            { keys: ['E'], label: 'Slash, press again to chain' },
+            { keys: ['E'], label: 'The next stroke' },
             { keys: ['Shift', 'E'], label: 'Running cut, while sprinting', combo: true },
             { keys: ['Space', 'E'], label: 'Plunging cut, in the air', combo: true },
             { keys: ['C', 'E'], label: 'Low sweep', combo: true },
             { keys: ['S', 'E'], label: 'Step back and slash', combo: true },
             { keys: ['A', 'E'], label: 'Side-step cut (D: the other way)', combo: true },
-            { keys: ['Q'], label: 'Heavy: spin (right button too)' },
+            { keys: ['Q'], label: 'Heavy: spin, leap, uppercut in turn' },
             { keys: ['W', 'Q'], label: 'Heavy: leaping overhead', combo: true },
             { keys: ['C', 'Q'], label: 'Heavy: rising uppercut', combo: true }
+        ]
+    },
+    {
+        title: 'Axe, hoe and sickle',
+        note: 'Axe: chop, diagonal chop, backhand, low, overhead; the heavy chop counts twice on a trunk. Hoe: dig, draw back, chop, sweep; heavy: break the ground. Sickle: reap, reap back, low, hook; heavy: whirl.',
+        rows: [
+            { keys: ['E'], label: 'The next move' },
+            { keys: ['Q'], label: 'Heavy move' }
         ]
     },
     {

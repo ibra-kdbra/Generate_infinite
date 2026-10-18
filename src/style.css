@@ -789,6 +789,46 @@ body
     color: var(--text);
 }
 
+/* the move just made, above the toolbar */
+.ui .move-label
+{
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--gutter) + 132px);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 0;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--surface);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, 6px);
+    transition: opacity 0.18s var(--ease), transform 0.18s var(--ease);
+    pointer-events: none;
+}
+
+.ui .move-label.is-shown
+{
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.ui .move-label span
+{
+    color: var(--text-faint);
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
 /* ── Context hint, toast, air, stamina, crosshair ── */
 
 .ui .context-hint,

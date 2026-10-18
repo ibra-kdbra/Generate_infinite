@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 /** A hand's target in the character's own space (x left, y up, z forward, from the feet). */
-export type HandTarget = { position: THREE.Vector3 | null, quaternion: THREE.Quaternion | null, pole?: THREE.Vector3 }   // pole: where the elbow points (character space)
+export type HandTarget = { position: THREE.Vector3 | null, quaternion: THREE.Quaternion | null, pole?: THREE.Vector3, weight?: number }   // pole: where the elbow points (character space); weight: this hand's share of the tool pose's
 
 /** What a tool asks of the body this frame (Tools.ts). */
 export type ToolPose = {
@@ -31,6 +31,7 @@ export type PoseInput = {
     climbGear: boolean       // climbing a tall face with a pair of axes
     mantle: number           // 0 .. 1 pulling up over an edge (0 when not)
     dt: number               // seconds since the last pose
+    stride?: number          // radians: the hips turned toward a side-step, the chest kept ahead
     tool?: ToolPose
 }
 
@@ -337,6 +338,14 @@ export default class CharacterPose {
         const origin = new THREE.Vector3().setFromMatrixPosition(model.matrixWorld)
         const feetY = group.getWorldPosition(new THREE.Vector3()).y
 
+        // a side-step (with a tool in hand): the hips and legs turn toward the step, the spine
+        // turns back so the chest still faces ahead
+        if (input.stride && Math.abs(input.stride) > 1e-3) {
+            this.rotateWorld(bones.pelvis, new THREE.Quaternion().setFromAxisAngle(bodyUp, input.stride))
+            if (bones.spine_01) this.rotateWorld(bones.spine_01, new THREE.Quaternion().setFromAxisAngle(bodyUp, - input.stride * 0.6))
+            if (bones.spine_02) this.rotateWorld(bones.spine_02, new THREE.Quaternion().setFromAxisAngle(bodyUp, - input.stride * 0.4))
+        }
+
         // where the clip put the feet, before the body lowers
         const footL = bones.foot_l!.getWorldPosition(new THREE.Vector3())
         const footR = bones.foot_r!.getWorldPosition(new THREE.Vector3())
@@ -524,6 +533,7 @@ export default class CharacterPose {
             const upper = this.bones[`upperarm_${side}`], lower = this.bones[`lowerarm_${side}`], hand = this.bones[`hand_${side}`]
             if (!target || !upper || !lower || !hand)
                 continue
+            const weight = tool.weight * (target.weight ?? 1)
             const orientation = target.quaternion ? modelQuaternion.clone().multiply(target.quaternion) : null
             if (target.position) {
                 const grip = target.position.clone().add(this.chestShift).applyMatrix4(model.matrixWorld)
@@ -531,10 +541,10 @@ export default class CharacterPose {
                 const handQuaternion = orientation ?? hand.getWorldQuaternion(new THREE.Quaternion())
                 const wrist = grip.sub((side === 'r' ? GRIP_RIGHT : GRIP_LEFT).clone().applyQuaternion(handQuaternion))
                 const pole = (target.pole ? target.pole.clone() : new THREE.Vector3(side === 'r' ? - 0.6 : 0.6, - 1, - 0.3)).applyQuaternion(modelQuaternion)
-                this.solveBlended(upper, lower, hand, wrist, tool.weight, false, pole)
+                this.solveBlended(upper, lower, hand, wrist, weight, false, pole)
             }
             if (orientation)
-                this.orientWorld(hand, orientation, tool.weight)
+                this.orientWorld(hand, orientation, weight)
         }
     }
 }
