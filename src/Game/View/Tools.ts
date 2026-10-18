@@ -376,6 +376,7 @@ export default class Tools {
     private spans = new Map<ToolName, [number, number]>()
     private bodyOffset = new THREE.Vector3()          // keeping the held tool out of the body (eased)
     private bodyTurn = new THREE.Quaternion()
+    private hang = new Map<ToolName, THREE.Quaternion>()     // hip tools swung aside by the legs (eased)
     private cuts = new Map<Plant, number>()
     private handWeight = 0
     private last: Pose | null = null
@@ -794,6 +795,60 @@ export default class Tools {
         pose.grip.add(this.bodyOffset)
         pose.dir.applyQuaternion(this.bodyTurn).normalize()
         pose.edge.applyQuaternion(this.bodyTurn)
+    }
+
+    /**
+     * A tool hanging at the hip swings on its belt: turned about where it hangs just clear
+     * of the legs (the thigh pushes it aside as it comes forward), easing back as the leg
+     * goes by, instead of the stride passing through it.
+     */
+    private hangClear(tool: ToolName, model: THREE.Object3D) {
+        const player = this.view.player
+        const legs: [THREE.Vector3, THREE.Vector3, number][] = []
+        for (const [from, to, radius] of [['thigh_l', 'calf_l', 0.095], ['calf_l', 'foot_l', 0.075], ['thigh_r', 'calf_r', 0.095], ['calf_r', 'foot_r', 0.075]] as const) {
+            const a = player.bone(from), b = player.bone(to)
+            if (a && b)
+                legs.push([a.getWorldPosition(new THREE.Vector3()), b.getWorldPosition(new THREE.Vector3()), radius])
+        }
+        const [low, high] = this.span(tool)
+        const origin = model.position
+        const rest = new THREE.Vector3(0, 1, 0).applyQuaternion(model.quaternion)
+        const dir = rest.clone()
+        const point = new THREE.Vector3(), closest = new THREE.Vector3(), segment = new THREE.Vector3()
+        for (let pass = 0; pass < 3; pass++) {
+            let depth = 0, at = 0
+            const normal = new THREE.Vector3()
+            for (let s = low; s <= high; s += 0.04) {
+                if (Math.abs(s) < 0.08)
+                    continue        // where it hangs
+                point.copy(origin).addScaledVector(dir, s)
+                for (const [a, b, radius] of legs) {
+                    segment.subVectors(b, a)
+                    const t = THREE.MathUtils.clamp(point.clone().sub(a).dot(segment) / Math.max(1e-6, segment.lengthSq()), 0, 1)
+                    closest.copy(a).addScaledVector(segment, t)
+                    const distance = point.distanceTo(closest)
+                    const d = radius + 0.012 - distance
+                    if (d > depth && distance > 1e-5) {
+                        depth = d
+                        at = s
+                        normal.subVectors(point, closest).divideScalar(distance)
+                    }
+                }
+            }
+            if (depth <= 0)
+                break
+            dir.addScaledVector(normal, depth / at).normalize()
+        }
+        // pushed aside at once, swinging back more slowly
+        const dt = Math.min(this.state.time.delta, 0.05)
+        const turn = new THREE.Quaternion().setFromUnitVectors(rest, dir)
+        let eased = this.hang.get(tool)
+        if (!eased) {
+            eased = new THREE.Quaternion()
+            this.hang.set(tool, eased)
+        }
+        eased.slerp(turn, 1 - Math.exp(- dt * (turn.w < eased.w ? 45 : 7)))
+        model.quaternion.premultiply(eased)
     }
 
     /** The body's targets for holding a tool in this pose (character space). */
@@ -1421,6 +1476,8 @@ export default class Tools {
                     continue
                 model.position.copy(holster.position)
                 model.quaternion.copy(holster.quaternion)
+                if (HOLSTER[tool].bone === 'pelvis')
+                    this.hangClear(tool, model)
             }
         }
 

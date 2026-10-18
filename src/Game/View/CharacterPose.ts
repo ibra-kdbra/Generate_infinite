@@ -313,10 +313,12 @@ export default class CharacterPose {
             root.slerp(new THREE.Quaternion().setFromUnitVectors(up, normal), input.slide)
         }
         if (input.climb > 0.001) {
-            // lean into the face (flat against it on a vertical wall: no lean), held off it
+            // lean into the face (flat against it on a vertical wall: no lean); on a slope that
+            // can be scrambled up the body stays more upright than the ground, leaning in with
+            // the hands ahead on the rock, instead of lying along it
             const normal = input.climbNormal.clone().applyQuaternion(groupInverse)
             const steepness = Math.acos(THREE.MathUtils.clamp(normal.y, - 1, 1))         // the face's angle from level
-            const lean = (Math.PI / 2 - steepness) * input.climb
+            const lean = (Math.PI / 2 - steepness) * THREE.MathUtils.lerp(0.6, 1, THREE.MathUtils.smoothstep(steepness, 1.0, 1.35)) * input.climb
             const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(yaw)
             root = new THREE.Quaternion().setFromAxisAngle(axis, lean).multiply(root)
             // hips close to the rock, shifted over the holding foot
