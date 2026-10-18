@@ -1411,7 +1411,7 @@ export default class Tools {
                 // lags the arm, swinging past and back
                 const run = THREE.MathUtils.smoothstep(player.speed, player.walkSpeed + 0.5, player.walkSpeed + 2.5) * gait.moving
                 const reach = 0.06 + run * 0.08
-                carry.grip.add(new THREE.Vector3(run * 0.04, bob * 0.025 + run * 0.06 + Math.max(0, swing) * run * 0.06, swing * reach - run * 0.06))
+                carry.grip.add(new THREE.Vector3(- run * 0.04, bob * 0.025 + run * 0.06 + Math.max(0, swing) * run * 0.06, swing * reach))
                 const target = - swing * (0.16 + run * 0.1) + gait.moving * 0.08 + run * 0.18
                 this.torchTiltSpeed += ((target - this.torchTilt) * 90 - this.torchTiltSpeed * 11) * dt
                 this.torchTilt += this.torchTiltSpeed * dt
