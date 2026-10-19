@@ -7,6 +7,7 @@ import { PLANT, Plant } from '../State/Vegetation'
 import { WATER_LEVEL } from '../Workers/TerrainShape'
 import { createCover, createPouch, createQuiver, createSack, createTool, createToolMaterials, createArrowGeometry, createClimbingAxe, ToolName, ToolMaterials } from './ToolModels'
 import { GRIP_LEFT, GRIP_RIGHT, HandTarget, ToolPose } from './CharacterPose'
+import { PerformanceName, Performance } from './Player'
 import Trail from './Trail'
 
 // Three tools per outfit: the ranger's and the farmer's
@@ -470,13 +471,13 @@ SWINGS.torch = {
 }
 // each press goes on to the next of these (back to the first after a pause)
 const SEQUENCE: Partial<Record<ToolName, string[]>> = {
-    sword: ['forehand', 'backhand', 'level', 'thrust', 'rising', 'reverse', 'lowCut', 'risingLeft', 'doubleCut', 'thrustHigh', 'pommel', 'overhead'],
-    axe: ['chop', 'diagonal', 'backhand', 'low', 'overhead', 'quick', 'wide', 'roots'],
+    sword: ['slashA', 'slashB', 'slashC', 'attack'],
+    axe: ['chop'],
     hoe: ['dig', 'pull', 'chop', 'side', 'scrape', 'pry'],
-    sickle: ['reap', 'back', 'low', 'hook', 'flick', 'gather']
+    sickle: ['harvest']
 }
 // Q (or the right button) goes through these
-const HEAVY: Partial<Record<ToolName, string[]>> = { sword: ['spin', 'leap', 'uppercut'], axe: ['mighty'], hoe: ['break'], sickle: ['whirl'], torch: ['jab', 'wave'] }
+const HEAVY: Partial<Record<ToolName, string[]>> = { sword: ['combo', 'heavyCombo'], hoe: ['break'], torch: ['jab', 'wave'] }
 const MOVE_LABELS: Record<string, string> = {
     forehand: 'Forehand', backhand: 'Backhand', level: 'Level cut', thrust: 'Thrust', rising: 'Rising cut', reverse: 'Return cut',
     lowCut: 'Low cut', overhead: 'Overhead', running: 'Running cut', plunge: 'Plunging cut', sweep: 'Low sweep', retreat: 'Step back and slash',
@@ -486,7 +487,9 @@ const MOVE_LABELS: Record<string, string> = {
     reap: 'Reap', back: 'Reap back', hook: 'Hook', whirl: 'Whirl',
     risingLeft: 'Rising cut, left', doubleCut: 'Double cut', thrustHigh: 'High thrust', pommel: 'Pommel strike',
     quick: 'Quick chop', wide: 'Wide swing', roots: 'At the roots', scrape: 'Scrape', pry: 'Pry up',
-    flick: 'Flick', gather: 'Gather', jab: 'Thrust the flame', wave: 'Wave the torch'
+    flick: 'Flick', gather: 'Gather', jab: 'Thrust the flame', wave: 'Wave the torch',
+    slashA: 'Slash', slashB: 'Backhand slash', slashC: 'Turning slash', attack: 'Overhead strike', dash: 'Dash strike',
+    combo: 'Combo', heavyCombo: 'Heavy combo', harvest: 'Harvest'
 }
 
 // Carried: how each tool is held while walking about (weight: how much the arm gives up its swing)
@@ -588,6 +591,42 @@ const MAX_ARROWS = 40
 // the edge lines up with the knuckles (hand +y); the same both ways
 const HAND_IN_TOOL = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
     new THREE.Vector3(- 1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)))
+// how each tool sits in the hand (tool space into hand space), as the animation libraries'
+// clips hold them: the sword as in the sword clips (calibrated on Sword_Idle: the blade up and
+// forward in the guard), the torch upright as Idle_Torch_Loop holds it; the others as above
+const GRIP: Partial<Record<ToolName, THREE.Quaternion>> = {
+    sword: new THREE.Quaternion(- 0.5312, 0.398, 0.7272, - 0.175).normalize(),
+    torch: new THREE.Quaternion(- 0.0147, 0.4216, 0.9054, - 0.0475).normalize()
+}
+const gripOf = (tool: ToolName) => GRIP[tool] ?? HAND_IN_TOOL
+
+/**
+ * The moves made from the animation libraries' clips (real motion, not keyed poses): which
+ * clip, when it can hit (windows, seconds), a step into it, when the next press may cut in,
+ * whether both hands are on the handle (the tool then follows both hands).
+ */
+type Motion = { clip: PerformanceName, active: [number, number][], kind: Kind, step?: [number, number], chain?: number, twoHanded?: boolean }
+const MOTIONS: Partial<Record<ToolName, Record<string, Motion>>> = {
+    sword: {
+        slashA: { clip: 'Sword_Regular_A', active: [[0.16, 0.29]], kind: 'blade', step: [0.12, 2.6], chain: 0.3 },
+        slashB: { clip: 'Sword_Regular_B', active: [[0.22, 0.33]], kind: 'blade', step: [0.18, 2.4], chain: 0.34 },
+        slashC: { clip: 'Sword_Regular_C', active: [[0.55, 0.75]], kind: 'blade', step: [0.5, 2.8], chain: 0.9 },
+        attack: { clip: 'Sword_Attack', active: [[0.36, 0.52]], kind: 'blade', step: [0.3, 2.4], chain: 0.9 },
+        dash: { clip: 'Sword_Dash', active: [[0.26, 0.42]], kind: 'blade', step: [0.2, 6.5], chain: 0.8 },
+        combo: { clip: 'Sword_Regular_Combo', active: [[0.18, 0.31], [0.68, 0.81], [1.48, 1.63]], kind: 'blade', step: [0.15, 2.2] },
+        heavyCombo: { clip: 'Sword_Heavy_Combo', active: [[0.44, 0.57], [1.13, 1.3], [1.8, 1.96], [2.5, 2.67]], kind: 'blade', step: [0.4, 2.4] }
+    },
+    axe: {
+        // a woodcutter's chop, both hands on the handle
+        chop: { clip: 'TreeChopping_Loop', active: [[0.06, 0.21]], kind: 'chop', chain: 0.8, twoHanded: true }
+    },
+    sickle: {
+        // bent to the stalks, a cut, straightening up
+        harvest: { clip: 'Farm_Harvest', active: [[1.18, 1.46]], kind: 'reap', chain: 1.9 }
+    }
+}
+// held while carried (a clip looping over the arms), instead of a keyed carry
+const HOLD: Partial<Record<ToolName, PerformanceName>> = { sword: 'Sword_Idle', torch: 'Idle_Torch_Loop' }
 const UP = new THREE.Vector3(0, 1, 0)
 
 type Pose = { grip: THREE.Vector3, dir: THREE.Vector3, edge: THREE.Vector3, twist: number, lean: number, lower: number }
@@ -607,7 +646,7 @@ type Mark = {
     tilt: number                   // radians: the stroke's slant across the trunk
     progress: number               // a notch: how far through (0 .. 1 of the chops it takes)
 }
-type SwingState = { tool: ToolName, def: Swing, keys: Key[], time: number, hits: Set<unknown>, queued: boolean, recoil: boolean, stepped: boolean, whooshed: boolean, name: string, spinFrom: number, landed: boolean }
+type SwingState = { tool: ToolName, def: Swing, keys: Key[], time: number, hits: Set<unknown>, queued: boolean, recoil: boolean, stepped: boolean, whooshed: boolean, name: string, spinFrom: number, landed: boolean, motion?: Motion, duration?: number }
 
 const vector = (v: V3) => new THREE.Vector3(v[0], v[1], v[2])
 const smooth = (t: number) => t * t * (3 - 2 * t)
@@ -709,6 +748,11 @@ export default class Tools {
     // slashes, a sickle's scratches, a hoe's nicks
     private marks = new Map<Plant, Mark[]>()
     private lastTip: THREE.Vector3 | null = null       // the working end's place last frame (the stroke's motion)
+    private holdWeight = 0                            // a carried tool's hold clip, faded in
+    private holdClip: PerformanceName | null = null
+    private acting: Performance | null = null         // the stroke's clip (fading out after it ends)
+    private headWas: THREE.Vector3 | null = null      // a two-handed tool's head last frame (its edge leads)
+    private edgeWas = new THREE.Vector3(0, 0, 1)
     private useHeld = false
     private recover = 0              // after a shot
     private aimLift = 0              // the camera rising to aim level as the draw starts
@@ -978,16 +1022,8 @@ export default class Tools {
      * the next move of the tool's sequence, back to the first after a pause.
      */
     private lightStroke(tool: ToolName) {
-        if (tool === 'sword') {
-            const player = this.state.player
-            const keys = this.state.controls.keys.down
-            if (!player.grounded) return 'plunge'
-            if (player.speed > player.walkSpeed + 1) return 'running'
-            if (keys.crouch) return 'sweep'
-            if (keys.backward && !keys.forward) return 'retreat'
-            if (keys.strafeLeft && !keys.strafeRight && !keys.forward) return 'sideLeft'
-            if (keys.strafeRight && !keys.strafeLeft && !keys.forward) return 'sideRight'
-        }
+        if (tool === 'sword' && this.state.player.speed > this.state.player.walkSpeed + 1)
+            return 'dash'           // running: the dash strike
         return this.nextOf(tool, SEQUENCE[tool]!, 'light')
     }
 
@@ -1011,7 +1047,8 @@ export default class Tools {
         if (this.swing && !(this.swing.def.chain !== undefined && this.swing.time >= this.swing.def.chain))
             return
         const keys = this.state.controls.keys.down
-        const name = tool === 'sword' && keys.crouch ? 'uppercut' : tool === 'sword' && keys.forward && player.grounded ? 'leap' : this.nextOf(tool, HEAVY[tool]!, 'heavy')
+        void keys
+        const name = this.nextOf(tool, HEAVY[tool]!, 'heavy')
         this.startSwing(tool, name)
     }
 
@@ -1032,6 +1069,16 @@ export default class Tools {
     // ── strokes ──
 
     private startSwing(tool: ToolName, name: string) {
+        const motion = MOTIONS[tool]?.[name]
+        if (motion) {
+            const def: Swing = { keys: [], active: motion.active[0], kind: motion.kind, step: motion.step, chain: motion.chain }
+            this.swing = { tool, def, keys: [], time: 0, hits: new Set(), queued: false, recoil: false, stepped: false, whooshed: false, name, spinFrom: this.state.player.rotation, landed: false, motion, duration: this.view.player.duration(motion.clip) }
+            this.trail.clear()
+            const list = SEQUENCE[tool] ?? []
+            const place = list.indexOf(name)
+            this.showLabel(HEAVY[tool]?.includes(name) ? `Heavy · ${MOVE_LABELS[name] ?? name}` : place >= 0 && list.length > 1 ? `${MOVE_LABELS[name] ?? name}<span>${place + 1} / ${list.length}</span>` : MOVE_LABELS[name] ?? name)
+            return
+        }
         const def = SWINGS[tool]![name]
         const keys = def.keys.map((key) => ({ ...key }))
         // from wherever the hands are now, back to the carry at the end
@@ -1056,6 +1103,10 @@ export default class Tools {
 
     /** After hitting something solid: hold for a beat (the blade bites), then back to the carry. */
     private rebound(hold: number, recover: number) {
+        if (this.swing?.motion) {
+            this.freeze = Math.max(this.freeze, hold * 0.8)     // a clip plays on: a hit-stop only
+            return
+        }
         if (!this.swing || !this.last)
             return
         const tool = this.swing.tool
@@ -1227,7 +1278,7 @@ export default class Tools {
             this.bodyOffset.set(0, 0, 0)
             this.bodyTurn.identity()
         }
-        const hand = frame(pose.dir, pose.edge).multiply(HAND_IN_TOOL)
+        const hand = frame(pose.dir, pose.edge).multiply(gripOf(tool).clone().invert())
         const main = { position: pose.grip.clone(), quaternion: hand, pole: pole ? vector(pole) : undefined }
         const second = SECOND_HAND[tool]
         const other = second !== undefined ? { position: pose.grip.clone().addScaledVector(pose.dir, second), quaternion: hand.clone() } : null
@@ -1360,9 +1411,10 @@ export default class Tools {
         const tip = new THREE.Vector3(0, TIP[tool], 0).applyMatrix4(model.matrixWorld)
         const motionFrom = this.lastTip
         this.lastTip = tip.clone()
-        if (tool === 'sword' && swing.time >= def.active[0] - 0.03 && swing.time <= def.active[1] + 0.05)
+        const windows = swing.motion ? swing.motion.active : [def.active]
+        if (tool === 'sword' && windows.some(([a, b]) => swing.time >= a - 0.03 && swing.time <= b + 0.05))
             this.trail.push(base, tip)
-        if (swing.time < def.active[0] || swing.time > def.active[1])
+        if (!windows.some(([a, b]) => swing.time >= a && swing.time <= b))
             return
         const particles = this.view.particles
         const p = this.state.player.position.current
@@ -1766,7 +1818,7 @@ export default class Tools {
         const { pose, weight, off } = result
 
         // the main hand (the left for the bow) on the tool, the other on the guard
-        const hand = frame(pose.dir, pose.edge).multiply(HAND_IN_TOOL)
+        const hand = frame(pose.dir, pose.edge).multiply(gripOf(tool).clone().invert())
         const main: HandTarget = { position: pose.grip.clone(), quaternion: hand }
         const other: HandTarget | null = off && off.weight > 0.001 ? { position: off.position, quaternion: off.quaternion, weight: off.weight } : null
         this.pose = tool === 'bow'
@@ -2030,10 +2082,17 @@ export default class Tools {
         else
             swing.time += dt
         const def = swing.def
-        const end = swing.keys[swing.keys.length - 1].t
-        const pose = this.strokePose(swing.tool, swing.keys, Math.min(swing.time, end))
-        this.holdPose(swing.tool, pose, 1)
-        this.last = pose
+        const end = swing.motion ? swing.duration! : swing.keys[swing.keys.length - 1].t
+        if (swing.motion) {
+            // the clip does the body (Player.performances); no keyed pose for the hands
+            this.pose = { right: null, left: null, weight: 0, twist: 0, lean: 0, lower: 0, pitch: 0 }
+            this.last = this.carryPose(swing.tool)
+        }
+        else {
+            const pose = this.strokePose(swing.tool, swing.keys, Math.min(swing.time, end))
+            this.holdPose(swing.tool, pose, 1)
+            this.last = pose
+        }
         // the whoosh as the stroke comes through
         if (!swing.whooshed && !swing.recoil && swing.time >= def.active[0] - 0.04) {
             swing.whooshed = true
@@ -2262,7 +2321,10 @@ export default class Tools {
                 carry.grip.lerp(new THREE.Vector3(- 0.2, 1.68, 0.3), this.raised)
                 carry.dir.lerp(new THREE.Vector3(0, 1, 0.1), this.raised).normalize()
             }
-            this.holdPose(tool, carry, CARRY[tool].weight, CARRY[tool].pole)
+            // a tool with a hold clip: the clip carries it (the keyed carry fades out under it;
+            // the torch raised still lifts the arm)
+            const clipped = HOLD[tool] ? 1 - this.holdWeight : 1
+            this.holdPose(tool, carry, CARRY[tool].weight * Math.max(clipped, tool === 'torch' ? this.raised : 0), CARRY[tool].pole)
             this.last = carry
         }
         else
@@ -2280,6 +2342,8 @@ export default class Tools {
         this.pose.weight = this.handWeight
 
         // face where the camera looks while aiming or striking
+        this.updatePerformances(dt)
+
         // the feet slow while the hands are busy: a stroke (not the running cut or the leap),
         // drawing or putting away, aiming the bow
         const busy = this.swing && !['running', 'leap', 'plunge'].includes(this.swing.name) ? 0.55 : this.transition ? 0.75 : this.aiming ? 0.5 : 1
@@ -2310,7 +2374,9 @@ export default class Tools {
                 const handQuaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(bone.matrixWorld))
                 const grip = (tool === 'bow' ? GRIP_LEFT : GRIP_RIGHT).clone().applyQuaternion(handQuaternion)
                 model.position.setFromMatrixPosition(bone.matrixWorld).add(grip)
-                model.quaternion.copy(handQuaternion).multiply(HAND_IN_TOOL)
+                model.quaternion.copy(handQuaternion).multiply(gripOf(tool))
+                if (this.swing?.motion?.twoHanded && this.swing.tool === tool)
+                    this.inBothHands(tool, model)
             }
             else {
                 const holster = this.holsterWorld(tool)
@@ -2479,6 +2545,64 @@ export default class Tools {
         this.moveLabel.innerHTML = html
         this.moveLabel.classList.add('is-shown')
         this.moveLabelTime = 1.3
+    }
+
+    /**
+     * A two-handed tool in a clip made for two hands: the handle runs from the left fist
+     * through the right (the right at its grip), its edge leading the stroke.
+     */
+    private inBothHands(tool: ToolName, model: THREE.Object3D) {
+        const right = this.view.player.bone('hand_r'), left = this.view.player.bone('hand_l')
+        if (!right || !left)
+            return
+        right.updateWorldMatrix(true, false)
+        left.updateWorldMatrix(true, false)
+        const r = GRIP_RIGHT.clone().applyMatrix4(right.matrixWorld), l = GRIP_LEFT.clone().applyMatrix4(left.matrixWorld)
+        const dir = r.clone().sub(l)
+        if (dir.lengthSq() < 1e-4)
+            return
+        dir.normalize()
+        // the edge: the way the head is moving (or ahead of the body when it barely moves)
+        const head = r.clone().addScaledVector(dir, TIP[tool])
+        const motion = this.headWas ? head.clone().sub(this.headWas) : new THREE.Vector3()
+        this.headWas = head
+        const body = new THREE.Vector3(0, 0, 1).applyQuaternion(this.view.player.model!.getWorldQuaternion(new THREE.Quaternion()))
+        const edge = motion.lengthSq() > 1e-4 ? motion.normalize() : body
+        edge.addScaledVector(dir, - edge.dot(dir))
+        if (edge.lengthSq() < 1e-4) edge.copy(UP).addScaledVector(dir, - dir.y)
+        this.edgeWas.lerp(edge.normalize(), 0.35).normalize()
+        model.position.copy(r)
+        model.quaternion.copy(frame(dir, this.edgeWas))
+    }
+
+    /**
+     * What the body performs this frame (Player.performances): the clip of a stroke, and the
+     * hold of a tool carried (the sword's guard, the torch held up), cross-fading as one ends
+     * and the other begins.
+     */
+    private updatePerformances(dt: number) {
+        const tool = this.equipped
+        const swing = this.swing
+        const hold = tool && this.inHand.has(tool) && !this.transition && !this.aiming ? HOLD[tool] : undefined
+        const k = (rate: number) => 1 - Math.exp(- dt * rate)
+        this.holdWeight += ((hold && !swing?.motion ? 1 : 0) - this.holdWeight) * k(9)
+        if (hold) this.holdClip = hold
+        if (swing?.motion) {
+            const fade = Math.min(1, swing.time / 0.08, Math.max(0, (swing.duration! - swing.time) / 0.15))
+            this.acting = { clip: swing.motion.clip, time: swing.time, weight: Math.max(fade, 0.001), whole: 1 }
+        }
+        else if (this.acting) {
+            this.acting.weight -= dt / 0.15
+            if (this.acting.weight <= 0) this.acting = null
+        }
+        const list: Performance[] = []
+        if (this.holdClip && this.holdWeight > 0.002) {
+            const duration = this.view.player.duration(this.holdClip)
+            list.push({ clip: this.holdClip, time: this.state.time.elapsed % duration, weight: this.holdWeight * (1 - (this.acting?.weight ?? 0)), whole: 0.4 })
+        }
+        if (this.acting)
+            list.push(this.acting)
+        this.view.player.performances = list
     }
 
     /** The quiver, pouch or sack on the belt. */

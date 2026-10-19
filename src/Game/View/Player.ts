@@ -22,6 +22,15 @@ const HAIR_COLORS: Record<CharacterName, string> = {
 const ZERO = new THREE.Vector3()
 
 const LOCOMOTION = ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop'] as const
+// performed on top of the gait (Tools): holding and using a tool, from the animation libraries
+export const PERFORMANCES = ['Sword_Idle', 'Sword_Attack', 'Idle_Torch_Loop', 'Sword_Regular_A', 'Sword_Regular_A_Rec', 'Sword_Regular_B',
+    'Sword_Regular_B_Rec', 'Sword_Regular_C', 'Sword_Regular_Combo', 'Sword_Heavy_Combo', 'Sword_Dash', 'Sword_Block', 'TreeChopping_Loop',
+    'Farm_Harvest', 'Farm_PlantSeed', 'Farm_Watering', 'Idle_Lantern_Loop', 'ClimbUp_1m'] as const
+export type PerformanceName = typeof PERFORMANCES[number]
+/** A clip played on top of the gait: at this time, this strong; `whole` how much of the body (legs too) it takes when standing still. */
+export type Performance = { clip: PerformanceName, time: number, weight: number, whole: number }
+// the legs and hips: a performance leaves them to the gait while the body moves
+const LOWER = new Set(['root', 'pelvis', 'thigh_l', 'calf_l', 'foot_l', 'ball_l', 'thigh_r', 'calf_r', 'foot_r', 'ball_r'])
 const ONE_SHOTS = ['Jump_Start', 'Jump_Land', 'Roll']
 
 type Gait = { clip: string, speed: number, duration: number, offset: number }
@@ -77,6 +86,8 @@ export default class Player {
     private leanPitch = 0                       // radians forward into the acceleration
     private leanBank = 0                        // radians into a turn
     private lookDirection = new THREE.Vector3()
+    performances: Performance[] = []            // set by the tools each frame
+    private layers = new Map<string, { whole: THREE.AnimationAction, upper: THREE.AnimationAction, duration: number }>()
     private diveAmount = 0
     private divePitch = 0
     private climbAmount = 0
@@ -180,12 +191,25 @@ export default class Player {
         const pelvis = model.getObjectByName('pelvis')
         const ratio = pelvis ? pelvis.position.z / this.mannequinPelvisHeight : 1
         this.actions = {}
+        this.layers.clear()
         for (const [clipName, source] of Object.entries(this.clips)) {
             const clip = source.clone()
             for (const track of clip.tracks)
                 if (track.name === 'pelvis.position')
                     for (let i = 0; i < track.values.length; i++)
                         track.values[i] *= ratio
+            if ((PERFORMANCES as readonly string[]).includes(clipName)) {
+                // performed: the whole clip (standing still) and its upper body alone (moving)
+                const upper = new THREE.AnimationClip(`${clipName}:upper`, clip.duration, clip.tracks.filter((track) => !LOWER.has(track.name.split('.')[0])))
+                const make = (c: THREE.AnimationClip) => {
+                    const action = this.mixer!.clipAction(c)
+                    action.setEffectiveWeight(0).play()
+                    action.timeScale = 0
+                    return action
+                }
+                this.layers.set(clipName, { whole: make(clip), upper: make(upper), duration: clip.duration })
+                continue
+            }
             const action = this.mixer.clipAction(clip)
             if (ONE_SHOTS.includes(clipName)) {
                 action.setLoop(THREE.LoopOnce, 1)
@@ -206,6 +230,11 @@ export default class Player {
         }
         for (const gait of this.gaits)
             this.actions[gait.clip].timeScale = 0       // driven by the shared phase
+        for (const layer of this.layers.values())       // (calibrating stopped them)
+            for (const action of [layer.upper, layer.whole]) {
+                action.setEffectiveWeight(0).play()
+                action.timeScale = 0
+            }
         this.oneShot = null
     }
 
@@ -365,6 +394,39 @@ export default class Player {
     /** The walk cycle (0..1, shared by the gaits) and how much the character is walking (0..1). */
     get gait() {
         return { phase: this.phase, moving: THREE.MathUtils.smoothstep(this.state.player.speed, 0.3, 1.5) * (this.state.player.grounded ? 1 : 0) }
+    }
+
+    /** How long a performance clip is (seconds). */
+    duration(clip: PerformanceName) {
+        return this.layers.get(clip)?.duration ?? 1
+    }
+
+    /**
+     * The performances (Tools) on top of the gait: each clip at its time, over the upper body
+     * as the body moves, over all of it standing still (a stance for a stroke). The mixer
+     * averages what drives each bone by weight, so a performance at strength f gets the
+     * weight f / (1 - f): the gait's share of those bones goes to 1 - f.
+     */
+    private perform(speed: number) {
+        for (const layer of this.layers.values()) {
+            layer.upper.setEffectiveWeight(0)
+            layer.whole.setEffectiveWeight(0)
+        }
+        const total = Math.min(0.985, this.performances.reduce((sum, p) => sum + Math.max(0, p.weight), 0))
+        if (total <= 0.001)
+            return
+        const heavy = total / (1 - total)
+        const moving = THREE.MathUtils.smoothstep(speed, 0.3, 1.2)
+        for (const p of this.performances) {
+            const layer = this.layers.get(p.clip)
+            if (!layer || p.weight <= 0)
+                continue
+            const share = heavy * p.weight / total
+            const whole = THREE.MathUtils.clamp(p.whole, 0, 1) * (1 - moving)
+            layer.upper.time = layer.whole.time = THREE.MathUtils.clamp(p.time, 0, layer.duration)
+            layer.upper.setEffectiveWeight(share * (1 - whole))
+            layer.whole.setEffectiveWeight(share * whole)
+        }
     }
 
     /** Where the follow camera looks (not a free camera's view): the way the eyes go with a tool in hand. */
@@ -565,6 +627,7 @@ export default class Player {
                 this.current = name
             }
         }
+        this.perform(player.speed)
         this.mixer!.update(dt)
 
         // ── swimming: hold the head just above the surface (diving: the body around the chest) ──

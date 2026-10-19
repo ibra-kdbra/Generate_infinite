@@ -51,22 +51,16 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Sword',
-        note: 'Twelve strokes in turn, one each press: forehand, backhand, level cut, thrust, rising cut, return cut, low cut, rising cut from the left, double cut, high thrust, pommel strike, overhead. What you do while pressing picks others.',
+        note: 'Real sword motion from the animation library: a slash, a backhand slash, a turning slash and an overhead strike in turn, one each press; a dash strike while running; Q for the two combos.',
         rows: [
             { keys: ['E'], label: 'The next stroke' },
-            { keys: ['Shift', 'E'], label: 'Running cut, while sprinting', combo: true },
-            { keys: ['Space', 'E'], label: 'Plunging cut, in the air', combo: true },
-            { keys: ['C', 'E'], label: 'Low sweep', combo: true },
-            { keys: ['S', 'E'], label: 'Step back and slash', combo: true },
-            { keys: ['A', 'E'], label: 'Side-step cut (D: the other way)', combo: true },
-            { keys: ['Q'], label: 'Heavy: spin, leap, uppercut in turn' },
-            { keys: ['W', 'Q'], label: 'Heavy: leaping overhead', combo: true },
-            { keys: ['C', 'Q'], label: 'Heavy: rising uppercut', combo: true }
+            { keys: ['Shift', 'E'], label: 'Dash strike, while running', combo: true },
+            { keys: ['Q'], label: 'A combo; again: the heavy combo' }
         ]
     },
     {
         title: 'Axe, hoe and sickle',
-        note: 'Axe: chop, diagonal chop, backhand, low, overhead, quick chop, wide swing, at the roots; the heavy chop counts twice on a trunk. Hoe: dig, draw back, chop, sweep, scrape, pry up; heavy: break the ground. Sickle: reap, reap back, low, hook, flick, gather; heavy: whirl. Torch: E raises it, Q thrusts or waves the flame (it scorches bark).',
+        note: 'Axe: a woodcutter\'s two-handed chop. Sickle: bent to the stalks, a harvest cut. Hoe: dig, draw back, chop, sweep, scrape, pry up; heavy: break the ground. Torch: held up as the animation library holds it; E raises it, Q thrusts or waves the flame (it scorches bark).',
         rows: [
             { keys: ['E'], label: 'The next move' },
             { keys: ['Q'], label: 'Heavy move' }
