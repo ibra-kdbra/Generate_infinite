@@ -1779,6 +1779,10 @@ export default class Tools {
         this.pose.weight = this.handWeight
 
         // face where the camera looks while aiming or striking
+        // the feet slow while the hands are busy: a stroke (not the running cut or the leap),
+        // drawing or putting away, aiming the bow
+        const busy = this.swing && !['running', 'leap', 'plunge'].includes(this.swing.name) ? 0.55 : this.transition ? 0.75 : this.aiming ? 0.5 : 1
+        player.actionPace += (busy - player.actionPace) * (1 - Math.exp(- dt * 8))
         // with a tool in hand: face where the camera looks (step back with S, sideways with A/D)
         player.stance = !!tool && (this.inHand.has(tool) || this.transition !== null) && !player.swimming && !player.climbing && !player.mantle
         player.aimYaw = this.aiming || this.swing !== null || player.stance ? player.camera.thirdPerson.theta : null

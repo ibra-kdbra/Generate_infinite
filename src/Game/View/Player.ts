@@ -74,6 +74,8 @@ export default class Player {
     private slideAmount = 0
     private strideDirection = 1                 // 1 walking forward, -1 backing away
     private strideYaw = 0                       // radians: the hips turned toward a side-step
+    private leanPitch = 0                       // radians forward into the acceleration
+    private leanBank = 0                        // radians into a turn
     private diveAmount = 0
     private divePitch = 0
     private climbAmount = 0
@@ -381,28 +383,46 @@ export default class Player {
         this.oneShot = name
     }
 
-    /** Idle / walk / jog / sprint weights for this speed; advances the shared cycle phase. */
+    /**
+     * Idle / walk / jog / run weights for this speed, each gait in its own band (a short
+     * cross-fade between them, not a long blend of two strides), played at the rate that
+     * matches its stride to the speed; advances the shared cycle phase.
+     */
     private locomotion(speed: number, dt: number) {
-        const gaits = this.gaits
-        let a = gaits[0], b = gaits[0], t = 0
-        if (speed > gaits[0].speed) {
-            const i = speed < gaits[1].speed ? 0 : 1
-            a = gaits[i]
-            b = gaits[i + 1]
-            t = Math.min(1, (speed - a.speed) / (b.speed - a.speed))
-        }
-        const natural = THREE.MathUtils.lerp(a.speed, b.speed, t)
-        const duration = THREE.MathUtils.lerp(a.duration, b.duration, t)
-        const rate = THREE.MathUtils.clamp(speed / natural, 0.55, 1.6)
-        // stepping backward: the cycle runs in reverse (the feet still match the ground)
-        this.phase = (this.phase + this.strideDirection * rate * dt / duration + 1) % 1
+        const [walk, jog, run] = this.gaits
+        const toJog = THREE.MathUtils.smoothstep(speed, 1.7, 2.9)
+        const toRun = THREE.MathUtils.smoothstep(speed, 6.0, 7.3)
+        const weights = [(1 - toJog), toJog * (1 - toRun), toJog * toRun]
+        // the shared cycle: each gait's rate (its stride matched to the speed), weighted
+        let advance = 0
+        ;[walk, jog, run].forEach((gait, i) => {
+            const rate = THREE.MathUtils.clamp(speed / gait.speed, 0.6, 1.45)
+            advance += weights[i] * rate / gait.duration
+        })
+        this.phase = (this.phase + this.strideDirection * advance * dt + 1) % 1
 
         const moving = THREE.MathUtils.smoothstep(speed, 0.15, 0.7)
         this.targets.Idle_Loop = 1 - moving
-        this.targets[a.clip] = (this.targets[a.clip] || 0) + (1 - t) * moving
-        this.targets[b.clip] = (this.targets[b.clip] || 0) + t * moving
-        for (const gait of gaits)
+        ;[walk, jog, run].forEach((gait, i) => {
+            this.targets[gait.clip] = (this.targets[gait.clip] || 0) + weights[i] * moving
+        })
+        for (const gait of this.gaits)
             this.actions[gait.clip].time = ((this.phase + gait.offset) % 1) * gait.duration
+    }
+
+    /**
+     * How the body leans: into the acceleration (forward getting going, back braking) and
+     * into a turn (toward its centre, the faster the more), as a runner does from the ankles.
+     */
+    private updateLean(dt: number) {
+        const player = this.state.player
+        const g = 9.8
+        const footing = player.grounded && !player.swimming && !player.sliding && !player.climbing ? 1 : 0
+        const pitch = THREE.MathUtils.clamp(Math.atan2(player.acceleration.forward, g) * 0.9, - 0.22, 0.2) * footing
+        const bank = THREE.MathUtils.clamp(Math.atan2(player.acceleration.right, g) * 0.85, - 0.3, 0.3) * footing
+        const k = 1 - Math.exp(- dt * 10)
+        this.leanPitch += (pitch - this.leanPitch) * k
+        this.leanBank += (bank - this.leanBank) * k
     }
 
     /**
@@ -437,6 +457,7 @@ export default class Player {
         const player = this.state.player
         const speed = player.speed
         this.updateStride(dt)
+        this.updateLean(dt)
         const state = player.movementState
         const swimming = state === PlayerState.STATE_SWIM || state === PlayerState.STATE_DIVE
         const climbing = player.climbing || player.mantle !== null
@@ -561,6 +582,8 @@ export default class Player {
             mantle,
             dt,
             stride: - this.strideYaw * this.footIK,
+            leanPitch: this.leanPitch,
+            leanBank: this.leanBank,
             tool: this.view.tools?.pose
         })
     }

@@ -20,6 +20,7 @@ import { WATER_LEVEL } from '../Workers/TerrainShape'
  * where it's deeper than `swimDepth` the player floats chest-deep and swims.
  */
 const hasInputWish = (wish: vec3) => wish[0] !== 0 || wish[2] !== 0
+const THREE_clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
 export default class Player {
     static STATE_IDLE = 'idle'
@@ -41,10 +42,13 @@ export default class Player {
 
     // tuning (metres, seconds)
     crouchSpeed = 1.9            // holding C
-    walkSpeed = 5.2              // default pace (an easy jog)
-    runSpeed = 9.5               // holding Shift
-    groundAcceleration = 45
-    groundFriction = 30
+    walkSpeed = 4.8              // default pace (a jog)
+    runSpeed = 8.2               // holding Shift (a run)
+    startAcceleration = 9        // m/s² getting going, up to the jog
+    sprintAcceleration = 4.2     // m/s² building up a run beyond it
+    groundFriction = 13          // m/s² stopping (a short skid from a run)
+    stanceAcceleration = 12      // stepping about with a tool in hand (any direction)
+    plantDeceleration = 17       // m/s² braking hard to turn round
     airAcceleration = 9
     gravity = 26
     jumpSpeed = 9
@@ -78,6 +82,11 @@ export default class Player {
     stance = false               // a tool in hand: facing the way the camera looks, stepping back and to the sides
     stanceBack = 0.6             // backing away: this much of the walking pace
     stanceSide = 0.85            // stepping sideways
+    actionPace = 1               // set by the tools: a stroke, drawing or aiming slows the feet
+    // the body's acceleration in its own frame (m/s², smoothed): forward, to the right; the
+    // view leans into it
+    acceleration = { forward: 0, right: 0 }
+    private lastVelocity = vec3.create()
     forcedRotation: number | null = null   // set by a spinning stroke: face exactly this way
 
     // climbing: the rock face's normal (out of the rock), the limb cycle and the way the
@@ -270,7 +279,13 @@ export default class Player {
             }
         }
         else if (hasInput) {
-            const pace = Math.min(targetSpeed, paceLimit)
+            // up a slope is slower going, down it a little quicker
+            let slope = 1
+            if (this.grounded && !this.swimming) {
+                const climb = - (this.groundNormal[0] * wish[0] + this.groundNormal[2] * wish[2]) / Math.max(0.3, this.groundNormal[1])
+                slope = climb > 0 ? Math.max(0.55, 1 - climb * 0.6) : Math.min(1.15, 1 - climb * 0.2)
+            }
+            const pace = Math.min(targetSpeed, paceLimit) * slope * this.actionPace
             let wx = wish[0] * pace, wz = wish[2] * pace
             if (this.grounded && steep) {
                 // no climbing a too-steep slope: drop the uphill part of the wish
@@ -280,13 +295,17 @@ export default class Player {
                 const along = wx * downX + wz * downZ
                 if (along < 0) { wx -= along * downX; wz -= along * downZ }
             }
-            const accel = this.swimming ? this.swimAcceleration : this.grounded ? this.groundAcceleration : this.airAcceleration
-            const dx = wx - v[0], dz = wz - v[2]
-            const dLength = Math.hypot(dx, dz)
-            const maxDelta = accel * dt
-            const k = dLength > maxDelta ? maxDelta / dLength : 1
-            ax = dx * k
-            az = dz * k
+            if (this.grounded && !this.swimming && !this.stance)
+                this.runStep(v, wx, wz, dt)
+            else {
+                const accel = this.swimming ? this.swimAcceleration : this.grounded ? this.stanceAcceleration : this.airAcceleration
+                const dx = wx - v[0], dz = wz - v[2]
+                const dLength = Math.hypot(dx, dz)
+                const maxDelta = accel * dt
+                const k = dLength > maxDelta ? maxDelta / dLength : 1
+                ax = dx * k
+                az = dz * k
+            }
         }
         else if (this.swimming) {
             // drift to a stop
@@ -365,8 +384,19 @@ export default class Player {
         p[1] += v[1] * dt
         p[2] += v[2] * dt
 
-        // trunks and boulders
-        this.state.vegetation?.resolveCollision(p, 0.32)
+        // trunks and boulders: pushed out, and the velocity into them taken away (sliding along)
+        const beforeX = p[0], beforeZ = p[2]
+        if (this.state.vegetation?.resolveCollision(p, 0.32)) {
+            const nx = p[0] - beforeX, nz = p[2] - beforeZ
+            const length = Math.hypot(nx, nz)
+            if (length > 1e-6) {
+                const into = (v[0] * nx + v[2] * nz) / length
+                if (into < 0) {
+                    v[0] -= into * nx / length
+                    v[2] -= into * nz / length
+                }
+            }
+        }
 
         // ── ground contact ──
         const newGround = this.groundAt(p[0], p[2])
@@ -391,6 +421,53 @@ export default class Player {
 
         this.timeSinceGrounded = this.grounded ? 0 : this.timeSinceGrounded + dt
         this.timeSinceJumpPressed += dt
+    }
+
+    /**
+     * On foot, the way a runner moves: getting going takes a moment and a full run longer;
+     * the heading swings round toward where the keys point no faster than the speed allows
+     * (a wider curve the faster), easing off the pace through a sharp turn; asked to go back
+     * the way it came, the body plants and brakes before turning. Sets the horizontal velocity.
+     */
+    private runStep(v: vec3, wx: number, wz: number, dt: number) {
+        const target = Math.hypot(wx, wz)
+        if (target < 1e-4)
+            return
+        const tx = wx / target, tz = wz / target
+        const speed = Math.hypot(v[0], v[2])
+        if (speed < 0.8) {
+            // from (nearly) standing: straight off toward the keys
+            const next = Math.min(target, speed + this.startAcceleration * dt)
+            v[0] = tx * next
+            v[2] = tz * next
+            return
+        }
+        let hx = v[0] / speed, hz = v[2] / speed
+        const angle = Math.atan2(hx * tz - hz * tx, hx * tx + hz * tz)
+        if (Math.abs(angle) > 2.2) {
+            // a reversal: plant the feet and brake, then pivot round and push off the other way
+            const next = speed - this.plantDeceleration * dt
+            if (next > 2.0) {
+                v[0] = hx * next
+                v[2] = hz * next
+            }
+            else {
+                v[0] = tx * Math.min(target, 1.2)
+                v[2] = tz * Math.min(target, 1.2)
+            }
+            return
+        }
+        const maxTurn = THREE_clamp(15 / (1 + speed * 0.85), 2.2, 11) * dt
+        const turn = THREE_clamp(angle, - maxTurn, maxTurn)
+        const c = Math.cos(turn), s = Math.sin(turn)
+        const nx = hx * c - hz * s, nz = hx * s + hz * c
+        hx = nx; hz = nz
+        // ease off the pace into a sharp turn
+        const desired = target * (1 - 0.35 * Math.min(1, Math.abs(angle) / 1.6))
+        const accel = speed < this.walkSpeed ? this.startAcceleration : this.sprintAcceleration
+        const next = speed < desired ? Math.min(desired, speed + accel * dt) : Math.max(desired, speed - this.groundFriction * dt)
+        v[0] = hx * next
+        v[2] = hz * next
     }
 
     /** Step forward with a strike (the tools): at least this speed that way for a moment. */
@@ -673,6 +750,17 @@ export default class Player {
                 this.wetHeight = 0
         }
 
+        // the body's acceleration in its own frame (the view leans into it)
+        if (this.time.delta > 1e-4) {
+            const ax = (this.velocity[0] - this.lastVelocity[0]) / this.time.delta
+            const az = (this.velocity[2] - this.lastVelocity[2]) / this.time.delta
+            const fx = - Math.sin(this.rotation), fz = - Math.cos(this.rotation)
+            const k = 1 - Math.exp(- this.time.delta * 7)
+            const grounded = this.grounded && !this.swimming && !this.climbing ? 1 : 0
+            this.acceleration.forward += ((ax * fx + az * fz) * grounded - this.acceleration.forward) * k
+            this.acceleration.right += ((ax * - fz + az * fx) * grounded - this.acceleration.right) * k
+        }
+        vec3.copy(this.lastVelocity, this.velocity)
         vec3.sub(this.position.delta, this.position.current, this.position.previous)
         vec3.copy(this.position.previous, this.position.current)
         this.speed = horizontalSpeed

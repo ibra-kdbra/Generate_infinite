@@ -32,6 +32,8 @@ export type PoseInput = {
     mantle: number           // 0 .. 1 pulling up over an edge (0 when not)
     dt: number               // seconds since the last pose
     stride?: number          // radians: the hips turned toward a side-step, the chest kept ahead
+    leanPitch?: number       // radians: the whole body leaning forward (+) from the ankles
+    leanBank?: number        // radians: leaning into a turn (+ toward the right)
     tool?: ToolPose
 }
 
@@ -325,6 +327,13 @@ export default class CharacterPose {
             // hips close to the rock, shifted over the holding foot
             const surfaceRight = new THREE.Vector3(- normal.x * normal.y, 1 - normal.y * normal.y, - normal.z * normal.y).normalize().cross(normal).normalize()
             model.position.addScaledVector(normal, 0.24 * input.climb).addScaledVector(surfaceRight, this.climbSway * input.climb)
+        }
+        // a runner's lean, from the feet: forward into the acceleration, sideways into a turn
+        if ((input.leanPitch && Math.abs(input.leanPitch) > 1e-4) || (input.leanBank && Math.abs(input.leanBank) > 1e-4)) {
+            const across = new THREE.Vector3(1, 0, 0).applyQuaternion(yaw)
+            const along = new THREE.Vector3(0, 0, 1).applyQuaternion(yaw)
+            root = new THREE.Quaternion().setFromAxisAngle(across, input.leanPitch ?? 0)
+                .multiply(new THREE.Quaternion().setFromAxisAngle(along, input.leanBank ?? 0)).multiply(root)
         }
         model.quaternion.copy(root).multiply(yaw)
         model.updateMatrixWorld(true)
