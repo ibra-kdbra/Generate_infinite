@@ -480,6 +480,10 @@ type Pose = { grip: THREE.Vector3, dir: THREE.Vector3, edge: THREE.Vector3, twis
 type Arrow = {
     position: THREE.Vector3, velocity: THREE.Vector3, quaternion: THREE.Quaternion
     stuck: boolean, age: number, stuckAt: number, wobbleAxis: THREE.Vector3, floating: boolean
+    // what it's stuck in: the ground (and how high the ground was there then: as the land
+    // gains detail coming closer, the arrow follows it) or a plant (felled, the arrow drops)
+    inGround?: { x: number, z: number, height: number }
+    inPlant?: Plant
 }
 type SwingState = { tool: ToolName, def: Swing, keys: Key[], time: number, hits: Set<unknown>, queued: boolean, recoil: boolean, stepped: boolean, whooshed: boolean, name: string, spinFrom: number, landed: boolean }
 
@@ -1422,8 +1426,19 @@ export default class Tools {
         const particles = this.view.particles
         this.arrows = this.arrows.filter((arrow) => (arrow.age += dt) < 60)
         for (const arrow of this.arrows) {
-            if (arrow.stuck)
+            if (arrow.stuck) {
+                if (arrow.inGround) {
+                    // the land under it gained detail (or lost it): keep it as deep in as it went
+                    const height = this.ground(arrow.inGround.x, arrow.inGround.z)
+                    if (Math.abs(height - arrow.inGround.height) > 0.002) {
+                        arrow.position.y += height - arrow.inGround.height
+                        arrow.inGround.height = height
+                    }
+                }
+                else if (arrow.inPlant && arrow.inPlant.collision <= 0)
+                    arrow.age = 1e9         // the tree it was in came down
                 continue
+            }
             const steps = 6
             for (let s = 0; s < steps && !arrow.stuck; s++) {
                 const h = dt / steps
@@ -1454,7 +1469,25 @@ export default class Tools {
                     break
                 }
                 const ground = this.ground(head.x, head.z)
-                const plant = this.state.vegetation.solidAt(head.x, head.y, head.z, 0.02)
+                // trunks and rocks as drawn: the trunk's own thickness at that height, the
+                // rock's real surface (their colliders are rounder and wider)
+                let plant = this.state.vegetation.solidAt(head.x, head.y, head.z, 0.02)
+                let surface: { point: THREE.Vector3, normal: THREE.Vector3 } | null = null
+                const tail = previous.clone().addScaledVector(along, 0.38)
+                if (plant) {
+                    surface = plant.kind === PLANT.ROCK ? this.view.vegetation.rockHit(plant, tail, head) : this.trunkHit(plant, tail, head)
+                    if (!surface)
+                        plant = null
+                }
+                if (!plant) {
+                    // a rock's drawn shape reaches beyond its collider (higher, wider): test it
+                    const rock = this.state.vegetation.nearest(head.x, head.z, 4, [PLANT.ROCK])
+                    if (rock && Math.hypot(head.x - rock.x, head.z - rock.z) < rock.scale * 1.3 && head.y < rock.y + rock.scale * 1.5) {
+                        surface = this.view.vegetation.rockHit(rock, tail, head)
+                        if (surface)
+                            plant = rock
+                    }
+                }
                 if (head.y < WATER_LEVEL && ground < WATER_LEVEL) {
                     // into the water: a splash, then it floats where it slows down
                     particles.emit('splash', new THREE.Vector3(head.x, WATER_LEVEL, head.z), 8, UP, 2.2, 0.5)
@@ -1465,15 +1498,15 @@ export default class Tools {
                 }
                 else if (plant?.kind === PLANT.ROCK && speed > 9) {
                     // glances off rock
-                    const normal = new THREE.Vector3(head.x - plant.x, 0.4, head.z - plant.z).normalize()
-                    particles.emit('spark', head, 8, normal, 3.5, 0.7)
+                    const normal = surface!.normal
+                    particles.emit('spark', surface!.point, 8, normal, 3.5, 0.7)
                     v.reflect(normal).multiplyScalar(0.3).add(new THREE.Vector3((Math.random() - 0.5) * 2, Math.random(), (Math.random() - 0.5) * 2))
                     p.copy(previous)
                 }
                 else if (plant || head.y < ground) {
                     // sticks, driven in deeper the faster it flew
                     const depth = THREE.MathUtils.clamp(speed * (plant ? 0.004 : 0.006), 0.04, plant ? 0.2 : 0.3)
-                    const contact = head.clone()
+                    const contact = surface ? surface.point.clone() : head.clone()
                     if (!plant) {
                         // back along the path to where the head met the ground
                         const before = previous.clone().addScaledVector(along, 0.38)
@@ -1483,6 +1516,8 @@ export default class Tools {
                     p.copy(contact).addScaledVector(along, depth - 0.38)
                     arrow.stuck = true
                     arrow.stuckAt = arrow.age
+                    if (plant) arrow.inPlant = plant
+                    else arrow.inGround = { x: contact.x, z: contact.z, height: this.ground(contact.x, contact.z) }
                     this.hitMarker = 0.3
                     this.view.audio.play('arrowHit', contact)
                     arrow.wobbleAxis.crossVectors(along, UP)
@@ -2206,6 +2241,31 @@ export default class Tools {
         this.view.scene.remove(notch)
         notch.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) { mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose() } })
         this.notches.delete(plant)
+    }
+
+    /**
+     * Where a segment (from -> to) meets a trunk as it's drawn (an upright cylinder of the
+     * trunk's thickness at that height), and the bark's normal there; null if it passes by.
+     */
+    private trunkHit(plant: Plant, from: THREE.Vector3, to: THREE.Vector3) {
+        const radius = this.view.trees.trunkRadius(plant, Math.max(0, to.y - plant.y)) + 0.01
+        const dx = to.x - from.x, dz = to.z - from.z
+        const fx = from.x - plant.x, fz = from.z - plant.z
+        const a = dx * dx + dz * dz, b = 2 * (fx * dx + fz * dz), c = fx * fx + fz * fz - radius * radius
+        let t: number
+        if (c <= 0)
+            t = 0           // already inside the bark
+        else {
+            const disc = b * b - 4 * a * c
+            if (a < 1e-9 || disc < 0)
+                return null
+            t = (- b - Math.sqrt(disc)) / (2 * a)
+            if (t < 0 || t > 1)
+                return null
+        }
+        const point = from.clone().lerp(to, t)
+        const normal = new THREE.Vector3(point.x - plant.x, 0, point.z - plant.z).normalize()
+        return { point, normal }
     }
 
     /** A short line by the toolbar: the move just started (or a tree's chops). */

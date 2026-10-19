@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 import View from './View'
 import State from '../State/State'
-import { PLANT } from '../State/Vegetation'
+import { PLANT, Plant } from '../State/Vegetation'
 import { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
 import Shadows, { SHADOW_UNIFORMS } from './Shadows'
 import vertexShader from './Materials/shaders/rocks/vertex.glsl'
@@ -22,6 +22,7 @@ type Layer = { mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMater
  * and level, refilled whenever the plants change or the player has moved enough.
  */
 export default class Vegetation {
+    private rockGeometry: THREE.BufferGeometry[] = []
     view: View
     state: State
     scene: THREE.Scene
@@ -83,6 +84,8 @@ export default class Vegetation {
             const { textures: set, rock: shapeKey, lod } = source.userData as { textures: string, rock: string, lod: number }
             if (!shapes.has(shapeKey))
                 shapes.set(shapeKey, shapes.size)
+            if (lod === 0)
+                this.rockGeometry[shapes.get(shapeKey)!] = source.geometry
             const geometry = new THREE.InstancedBufferGeometry()
             geometry.index = source.geometry.index
             for (const name of ['position', 'normal', 'uv'])
@@ -101,6 +104,55 @@ export default class Vegetation {
         })
         this.shapes = shapes.size
         this.version = -1
+    }
+
+    /**
+     * Where a segment (from -> to, world) first meets a rock as it's drawn, and the surface's
+     * normal there; null if it misses (arrows strike the real rock, not its rough collider).
+     */
+    rockHit(plant: Plant, from: THREE.Vector3, to: THREE.Vector3) {
+        const shape = Math.floor((plant.tint * 7.31 + plant.rotation * 0.37) % 1 * this.shapes)
+        const geometry = this.rockGeometry[shape]
+        if (!geometry)
+            return null
+        // into the rock's own space (as the vertex shader places it: scaled, turned, moved)
+        const size = plant.scale * 1.15
+        const center = new THREE.Vector3(plant.x, plant.y + plant.scale * 0.2, plant.z)
+        const c = Math.cos(plant.rotation), s = Math.sin(plant.rotation)
+        const toLocal = (p: THREE.Vector3) => {
+            const d = p.clone().sub(center).divideScalar(size)
+            return new THREE.Vector3(c * d.x - s * d.z, d.y, s * d.x + c * d.z)
+        }
+        const toWorld = (p: THREE.Vector3) => new THREE.Vector3(c * p.x + s * p.z, p.y, - s * p.x + c * p.z).multiplyScalar(size).add(center)
+        const a = toLocal(from), b = toLocal(to)
+        const length = a.distanceTo(b)
+        if (length < 1e-6)
+            return null
+        const ray = new THREE.Ray(a, b.clone().sub(a).divideScalar(length))
+        const position = geometry.getAttribute('position') as THREE.BufferAttribute
+        const index = geometry.index
+        const count = index ? index.count : position.count
+        const v0 = new THREE.Vector3(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), hit = new THREE.Vector3()
+        let best = Infinity, normal: THREE.Vector3 | null = null
+        for (let i = 0; i < count; i += 3) {
+            const i0 = index ? index.getX(i) : i, i1 = index ? index.getX(i + 1) : i + 1, i2 = index ? index.getX(i + 2) : i + 2
+            v0.fromBufferAttribute(position, i0)
+            v1.fromBufferAttribute(position, i1)
+            v2.fromBufferAttribute(position, i2)
+            if (ray.intersectTriangle(v0, v1, v2, false, hit)) {
+                const t = hit.distanceTo(a)
+                if (t < best && t <= length) {
+                    best = t
+                    normal = new THREE.Vector3().crossVectors(v1.clone().sub(v0), v2.clone().sub(v0)).normalize()
+                }
+            }
+        }
+        if (!normal)
+            return null
+        const point = toWorld(a.clone().addScaledVector(ray.direction, best))
+        const n = new THREE.Vector3(c * normal.x + s * normal.z, normal.y, - s * normal.x + c * normal.z).normalize()
+        if (n.dot(to.clone().sub(from)) > 0) n.negate()
+        return { point, normal: n }
     }
 
     /** Make room for `count` instances (grows by doubling). */
