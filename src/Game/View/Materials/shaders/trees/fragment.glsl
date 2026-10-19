@@ -10,6 +10,7 @@ varying vec3 vNormal;
 varying vec3 vObjectNormal;
 varying vec3 vWorldPosition;
 varying float vAo;
+varying float vFellCut;
 varying float vDistance;
 #ifndef BAKE
 varying vec3 vHaze;
@@ -26,6 +27,10 @@ float dither(vec2 pixel) { return fract(52.9829189 * fract(dot(pixel, vec2(0.067
 
 void main()
 {
+    // a felled tree: below the cut is the stump
+    if (vFellCut < 0.0)
+        discard;
+
     #ifdef SHADOW
         // depth only (Shadows.ts): the near trees cast up to the middle of the hand-over band,
         // the billboards beyond it

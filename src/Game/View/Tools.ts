@@ -485,6 +485,14 @@ type Arrow = {
     inGround?: { x: number, z: number, height: number }
     inPlant?: Plant
 }
+type Mark = {
+    kind: 'notch' | 'slash' | 'scratch' | 'nick'
+    group: THREE.Group
+    toward: THREE.Vector3          // out from the trunk's axis to where it was struck
+    y: number                      // its height (world)
+    tilt: number                   // radians: the stroke's slant across the trunk
+    progress: number               // a notch: how far through (0 .. 1 of the chops it takes)
+}
 type SwingState = { tool: ToolName, def: Swing, keys: Key[], time: number, hits: Set<unknown>, queued: boolean, recoil: boolean, stepped: boolean, whooshed: boolean, name: string, spinFrom: number, landed: boolean }
 
 const vector = (v: V3) => new THREE.Vector3(v[0], v[1], v[2])
@@ -583,7 +591,10 @@ export default class Tools {
     private lastStroke = - 10                         // when the last stroke ended (the sequence starts again after a pause)
     private moveLabel: HTMLElement
     private moveLabelTime = 0
-    private notches = new Map<Plant, THREE.Group>()   // the cut in a trunk being felled
+    // the marks tools leave on trunks: an axe's notches (where it's being felled), a sword's
+    // slashes, a sickle's scratches, a hoe's nicks
+    private marks = new Map<Plant, Mark[]>()
+    private lastTip: THREE.Vector3 | null = null       // the working end's place last frame (the stroke's motion)
     private useHeld = false
     private recover = 0              // after a shot
     private aimLift = 0              // the camera rising to aim level as the draw starts
@@ -593,7 +604,6 @@ export default class Tools {
     private raised = 0               // the torch held up
     private torchTilt = 0            // radians forward: the torch lags the arm's swing (a spring)
     private torchTiltSpeed = 0
-    private chops = new Map<Plant, number>()
     private spans = new Map<ToolName, [number, number]>()
     private bodyOffset = new THREE.Vector3()          // keeping the held tool out of the body (eased)
     private bodyTurn = new THREE.Quaternion()
@@ -1222,7 +1232,11 @@ export default class Tools {
     /** Tests the live stroke against the world, after the tool is placed in the hand. */
     private testHits() {
         const swing = this.swing
-        if (!swing || swing.recoil || this.freeze > 0)
+        if (!swing || swing.recoil) {
+            this.lastTip = null
+            return
+        }
+        if (this.freeze > 0)
             return
         const def = swing.def
         const tool = swing.tool
@@ -1230,6 +1244,8 @@ export default class Tools {
         model.updateMatrixWorld(true)
         const base = new THREE.Vector3(0, 0.3, 0).applyMatrix4(model.matrixWorld)
         const tip = new THREE.Vector3(0, TIP[tool], 0).applyMatrix4(model.matrixWorld)
+        const motionFrom = this.lastTip
+        this.lastTip = tip.clone()
         if (tool === 'sword' && swing.time >= def.active[0] - 0.03 && swing.time <= def.active[1] + 0.05)
             this.trail.push(base, tip)
         if (swing.time < def.active[0] || swing.time > def.active[1])
@@ -1260,33 +1276,40 @@ export default class Tools {
                     this.rebound(0.06, 0.4)
                     return
                 }
+                if (plant.felled) {
+                    // a stump: a dull knock, nothing more to fell
+                    this.view.audio.play('hitWood', point, 0.5)
+                    particles.emit('chip', point, 4, normal, 1.8, 0.6)
+                    this.freeze = 0.06
+                    this.rebound(0.05, 0.38)
+                    return
+                }
+                const motion = motionFrom ? tip.clone().sub(motionFrom) : new THREE.Vector3(1, 0, 0)
                 this.view.audio.play('hitWood', point, tool === 'axe' ? 1 : 0.6)
                 particles.emit('chip', point, tool === 'axe' ? 12 : 6, normal, tool === 'axe' ? 3.2 : 2.2, 0.65)
                 this.view.trees.strike(plant.x, plant.z, plant.x - p[0], plant.z - p[2], tool === 'axe' ? 1 : 0.45)
                 if (tool === 'axe') {
-                    // the cut deepens with every chop; a thin trunk falls after 5 to 10, a
-                    // thick one takes up to 20 (the heavy chop counts twice)
+                    // the axe bites a notch where it lands, slanted as the stroke came, deeper
+                    // with every chop on it; the tree goes when the cuts are through (a thin
+                    // trunk after 5 to 10 chops, a thick one up to 20; the heavy chop counts twice)
                     this.freeze = 0.1
                     this.jolt(0.34)
                     const needed = chopsToFell(plant)
-                    const chops = (this.chops.get(plant) ?? 0) + (swing.name === 'mighty' ? 2 : 1)
-                    this.chops.set(plant, chops)
-                    this.notch(plant, point, Math.min(1, chops / needed))
-                    this.showLabel(`${MOVE_LABELS[swing.name] ?? 'Chop'}<span>${Math.min(chops, needed)} / ${needed}</span>`)
+                    const mark = this.cutInto(plant, point, motion, 'notch', (swing.name === 'mighty' ? 2 : 1) / needed)
+                    const through = (this.marks.get(plant) ?? []).filter((m) => m.kind === 'notch').reduce((sum, m) => sum + m.progress, 0)
+                    this.showLabel(`${MOVE_LABELS[swing.name] ?? 'Chop'}<span>${Math.min(needed, Math.round(through * needed))} / ${needed}</span>`)
                     particles.emit('chip', point, 8, normal, 2.6, 0.7)
-                    if (chops >= needed) {
-                        this.chops.delete(plant)
-                        this.removeNotch(plant)
-                        this.view.trees.fell(plant, plant.x - p[0], plant.z - p[2])
-                        particles.emit('leaf', new THREE.Vector3(plant.x, plant.y + plant.scale * 0.7, plant.z), 18, UP, 2.5, 0.9)
-                    }
+                    if (through >= 0.999)
+                        this.fellAt(plant, mark)
                     this.rebound(0.16, 0.42)
                 }
                 else {
-                    // the hoe and the blades nick the bark
-                    if (tool === 'hoe' && !this.notches.has(plant))
-                        this.notch(plant, point, 0.06)
-                    this.freeze = 0.07
+                    // a sword scars the bark along its stroke (it can't fell a tree: that's
+                    // the axe's work), a sickle scratches it, a hoe nicks it
+                    this.cutInto(plant, point, motion, tool === 'sword' ? 'slash' : tool === 'sickle' ? 'scratch' : 'nick', 0)
+                    if (tool === 'sword')
+                        this.showLabel('Scarred the bark<span>an axe fells trees</span>')
+                    this.freeze = tool === 'sword' ? 0.09 : 0.07
                     this.jolt(0.2)
                     this.rebound(0.05, 0.38)
                 }
@@ -1435,7 +1458,7 @@ export default class Tools {
                         arrow.inGround.height = height
                     }
                 }
-                else if (arrow.inPlant && arrow.inPlant.collision <= 0)
+                else if (arrow.inPlant && arrow.inPlant.felled && arrow.position.y > arrow.inPlant.y + (arrow.inPlant.stump ?? 0))
                     arrow.age = 1e9         // the tree it was in came down
                 continue
             }
@@ -2181,66 +2204,119 @@ export default class Tools {
     }
 
     /**
-     * The cut in a trunk being felled: fresh pale wood on the side the chops come from, wider
-     * and deeper as it goes (progress 0 .. 1 of the chops it takes).
+     * A tool's mark on a trunk where it struck, slanted along the stroke's path across the
+     * trunk. A blow close to an existing mark of the same kind (the same side, near the same
+     * height) deepens it; elsewhere it starts another. Returns the mark.
      */
-    private notch(plant: Plant, point: THREE.Vector3, progress: number) {
-        let notch = this.notches.get(plant)
-        if (!notch) {
-            // a felling notch: a level lower cut and a sloping upper one meeting inside the
-            // trunk; unit size, its mouth on the bark (z = 0), reaching in to z = -1
-            const geometry = new THREE.BufferGeometry()
-            const v = [
-                // upper cut: from the top of the mouth down to the back of the notch
-                - 0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, - 0.5, - 1, - 0.5, 0.5, 0, 0.5, - 0.5, - 1, - 0.5, - 0.5, - 1,
-                // lower cut: level, from the mouth to the back
-                - 0.5, - 0.5, 0, - 0.5, - 0.5, - 1, 0.5, - 0.5, - 1, - 0.5, - 0.5, 0, 0.5, - 0.5, - 1, 0.5, - 0.5, 0,
-                // the ends
-                - 0.5, 0.5, 0, - 0.5, - 0.5, - 1, - 0.5, - 0.5, 0, 0.5, 0.5, 0, 0.5, - 0.5, 0, 0.5, - 0.5, - 1
-            ]
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
-            const shade = [0.95, 0.95, 0.72, 0.95, 0.72, 0.72, 1, 0.8, 0.8, 1, 0.8, 1, 0.82, 0.7, 0.82, 0.82, 0.82, 0.7]
-            geometry.setAttribute('color', new THREE.Float32BufferAttribute(shade.flatMap((k) => [k, k, k]), 3))
-            geometry.computeVertexNormals()
-            // fresh wood, pale even in the shade; drawn pulled toward the eye by the cut's depth
-            // (along the line of sight, so it stays where it is on screen): the bark it's cut
-            // into doesn't hide it, anything nearer (the woodcutter) still does
-            const material = new THREE.MeshStandardMaterial({ color: '#dcbc8c', roughness: 0.9, vertexColors: true, side: THREE.DoubleSide, emissive: '#3c2c18' })
-            const pull = { value: 0 }
-            material.onBeforeCompile = (shader) => {
-                shader.uniforms.uPull = pull
-                shader.vertexShader = 'uniform float uPull;\n' + shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
-                    mvPosition.xyz *= max(0.05, 1.0 - uPull / max(length(mvPosition.xyz), 0.001));
-                    gl_Position = projectionMatrix * mvPosition;`)
+    private cutInto(plant: Plant, point: THREE.Vector3, motion: THREE.Vector3, kind: Mark['kind'], amount: number) {
+        const toward = new THREE.Vector3(point.x - plant.x, 0, point.z - plant.z)
+        if (toward.lengthSq() < 1e-6) toward.set(1, 0, 0)
+        toward.normalize()
+        // the slant: the stroke's motion across the trunk's face, as an angle from level
+        const across = motion.clone().addScaledVector(toward, - motion.dot(toward))
+        const side = new THREE.Vector3().crossVectors(UP, toward)
+        let tilt = Math.atan2(across.y, across.dot(side))
+        if (tilt > Math.PI / 2) tilt -= Math.PI
+        if (tilt < - Math.PI / 2) tilt += Math.PI
+        tilt = THREE.MathUtils.clamp(tilt, - 0.9, 0.9)
+        const y = THREE.MathUtils.clamp(point.y, plant.y + 0.35, plant.y + 1.5)
+        const marks = this.marks.get(plant) ?? []
+        let mark = marks.find((m) => m.kind === kind && m.toward.angleTo(toward) < 0.6 && Math.abs(m.y - y) < 0.3)
+        if (!mark || kind === 'slash' || kind === 'scratch') {
+            const fresh: Mark = { kind, group: this.markMesh(kind), toward, y, tilt, progress: 0 }
+            this.view.scene.add(fresh.group)
+            marks.push(fresh)
+            this.marks.set(plant, marks)
+            while (marks.length > 10)
+                this.dropMark(marks.shift()!)
+            // only so many trees keep their marks
+            if (this.marks.size > 24) {
+                const [oldest, list] = this.marks.entries().next().value!
+                list.forEach((m) => this.dropMark(m))
+                this.marks.delete(oldest)
             }
-            const mesh = new THREE.Mesh(geometry, material)
-            mesh.userData.pull = pull
-            notch = new THREE.Group()
-            notch.add(mesh)
-            const toward = new THREE.Vector3(point.x - plant.x, 0, point.z - plant.z)
-            if (toward.lengthSq() < 1e-6) toward.set(1, 0, 0)
-            notch.userData = { toward: toward.normalize(), y: THREE.MathUtils.clamp(point.y, plant.y + 0.35, plant.y + 1.3) }
-            this.notches.set(plant, notch)
-            this.view.scene.add(notch)
-            if (this.notches.size > 16)
-                this.removeNotch(this.notches.keys().next().value!)
+            mark = fresh
         }
-        const radius = this.view.trees.trunkRadius(plant, notch.userData.y - plant.y)
-        const toward = notch.userData.toward as THREE.Vector3
-        // the mouth just proud of the bark, wider and deeper with each chop
-        notch.position.set(plant.x, notch.userData.y, plant.z).addScaledVector(toward, radius * 0.97)
-        notch.lookAt(notch.position.clone().add(toward))
-        notch.scale.set(radius * (0.9 + progress * 0.6), 0.07 + progress * 0.2, 0.02 + progress * radius * 1.05)
-        ;(notch.children[0].userData.pull as { value: number }).value = notch.scale.z + radius * 0.35
+        else
+            mark.tilt = mark.tilt * 0.75 + tilt * 0.25
+        mark.progress = Math.min(1, mark.progress + amount)
+        this.placeMark(plant, mark)
+        return mark
     }
 
-    private removeNotch(plant: Plant) {
-        const notch = this.notches.get(plant)
-        if (!notch)
-            return
-        this.view.scene.remove(notch)
-        notch.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) { mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose() } })
-        this.notches.delete(plant)
+    /** A mark's look: an axe's wedge of fresh wood, a sword's long thin slash, a sickle's scratch, a hoe's nick. */
+    private markMesh(kind: Mark['kind']) {
+        // a wedge: a level lower face and a sloping upper one meeting inside the trunk; unit
+        // size, its mouth on the bark (z = 0), reaching in to z = -1
+        const geometry = new THREE.BufferGeometry()
+        const v = [
+            - 0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, - 0.5, - 1, - 0.5, 0.5, 0, 0.5, - 0.5, - 1, - 0.5, - 0.5, - 1,
+            - 0.5, - 0.5, 0, - 0.5, - 0.5, - 1, 0.5, - 0.5, - 1, - 0.5, - 0.5, 0, 0.5, - 0.5, - 1, 0.5, - 0.5, 0,
+            - 0.5, 0.5, 0, - 0.5, - 0.5, - 1, - 0.5, - 0.5, 0, 0.5, 0.5, 0, 0.5, - 0.5, 0, 0.5, - 0.5, - 1
+        ]
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
+        const shade = [0.95, 0.95, 0.72, 0.95, 0.72, 0.72, 1, 0.8, 0.8, 1, 0.8, 1, 0.82, 0.7, 0.82, 0.82, 0.82, 0.7]
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(shade.flatMap((k) => [k, k, k]), 3))
+        geometry.computeVertexNormals()
+        // fresh wood, pale even in the shade; drawn pulled toward the eye by the cut's depth
+        // (along the line of sight, so it stays where it is on screen): the bark it's cut into
+        // doesn't hide it, anything nearer (the woodcutter) still does
+        const color = kind === 'nick' ? '#c9a878' : '#dcbc8c'
+        const material = new THREE.MeshStandardMaterial({ color, roughness: 0.9, vertexColors: true, side: THREE.DoubleSide, emissive: '#3c2c18' })
+        const pull = { value: 0 }
+        material.onBeforeCompile = (shader) => {
+            shader.uniforms.uPull = pull
+            shader.vertexShader = 'uniform float uPull;\n' + shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+                mvPosition.xyz *= max(0.05, 1.0 - uPull / max(length(mvPosition.xyz), 0.001));
+                gl_Position = projectionMatrix * mvPosition;`)
+        }
+        const mesh = new THREE.Mesh(geometry, material)
+        mesh.userData.pull = pull
+        const group = new THREE.Group()
+        group.add(mesh)
+        return group
+    }
+
+    /** Put a mark on its trunk: on the bark at its side and height, slanted, sized by its kind and depth. */
+    private placeMark(plant: Plant, mark: Mark) {
+        const radius = this.view.trees.trunkRadius(plant, mark.y - plant.y)
+        const group = mark.group
+        group.position.set(plant.x, mark.y, plant.z).addScaledVector(mark.toward, radius * 0.97)
+        group.lookAt(group.position.clone().add(mark.toward))
+        group.rotateZ(mark.tilt)
+        const p = mark.progress
+        const size: Record<Mark['kind'], [number, number, number]> = {
+            notch: [radius * (0.9 + p * 0.6), 0.07 + p * 0.2, 0.02 + p * radius * 1.05],
+            slash: [radius * 1.5, 0.018, 0.025],
+            scratch: [radius * 0.8, 0.012, 0.012],
+            nick: [radius * 0.5, 0.05, 0.03]
+        }
+        group.scale.set(...size[mark.kind])
+        ;(group.children[0].userData.pull as { value: number }).value = group.scale.z + radius * 0.35
+    }
+
+    private dropMark(mark: Mark) {
+        this.view.scene.remove(mark.group)
+        mark.group.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) { mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose() } })
+    }
+
+    /**
+     * The cuts are through: the tree falls toward its notches (it hinges on the wood left on
+     * the far side, the way a notched tree does), cut through at the deepest one's height.
+     */
+    private fellAt(plant: Plant, deepest: Mark) {
+        const marks = this.marks.get(plant) ?? []
+        const toward = new THREE.Vector3()
+        for (const mark of marks)
+            if (mark.kind === 'notch')
+                toward.addScaledVector(mark.toward, mark.progress)
+        if (toward.lengthSq() < 1e-6) toward.copy(deepest.toward)
+        toward.normalize()
+        marks.forEach((m) => this.dropMark(m))
+        this.marks.delete(plant)
+        this.view.trees.fell(plant, toward.x, toward.z, deepest.y - plant.y)
+        this.showLabel('Timber!<span>it falls toward the cut</span>')
+        this.view.particles.emit('leaf', new THREE.Vector3(plant.x, plant.y + plant.scale * 0.7, plant.z), 18, UP, 2.5, 0.9)
     }
 
     /**

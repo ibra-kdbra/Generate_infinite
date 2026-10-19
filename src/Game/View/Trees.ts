@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import View from './View'
 import State from '../State/State'
 import Settings, { Quality } from '../Settings'
-import { PLANT, Plant, PlantKind } from '../State/Vegetation'
+import { Log, PLANT, Plant, PlantKind } from '../State/Vegetation'
 import { CLOUD_UNIFORMS, LIGHT_UNIFORMS } from './Sky'
 import Shadows, { SHADOW_UNIFORMS } from './Shadows'
 import { Tree } from '../Vendor/ezTree/tree.js'
@@ -54,6 +54,14 @@ const FELLED = 4
 const CELLS: Record<Quality, number> = { low: 192, medium: 256, high: 384, ultra: 448 }
 
 type Instances = { instance: THREE.InstancedBufferAttribute, extra: THREE.InstancedBufferAttribute }
+type Felled = {
+    plant: Plant, angle: number, speed: number, direction: number, rest: number, landed: boolean
+    cut: number                      // where it was cut through (metres above its foot)
+    drop: number                     // how far its butt has dropped off the stump
+    radius: number                   // the trunk's at the cut
+    stump: THREE.Group
+    end: THREE.Mesh                  // the fresh wood at the cut end of the trunk
+}
 type Variant = {
     species: Species
     radius: number                   // crown half width, tree height = 1
@@ -119,7 +127,10 @@ export default class Trees {
     private materials = new Map<string, THREE.ShaderMaterial>()
     private version = -1
     private builtAt = new THREE.Vector2(Infinity, Infinity)
-    private felled: { plant: Plant, angle: number, speed: number, direction: number, rest: number, landed: boolean }[] = []
+    private felled: Felled[] = []
+    private stumpMaterials = {
+        wood: new THREE.MeshStandardMaterial({ color: '#d9bd90', roughness: 0.85, emissive: '#2a1e10' })
+    }
 
     constructor() {
         this.view = View.getInstance()
@@ -143,6 +154,7 @@ export default class Trees {
         this.uniforms.uTreeHitDirection = { value: new THREE.Vector2(1, 0) }
         // trees falling or fallen: x, z, angle from upright, direction of the fall
         this.uniforms.uFelled = { value: Array.from({ length: FELLED }, () => new THREE.Vector4(0, 0, 0, 0)) }
+        this.uniforms.uFelledCut = { value: Array.from({ length: FELLED }, () => new THREE.Vector4(0, 0, 0, 0)) }
 
         this.applyQuality()
         this.settings.events.on('change:quality', () => this.applyQuality())
@@ -378,6 +390,7 @@ export default class Trees {
         for (const variant of this.variants)
             this.scene.add(variant.bark, variant.leaves, variant.barkMid, variant.leavesMid)
         this.scene.add(this.impostor.mesh)
+        this.state.vegetation.trunkRadius = (plant, height) => this.trunkRadius(plant, height)
         this.ready = true
         this.version = -1
     }
@@ -560,6 +573,12 @@ export default class Trees {
         this.uniforms.uTreeHitDirection.value.set(directionX / length, directionZ / length)
     }
 
+    /** How wide a tree's crown is (half its width / its height). */
+    private crownRadius(plant: Plant) {
+        const options = this.variants.filter((variant) => variant.species.kind === plant.kind)
+        return options.length ? options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))].radius : 0.3
+    }
+
     /** How thick a tree's trunk is drawn `height` metres above its foot (its radius, metres). */
     trunkRadius(plant: Plant, height: number) {
         const options = this.variants.filter((variant) => variant.species.kind === plant.kind)
@@ -575,33 +594,70 @@ export default class Trees {
     }
 
     /**
-     * Fell a tree away from (directionX, directionZ): it tips slowly, then falls like a rod
-     * hinged at its foot (angular acceleration 3g/2L sin θ) until it meets the slope, bounces
-     * once and lies there. Its trunk no longer blocks the way.
+     * Fell a tree cut through `cut` metres above its foot, toward (directionX, directionZ):
+     * above the cut it tips slowly, then falls like a rod hinged at the cut (angular
+     * acceleration 3g/2L sin θ), its butt dropping off the stump, until it meets the slope,
+     * bounces once and lies there. The stump stays, a fresh-cut top on it; the trunk lying on
+     * the ground is solid and its branches a thicket (State/Vegetation logs).
      */
-    fell(plant: Plant, directionX: number, directionZ: number) {
+    fell(plant: Plant, directionX: number, directionZ: number, cut = 0.9) {
         if (this.felled.some((tree) => tree.plant === plant))
             return
-        if (this.felled.length >= FELLED) {
-            const oldest = this.felled.shift()!
-            this.state.vegetation.remove(oldest.plant)
-        }
+        if (this.felled.length >= FELLED)
+            this.clearFelled(this.felled.shift()!)
         const direction = Math.atan2(directionZ, directionX)
         // lying angle: where the trunk meets the ground at half its height down the slope
         const reach = plant.scale * 0.5
         const ground = this.state.player.groundAt(plant.x + Math.cos(direction) * reach, plant.z + Math.sin(direction) * reach)
         const rest = THREE.MathUtils.clamp(Math.PI / 2 - Math.atan2(ground - plant.y, reach), 1.15, 1.95)
-        plant.collision = 0
+        const radius = this.trunkRadius(plant, cut)
+        plant.felled = true
+        plant.stump = cut
+        // the stump: bark below the cut, the cut's fresh wood on top; the cut end of the trunk
+        const stump = new THREE.Group()
+        const side = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 1.12, cut + 0.15, 14, 1, true), this.stumpBark(plant, cut))
+        side.position.y = (cut - 0.15) / 2
+        const top = new THREE.Mesh(new THREE.CircleGeometry(radius, 14), this.stumpMaterials.wood)
+        top.rotation.x = - Math.PI / 2
+        top.position.y = cut
+        stump.add(side, top)
+        stump.position.set(plant.x, plant.y, plant.z)
+        const end = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.97, 14), this.stumpMaterials.wood)
+        this.scene.add(stump, end)
         this.view.audio?.play('treeFall', new THREE.Vector3(plant.x, plant.y + 2, plant.z), 1.4)
-        this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false })
+        this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false, cut, drop: 0, radius, stump, end })
+    }
+
+    /** The stump's bark: the tree's own bark texture, wrapped round it. */
+    private stumpBark(plant: Plant, height: number) {
+        const options = this.variants.filter((variant) => variant.species.kind === plant.kind)
+        const species = options.length ? options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))].species : SPECIES[0]
+        const map = this.texture(`bark_${species.bark}_color`, true).clone()
+        map.colorSpace = THREE.SRGBColorSpace
+        map.repeat.set(2, Math.max(0.5, height))
+        map.needsUpdate = true
+        return new THREE.MeshStandardMaterial({ map, roughness: 0.95, color: '#b9b0a4' })
+    }
+
+    private clearFelled(tree: Felled) {
+        this.scene.remove(tree.stump, tree.end)
+        tree.stump.traverse((object) => {
+            const mesh = object as THREE.Mesh
+            if (!mesh.isMesh) return
+            mesh.geometry.dispose()
+            if (mesh.material !== this.stumpMaterials.wood) (mesh.material as THREE.MeshStandardMaterial).dispose()
+        })
+        tree.end.geometry.dispose()
+        this.state.vegetation.remove(tree.plant)
     }
 
     private updateFelled(dt: number) {
         const slots = this.uniforms.uFelled.value as THREE.Vector4[]
+        const cuts = this.uniforms.uFelledCut.value as THREE.Vector4[]
         const p = this.state.player.position.current
         this.felled = this.felled.filter((tree) => {
             if (Math.hypot(tree.plant.x - p[0], tree.plant.z - p[2]) > 90) {
-                this.state.vegetation.remove(tree.plant)
+                this.clearFelled(tree)
                 return false
             }
             return true
@@ -627,11 +683,36 @@ export default class Trees {
                 }
             }
         }
+        const logs: Log[] = []
         slots.forEach((slot, i) => {
             const tree = this.felled[i]
-            if (tree) slot.set(tree.plant.x, tree.plant.z, tree.angle, tree.direction)
-            else slot.set(0, 0, 0, 0)
+            if (!tree) {
+                slot.set(0, 0, 0, 0)
+                cuts[i].set(0, 0, 0, 0)
+                return
+            }
+            // the butt drops off the stump as the tree goes over, to lie on the ground
+            tree.drop = Math.max(0, tree.cut - tree.radius) * THREE.MathUtils.smoothstep(tree.angle, 0.45, tree.rest)
+            slot.set(tree.plant.x, tree.plant.z, tree.angle, tree.direction)
+            cuts[i].set(tree.cut, tree.drop, 0, 0)
+            // the trunk's line now, from the cut end; its cut end capped with fresh wood
+            const along = new THREE.Vector3(Math.cos(tree.direction) * Math.sin(tree.angle), Math.cos(tree.angle), Math.sin(tree.direction) * Math.sin(tree.angle))
+            const butt = new THREE.Vector3(tree.plant.x, tree.plant.y + tree.cut - tree.drop, tree.plant.z)
+            tree.end.position.copy(butt).addScaledVector(along, 0.005)
+            tree.end.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), along.clone().negate())
+            if (tree.angle > 0.3) {
+                const scale = tree.plant.scale
+                const crown = this.crownRadius(tree.plant) * scale
+                const tip = butt.clone().addScaledVector(along, scale * 0.55)
+                const from = butt.clone().addScaledVector(along, scale * 0.35), to = butt.clone().addScaledVector(along, scale * 0.95)
+                logs.push({
+                    plant: tree.plant,
+                    trunk: { a: butt.toArray(), b: tip.toArray(), radius: tree.radius * 0.9 },
+                    crown: { a: from.toArray(), b: to.toArray(), radius: crown * 0.55 }
+                })
+            }
         })
+        this.state.vegetation.logs = logs
     }
 
     /** The trunk hits the ground: dust along it, leaves flying from the crown, the ground shakes. */

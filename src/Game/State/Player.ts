@@ -83,6 +83,7 @@ export default class Player {
     stanceBack = 0.6             // backing away: this much of the walking pace
     stanceSide = 0.85            // stepping sideways
     actionPace = 1               // set by the tools: a stroke, drawing or aiming slows the feet
+    thicket = 1                  // 1 in the open .. less pushing through a felled tree's branches
     // the body's acceleration in its own frame (m/s², smoothed): forward, to the right; the
     // view leans into it
     acceleration = { forward: 0, right: 0 }
@@ -285,7 +286,7 @@ export default class Player {
                 const climb = - (this.groundNormal[0] * wish[0] + this.groundNormal[2] * wish[2]) / Math.max(0.3, this.groundNormal[1])
                 slope = climb > 0 ? Math.max(0.55, 1 - climb * 0.6) : Math.min(1.15, 1 - climb * 0.2)
             }
-            const pace = Math.min(targetSpeed, paceLimit) * slope * this.actionPace
+            const pace = Math.min(targetSpeed, paceLimit) * slope * this.actionPace * this.thicket
             let wx = wish[0] * pace, wz = wish[2] * pace
             if (this.grounded && steep) {
                 // no climbing a too-steep slope: drop the uphill part of the wish
@@ -398,8 +399,12 @@ export default class Player {
             }
         }
 
+        // felled trees: their trunks are solid (or stood on), their crowns thickets
+        const logs = this.state.vegetation?.resolveLogs(p, v, 0.32)
+        this.thicket += ((logs ? logs.free : 1) - this.thicket) * Math.min(1, dt * 10)
+
         // ── ground contact ──
-        const newGround = this.groundAt(p[0], p[2])
+        const newGround = Math.max(this.groundAt(p[0], p[2]), logs?.stand ?? - Infinity)
         if (this.swimming && p[1] < newGround + 0.25) {
             // the lake bed: swim along it
             p[1] = newGround + 0.25

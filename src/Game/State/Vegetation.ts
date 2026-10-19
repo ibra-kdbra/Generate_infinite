@@ -19,6 +19,15 @@ export type Plant = {
     rotation: number
     tint: number         // 0..1 colour variation
     collision: number    // radius the player can't enter (0 = walk through)
+    felled?: boolean     // cut down (what stands is its stump)
+    stump?: number       // the stump's height, once felled
+}
+
+/** A felled tree lying on the ground: its trunk (solid, can be stood on) and its crown (a thicket of branches). */
+export type Log = {
+    plant: Plant
+    trunk: { a: number[], b: number[], radius: number }
+    crown: { a: number[], b: number[], radius: number }
 }
 
 type Cell = { ix: number, iz: number, plants: Plant[], chunkSize: number }
@@ -40,7 +49,19 @@ const smoothstep = (a: number, b: number, v: number) => {
  * as the terrain under them is generated and dropped behind the player; heights are
  * re-read when the terrain there gets more detailed. Trunks and big rocks collide.
  */
+const THREE_clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+
+/** The point of segment a-b nearest to p. */
+function closestOnSegment(p: vec3 | number[], a: number[], b: number[]) {
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+    const length = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
+    const t = length > 1e-9 ? THREE_clamp(((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / length, 0, 1) : 0
+    return [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]
+}
+
 export default class Vegetation {
+    logs: Log[] = []                          // felled trees lying on the ground (View/Trees)
+    trunkRadius: ((plant: Plant, height: number) => number) | null = null      // a trunk's thickness as drawn (View/Trees)
     game: Game
     state: State
     cellSize = 32
@@ -211,6 +232,8 @@ export default class Vegetation {
 
     /** How tall a plant's solid part is: a trunk up to where the crown starts, a boulder's top. */
     private solidTop(plant: Plant) {
+        if (plant.stump !== undefined)
+            return plant.y + plant.stump
         if (plant.kind === PLANT.ROCK)
             return plant.y + plant.scale * 1.05      // the scanned boulders: under ~1 m tall per metre across
         return plant.y + plant.scale * (plant.kind === PLANT.CONIFER ? 0.35 : 0.45)
@@ -234,7 +257,7 @@ export default class Vegetation {
                         continue
                     const dx = position[0] - plant.x, dz = position[2] - plant.z
                     const distance = Math.hypot(dx, dz)
-                    const minimum = plant.collision + radius
+                    const minimum = this.radiusOf(plant, position[1] - plant.y) + radius
                     if (distance < minimum && distance > 1e-4) {
                         position[0] = plant.x + dx / distance * minimum
                         position[2] = plant.z + dz / distance * minimum
@@ -244,6 +267,57 @@ export default class Vegetation {
             }
         }
         return hit
+    }
+
+    /**
+     * How thick a plant is at this height as it's drawn: a trunk's bark (the view measures
+     * its trees: `trunkRadius`), else its collider.
+     */
+    private radiusOf(plant: Plant, height: number) {
+        if (plant.kind !== PLANT.ROCK && plant.kind !== PLANT.BUSH && this.trunkRadius)
+            return this.trunkRadius(plant, THREE_clamp(height, 0.3, plant.stump ?? 1.6)) + 0.03
+        return plant.collision
+    }
+
+    /**
+     * The felled trees lying on the ground: their trunks are solid (the body is pushed out of
+     * them, or stands on one stepped up onto) and their crowns are thickets that hold the body
+     * back. Returns the height of a trunk's top to stand on (if any) and how freely one moves
+     * here (1 in the open .. 0.35 deep in the branches); pushes `position` out of trunks and
+     * takes away the velocity into them.
+     */
+    resolveLogs(position: vec3, velocity: vec3, radius: number) {
+        let stand: number | null = null, free = 1
+        for (const log of this.logs) {
+            const t = log.trunk
+            const c = closestOnSegment(position, t.a, t.b)
+            const dx = position[0] - c[0], dz = position[2] - c[2]
+            const horizontal = Math.hypot(dx, dz)
+            const top = c[1] + t.radius
+            if (horizontal < t.radius + radius) {
+                if (position[1] >= top - 0.4) {
+                    // stepped up onto it (or standing on it)
+                    if (horizontal < t.radius + radius * 0.4)
+                        stand = Math.max(stand ?? - Infinity, top)
+                }
+                else if (horizontal > 1e-4) {
+                    const push = t.radius + radius - horizontal
+                    position[0] += dx / horizontal * push
+                    position[2] += dz / horizontal * push
+                    const into = (velocity[0] * dx + velocity[2] * dz) / horizontal
+                    if (into < 0) {
+                        velocity[0] -= into * dx / horizontal
+                        velocity[2] -= into * dz / horizontal
+                    }
+                }
+            }
+            const k = log.crown
+            const cc = closestOnSegment(position, k.a, k.b)
+            const d = Math.hypot(position[0] - cc[0], position[1] + 0.9 - cc[1], position[2] - cc[2])
+            if (d < k.radius)
+                free = Math.min(free, 0.35 + 0.65 * d / k.radius)
+        }
+        return { stand, free }
     }
 
     /** Whether a point is inside a trunk or a boulder (camera line-of-sight checks). */
@@ -261,7 +335,7 @@ export default class Vegetation {
                 if (!cell)
                     continue
                 for (const plant of cell.plants)
-                    if (plant.collision > 0 && y > plant.y - 0.5 && y < this.solidTop(plant) + radius && Math.hypot(x - plant.x, z - plant.z) < plant.collision + radius)
+                    if (plant.collision > 0 && y > plant.y - 0.5 && y < this.solidTop(plant) + radius && Math.hypot(x - plant.x, z - plant.z) < this.radiusOf(plant, y - plant.y) + radius)
                         return plant
             }
         }

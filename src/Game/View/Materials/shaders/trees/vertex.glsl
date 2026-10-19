@@ -10,6 +10,8 @@ uniform vec3 uViewPosition;     // the view's camera (in the shadow pass cameraP
 uniform vec4 uTreeHit;          // a tree just struck with the axe: x, z, when (s), strength
 uniform vec2 uTreeHitDirection;
 uniform vec4 uFelled[4];        // felled trees: x, z, angle from upright, direction of the fall (Trees.ts)
+uniform vec4 uFelledCut[4];     // and where each was cut (height above its foot) and how far it has dropped since
+varying float vFellCut;         // height above the cut, as the tree stood (below it: the stump's, not drawn here)
 
 attribute vec4 aInstance;        // x, y, z, scale (height in metres)
 attribute vec2 aInstanceExtra;   // rotation, unused
@@ -71,6 +73,7 @@ void main()
     p.xz = turn * p.xz;
     n.xz = turn * n.xz;
     vec3 world = p + aInstance.xyz;
+    vFellCut = 1e3;
 
     #ifndef BAKE
         vec2 wind = texture2D(uNoiseTexture, aInstance.xz * 0.004 + uTime * 0.02).xy - 0.5;
@@ -84,13 +87,16 @@ void main()
         float hitAge = uTime - uTreeHit.z;
         if (hitAge > 0.0 && hitAge < 3.0 && distance(aInstance.xz, uTreeHit.xy) < 0.6)
             world.xz += uTreeHitDirection * sin(hitAge * 13.0) * exp(- hitAge * 2.2) * uTreeHit.w * aSway * scale * 0.035;
-        // felled: the whole tree turns about its foot, toward the way it falls
+        // felled: the tree above the cut turns about the cut toward the way it falls, its
+        // butt dropping off the stump to the ground; below the cut is the stump (not drawn here)
         for (int i = 0; i < 4; i++) {
             vec4 felled = uFelled[i];
-            if (felled.z > 0.0 && distance(aInstance.xz, felled.xy) < 0.05) {
+            if (felled.z >= 0.0 && uFelledCut[i].x > 0.0 && distance(aInstance.xz, felled.xy) < 0.05) {
                 vec3 axis = vec3(sin(felled.w), 0.0, - cos(felled.w));
-                world = aInstance.xyz + rotateAbout(world - aInstance.xyz, axis, felled.z);
+                vec3 pivot = aInstance.xyz + vec3(0.0, uFelledCut[i].x, 0.0);
+                world = pivot + rotateAbout(world - pivot, axis, felled.z) - vec3(0.0, uFelledCut[i].y, 0.0);
                 n = rotateAbout(n, axis, felled.z);
+                vFellCut = p.y - uFelledCut[i].x;
             }
         }
     #endif
