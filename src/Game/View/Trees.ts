@@ -128,6 +128,7 @@ export default class Trees {
     private version = -1
     private builtAt = new THREE.Vector2(Infinity, Infinity)
     private felled: Felled[] = []
+    private rustle = 0                    // seconds until a fallen crown rustles again
     private stumpMaterials = {
         wood: new THREE.MeshStandardMaterial({ color: '#d9bd90', roughness: 0.85, emissive: '#2a1e10' })
     }
@@ -733,10 +734,40 @@ export default class Trees {
         this.state.player.camera.thirdPerson.shake(0.55 * strength * Math.max(0, 1 - distance / 40))
     }
 
+    /**
+     * Pushing through a fallen crown: the branches give and shake, leaves come off them and
+     * they rustle (the physics holds the body back: State/Vegetation).
+     */
+    private updateThicket(dt: number) {
+        this.rustle = Math.max(0, this.rustle - dt)
+        const player = this.state.player
+        if (player.speed < 0.6 || this.rustle > 0)
+            return
+        const p = player.position.current
+        for (const log of this.state.vegetation.logs) {
+            const { a, b, radius } = log.crown
+            const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+            const length = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2
+            const t = THREE.MathUtils.clamp(((p[0] - a[0]) * ab[0] + (p[1] + 0.9 - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / Math.max(1e-6, length), 0, 1)
+            const d = Math.hypot(p[0] - a[0] - ab[0] * t, p[1] + 0.9 - a[1] - ab[1] * t, p[2] - a[2] - ab[2] * t)
+            if (d > radius)
+                continue
+            const v = player.velocity
+            this.strike(log.plant.x, log.plant.z, v[0], v[2], 0.35 + player.speed * 0.08)
+            const at = new THREE.Vector3(p[0], p[1] + 1.1, p[2])
+            this.view.audio?.play('reap', at, 0.5)
+            if (Math.random() < 0.6)
+                this.view.particles?.emit('leaf', at, 3, new THREE.Vector3(0, 1, 0), 1.2, 0.9)
+            this.rustle = 0.32
+            return
+        }
+    }
+
     update() {
         if (!this.ready)
             return
         this.updateFelled(Math.min(this.state.time.delta, 0.05))
+        this.updateThicket(Math.min(this.state.time.delta, 0.05))
         const p = this.state.player.position.current
         if (this.version !== this.state.vegetation.version || this.horizonVersion !== this.view.horizon.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 6)
             this.rebuild()

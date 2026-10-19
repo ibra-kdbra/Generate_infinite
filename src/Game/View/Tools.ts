@@ -2346,7 +2346,8 @@ export default class Tools {
         if (tilt > Math.PI / 2) tilt -= Math.PI
         if (tilt < - Math.PI / 2) tilt += Math.PI
         tilt = THREE.MathUtils.clamp(tilt, - 0.9, 0.9)
-        const y = THREE.MathUtils.clamp(point.y, plant.y + 0.35, plant.y + 1.5)
+        // a felling notch sits low (the stump left is knee to waist high); other marks where they land
+        const y = THREE.MathUtils.clamp(point.y, plant.y + 0.35, plant.y + (kind === 'notch' ? 0.85 : 1.5))
         const marks = this.marks.get(plant) ?? []
         let mark = marks.find((m) => m.kind === kind && m.toward.angleTo(toward) < 0.6 && Math.abs(m.y - y) < 0.3)
         if (!mark || kind === 'slash' || kind === 'scratch' || kind === 'scorch') {
