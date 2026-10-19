@@ -76,6 +76,7 @@ export default class Player {
     private strideYaw = 0                       // radians: the hips turned toward a side-step
     private leanPitch = 0                       // radians forward into the acceleration
     private leanBank = 0                        // radians into a turn
+    private lookDirection = new THREE.Vector3()
     private diveAmount = 0
     private divePitch = 0
     private climbAmount = 0
@@ -366,6 +367,13 @@ export default class Player {
         return { phase: this.phase, moving: THREE.MathUtils.smoothstep(this.state.player.speed, 0.3, 1.5) * (this.state.player.grounded ? 1 : 0) }
     }
 
+    /** Where the follow camera looks (not a free camera's view): the way the eyes go with a tool in hand. */
+    private gaze() {
+        const camera = this.state.player.camera.thirdPerson
+        const pitch = THREE.MathUtils.clamp((camera.phi - Math.PI / 2) * 0.6, - 0.5, 0.4)
+        return this.lookDirection.set(- Math.sin(camera.theta) * Math.cos(pitch), Math.sin(pitch), - Math.cos(camera.theta) * Math.cos(pitch))
+    }
+
     /** How far the clip has moved the chest from its rest (held tools move with it). */
     get chestShift() {
         return this.pose ? this.pose.chestShift : ZERO
@@ -607,6 +615,8 @@ export default class Player {
             stride: - this.strideYaw * this.footIK,
             leanPitch: this.leanPitch,
             leanBank: this.leanBank,
+            // a tool in hand: the eyes on where the camera looks; otherwise ahead, kept level
+            look: player.stance || this.view.tools?.aiming ? this.gaze() : null,
             tool: this.view.tools?.pose
         })
     }

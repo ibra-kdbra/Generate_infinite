@@ -35,6 +35,7 @@ export type PoseInput = {
     stride?: number          // radians: the hips turned toward a side-step, the chest kept ahead
     leanPitch?: number       // radians: the whole body leaning forward (+) from the ankles
     leanBank?: number        // radians: leaning into a turn (+ toward the right)
+    look?: THREE.Vector3 | null      // world: where the eyes go (a tool in hand: where the camera looks); else ahead
     tool?: ToolPose
 }
 
@@ -96,9 +97,17 @@ export default class CharacterPose {
     private chestRest = new THREE.Vector3(0, 1.27, - 0.05)
     readonly chestShift = new THREE.Vector3()
 
+    private headRestInverse: THREE.Quaternion | null = null     // the head's turn in the bind pose, relative to the body (inverted)
+    private chestRestInverse: THREE.Quaternion | null = null
+
     constructor(model: THREE.Object3D) {
         for (const name of BONES)
             this.bones[name] = model.getObjectByName(name)
+        model.updateMatrixWorld(true)
+        const rest = (bone: THREE.Object3D | undefined) => bone ? model.getWorldQuaternion(new THREE.Quaternion()).invert()
+            .multiply(bone.getWorldQuaternion(new THREE.Quaternion())).invert() : null
+        this.headRestInverse = rest(this.bones.Head)
+        this.chestRestInverse = rest(this.bones.spine_03)
         if (this.bones.spine_03) {
             model.updateMatrixWorld(true)
             this.chestRest.copy(model.worldToLocal(this.bones.spine_03.getWorldPosition(new THREE.Vector3())))
@@ -498,6 +507,40 @@ export default class CharacterPose {
             this.hands(model, tool)
         if (input.climb > 0.05)
             this.climbGrip(input)
+        this.steadyHead(input)
+    }
+
+    /**
+     * The head kept level, the way people carry it whatever the body does: no tilt to the
+     * side (a runner banking into a turn, a lean, a stroke), looking up or down only so far
+     * and no further round than the chest allows, turned toward where the eyes go when given.
+     */
+    private steadyHead(input: PoseInput) {
+        const head = this.bones.Head, chest = this.bones.spine_03
+        if (!head || !chest || !this.headRestInverse || !this.chestRestInverse)
+            return
+        const frame = head.getWorldQuaternion(new THREE.Quaternion()).multiply(this.headRestInverse)
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(frame)
+        const target = input.look ? input.look.clone().normalize() : forward
+        // how far up or down
+        const climbing = input.climb > 0.3
+        const pitch = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(target.y, - 1, 1)), climbing ? - 0.3 : - 0.5, climbing ? 0.85 : 0.45)
+        // and round: no more than 85° from where the chest faces (an archer looks along the arrow)
+        const level = target.clone().setY(0)
+        if (level.lengthSq() < 1e-6) level.copy(forward).setY(0)
+        level.normalize()
+        const chestForward = new THREE.Vector3(0, 0, 1).applyQuaternion(chest.getWorldQuaternion(new THREE.Quaternion()).multiply(this.chestRestInverse)).setY(0)
+        if (chestForward.lengthSq() > 1e-6) {
+            chestForward.normalize()
+            const yaw = Math.atan2(new THREE.Vector3().crossVectors(chestForward, level).y, chestForward.dot(level))
+            const limited = THREE.MathUtils.clamp(yaw, - 1.48, 1.48)
+            if (limited !== yaw) level.copy(chestForward).applyAxisAngle(up, limited)
+        }
+        const look = level.multiplyScalar(Math.cos(pitch)).addScaledVector(up, Math.sin(pitch)).normalize()
+        const left = new THREE.Vector3().crossVectors(up, look).normalize()
+        const headUp = new THREE.Vector3().crossVectors(look, left)
+        const steady = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(left, headUp, look))
+        this.orientWorld(head, steady.multiply(this.headRestInverse.clone().invert()), 0.85)
     }
 
     /**
