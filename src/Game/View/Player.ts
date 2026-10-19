@@ -85,6 +85,7 @@ export default class Player {
     private groundSampler = (x: number, z: number) => this.state.player.groundAt(x, z)
     modelYaw = 0                        // the model may be turned to face the way it walks
     private boneCache = new Map<string, THREE.Object3D | undefined>()
+    private restFrames = new Map<string, THREE.Quaternion>()
     private loadId = 0
     // wet clothes and skin (State/Player wetness), shared by all the character's materials
     private wetUniforms = { uWetLine: { value: - 1e5 }, uWetness: { value: 0 } }
@@ -164,6 +165,13 @@ export default class Player {
         this.pose = new CharacterPose(model)
         this.pose.onPlant = (limb, at, gear) => this.view.tools?.climbPlant(limb, at, gear)
         this.boneCache.clear()
+        // each bone's turn in the bind pose, relative to the body: gear hung on a bone is placed
+        // in the body's axes (x left, y up, z forward) as the bone carries them
+        model.updateMatrixWorld(true)
+        const bodyInverse = model.getWorldQuaternion(new THREE.Quaternion()).invert()
+        this.restFrames.clear()
+        for (const name of ['pelvis', 'spine_03'])
+            this.restFrames.set(name, bodyInverse.clone().multiply(model.getObjectByName(name)!.getWorldQuaternion(new THREE.Quaternion())).invert())
 
         // Clips were made on the mannequin; only rotations and the pelvis translation are
         // kept, the pelvis scaled to this body's hip height
@@ -361,6 +369,21 @@ export default class Player {
     /** How far the clip has moved the chest from its rest (held tools move with it). */
     get chestShift() {
         return this.pose ? this.pose.chestShift : ZERO
+    }
+
+    /**
+     * A bone's frame in the body's axes (x left, y up, z forward): where the bone is, turned
+     * as it is now relative to the bind pose. Gear worn on it (Tools) is placed in it.
+     */
+    boneFrame(name: string) {
+        const bone = this.bone(name), rest = this.restFrames.get(name)
+        if (!bone || !rest)
+            return null
+        bone.updateWorldMatrix(true, false)
+        return {
+            position: new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld),
+            quaternion: bone.getWorldQuaternion(new THREE.Quaternion()).multiply(rest)
+        }
     }
 
     /** A bone of the current model (tools hold on to the hands). */

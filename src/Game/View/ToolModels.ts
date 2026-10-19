@@ -227,38 +227,70 @@ export function createCover(name: ToolName, m: ToolMaterials): THREE.Group {
 }
 
 /**
- * The bag worn on the back, the tools' home: a rucksack with a flap, buckled straps and a
- * rolled blanket (leather for the Ranger, a burlap sack for the Villager). In the chest
- * bone's space (x left, y up, z forward); the back of the body is at about z = -0.12.
+ * A belt quiver for the right hip (the way most medieval bowmen carried their arrows): a
+ * leather tube, open end up, the arrows' fletchings standing out of it. In its own space: the
+ * axis along +Y, the mouth at the top (y = 0.3).
  */
-export function createBag(kind: 'ranger' | 'peasant', m: ToolMaterials): THREE.Group {
+export function createQuiver(m: ToolMaterials): THREE.Group {
     const group = new THREE.Group()
-    group.name = 'bag'
-    const body = kind === 'ranger' ? m.leather : m.burlap
-    const sack = new THREE.Mesh(new RoundedBoxGeometry(0.32, 0.4, 0.15, 3, 0.06), body)
-    sack.position.set(0, - 0.06, - 0.215)
-    group.add(sack)
-    const flap = new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.16, 0.035, 2, 0.015), kind === 'ranger' ? m.tan : m.canvas)
-    flap.position.set(0, 0.1, - 0.29)
-    flap.rotation.x = 0.12
-    group.add(flap)
-    for (const x of [- 0.08, 0.08]) {
-        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.3, 0.012), m.leather)
-        strap.position.set(x, - 0.02, - 0.295)
-        group.add(strap)
-        const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.026, 0.016), m.darkSteel)
-        buckle.position.set(x, - 0.05, - 0.302)
-        group.add(buckle)
-        // shoulder straps, up over the shoulders
-        const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.18), m.leather)
-        shoulder.position.set(x * 1.35, 0.17, - 0.12)
-        shoulder.rotation.x = 0.35
-        group.add(shoulder)
+    group.name = 'quiver'
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.042, 0.56, 12, 1, true), m.leather)
+    tube.material = m.leather.clone()
+    ;(tube.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide
+    tube.position.y = 0.02
+    group.add(tube)
+    const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.042, 12), m.leather)
+    bottom.rotation.x = Math.PI / 2
+    bottom.position.y = - 0.26
+    group.add(bottom)
+    for (const y of [0.27, - 0.18]) {
+        const band = new THREE.Mesh(new THREE.TorusGeometry(y > 0 ? 0.053 : 0.046, 0.006, 6, 16), m.tan)
+        band.rotation.x = Math.PI / 2
+        band.position.y = y
+        group.add(band)
     }
-    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.34, 12), kind === 'ranger' ? m.cloth : m.canvas)
-    roll.rotation.z = Math.PI / 2
-    roll.position.set(0, - 0.3, - 0.215)
-    group.add(roll)
+    const arrows = new THREE.Mesh(createArrowGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 }))
+    arrows.name = 'arrow-template'
+    const spots: [number, number][] = [[0, 0], [0.025, 0.012], [- 0.022, 0.016], [0.012, - 0.026], [- 0.02, - 0.018], [0.03, - 0.006], [- 0.006, 0.03], [0.008, 0.008]]
+    spots.forEach(([x, z], i) => {
+        const arrow = arrows.clone()
+        arrow.position.set(x, 0.24 - (i % 3) * 0.015, z)       // nocks up, fletchings out of the top
+        arrow.rotation.set(x * 2, 0, - z * 2)
+        arrow.rotateX(Math.PI)                                 // head down in the quiver
+        group.add(arrow)
+    })
+    group.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) mesh.castShadow = false })
+    return group
+}
+
+/** A small leather pouch for the belt (the Ranger's: the torch's cap goes in it). Mouth at the top. */
+export function createPouch(m: ToolMaterials): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'pouch'
+    const body = new THREE.Mesh(new RoundedBoxGeometry(0.15, 0.15, 0.07, 2, 0.03), m.leather)
+    group.add(body)
+    const flap = new THREE.Mesh(new RoundedBoxGeometry(0.155, 0.07, 0.075, 2, 0.02), m.tan)
+    flap.position.y = 0.05
+    group.add(flap)
+    group.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) mesh.castShadow = false })
+    return group
+}
+
+/** The Villager's burlap sack, slung from the shoulder and hanging at the hip (guards go in it). Mouth at the top. */
+export function createSack(m: ToolMaterials): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'sack'
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 10), m.burlap)
+    body.scale.set(1, 1.15, 0.62)
+    body.position.y = - 0.06
+    group.add(body)
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.085, 0.09, 12), m.burlap)
+    neck.position.y = 0.12
+    group.add(neck)
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.008, 6, 14), m.leather)
+    tie.rotation.x = Math.PI / 2
+    tie.position.y = 0.13
+    group.add(tie)
     group.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) mesh.castShadow = false })
     return group
 }

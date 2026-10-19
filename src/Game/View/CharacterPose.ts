@@ -12,6 +12,7 @@ export type ToolPose = {
     lean: number             // radians forward
     lower: number            // metres: bending the knees into a low stroke
     pitch: number            // radians: aiming up (-) or down (+) with the whole upper body
+    hips?: number            // radians: the hips turned (an archer side-on to the mark), the legs with them
 }
 
 export type PoseInput = {
@@ -349,10 +350,12 @@ export default class CharacterPose {
 
         // a side-step (with a tool in hand): the hips and legs turn toward the step, the spine
         // turns back so the chest still faces ahead
-        if (input.stride && Math.abs(input.stride) > 1e-3) {
-            this.rotateWorld(bones.pelvis, new THREE.Quaternion().setFromAxisAngle(bodyUp, input.stride))
-            if (bones.spine_01) this.rotateWorld(bones.spine_01, new THREE.Quaternion().setFromAxisAngle(bodyUp, - input.stride * 0.6))
-            if (bones.spine_02) this.rotateWorld(bones.spine_02, new THREE.Quaternion().setFromAxisAngle(bodyUp, - input.stride * 0.4))
+        const hips = (input.stride ?? 0) + (tool && tool.hips ? tool.hips * tool.weight : 0)
+        if (Math.abs(hips) > 1e-3) {
+            this.rotateWorld(bones.pelvis, new THREE.Quaternion().setFromAxisAngle(bodyUp, hips))
+            const stride = input.stride ?? 0
+            if (bones.spine_01) this.rotateWorld(bones.spine_01, new THREE.Quaternion().setFromAxisAngle(bodyUp, - stride * 0.6))
+            if (bones.spine_02) this.rotateWorld(bones.spine_02, new THREE.Quaternion().setFromAxisAngle(bodyUp, - stride * 0.4))
         }
 
         // where the clip put the feet, before the body lowers
@@ -391,7 +394,7 @@ export default class CharacterPose {
                     this.rotateWorld(bones[name]!, new THREE.Quaternion().setFromAxisAngle(bodyUp, tool.twist * tool.weight / 3))
             // the head keeps looking where the stroke (or the arrow) goes
             if (bones.neck_01)
-                this.rotateWorld(bones.neck_01, new THREE.Quaternion().setFromAxisAngle(bodyUp, - tool.twist * tool.weight * 0.75))
+                this.rotateWorld(bones.neck_01, new THREE.Quaternion().setFromAxisAngle(bodyUp, - (tool.twist * 0.75 + (tool.hips ?? 0) * 0.9) * tool.weight))
         }
         if (tool && Math.abs(tool.pitch) > 1e-4 && bones.spine_02) {
             const chestLeft = new THREE.Vector3(1, 0, 0).applyQuaternion(bones.spine_02.getWorldQuaternion(this.q[0]))
