@@ -524,11 +524,11 @@ const TIP: Record<ToolName, number> = { sword: 0.86, axe: 0.45, hoe: 1.0, sickle
 // across the back. `hang`: where a belt tool hangs (metres along it): it swings there,
 // pushed aside by the legs.
 const HOLSTER: Record<ToolName, { bone: 'pelvis' | 'spine_03', position: V3, dir: V3, edge: V3, hang?: number }> = {
-    sword: { bone: 'pelvis', position: [0.2, 0.06, 0.15], dir: [0.06, - 0.72, - 0.69], edge: [0, - 0.69, 0.72], hang: 0.12 },
-    bow: { bone: 'spine_03', position: [0.02, - 0.02, - 0.3], dir: [- 0.5, 0.86, 0], edge: [0, 0, - 1] },
+    sword: { bone: 'pelvis', position: [0.21, 0.06, 0.14], dir: [0.2, - 0.55, - 0.81], edge: [0, - 0.83, 0.56], hang: 0.12 },
+    bow: { bone: 'spine_03', position: [0.02, - 0.02, - 0.21], dir: [- 0.5, 0.86, 0], edge: [0, 0, - 1] },
     torch: { bone: 'pelvis', position: [- 0.05, - 0.02, - 0.18], dir: [- 0.3, 0.9, - 0.3], edge: [0, 0.3, 0.95] },
     axe: { bone: 'pelvis', position: [- 0.24, - 0.33, 0.03], dir: [- 0.05, 1, 0.06], edge: [0, - 0.06, - 1], hang: 0.4 },
-    hoe: { bone: 'spine_03', position: [- 0.08, - 0.12, - 0.22], dir: [0.3, 0.95, 0], edge: [0, 0, - 1] },
+    hoe: { bone: 'spine_03', position: [- 0.08, - 0.4, - 0.25], dir: [0.3, 0.95, 0], edge: [0, 0, - 1] },
     sickle: { bone: 'pelvis', position: [0.22, 0.12, 0.06], dir: [0.06, - 0.94, 0.33], edge: [0, 0.33, 0.94], hang: 0 }
 }
 // how a tool comes out: drawn from a sheath that stays on the belt (the scabbard, the
@@ -1271,7 +1271,7 @@ export default class Tools {
     }
 
     /** The body's targets for holding a tool in this pose (character space). */
-    private holdPose(tool: ToolName, pose: Pose, weight: number, pole?: V3) {
+    private holdPose(tool: ToolName, pose: Pose, weight: number, pole?: V3, secondHand = 1) {
         if (tool !== 'bow' && !this.transition)
             this.keepOffBody(tool, pose)
         else {
@@ -1281,7 +1281,7 @@ export default class Tools {
         const hand = frame(pose.dir, pose.edge).multiply(gripOf(tool).clone().invert())
         const main = { position: pose.grip.clone(), quaternion: hand, pole: pole ? vector(pole) : undefined }
         const second = SECOND_HAND[tool]
-        const other = second !== undefined ? { position: pose.grip.clone().addScaledVector(pose.dir, second), quaternion: hand.clone() } : null
+        const other = second !== undefined && secondHand > 0.001 ? { position: pose.grip.clone().addScaledVector(pose.dir, second), quaternion: hand.clone(), weight: secondHand } : null
         this.pose = tool === 'bow'
             ? { right: null, left: main, weight, twist: pose.twist, lean: pose.lean, lower: pose.lower, pitch: 0 }
             : { right: main, left: other, weight, twist: pose.twist, lean: pose.lean, lower: pose.lower, pitch: 0 }
@@ -2324,7 +2324,10 @@ export default class Tools {
             // a tool with a hold clip: the clip carries it (the keyed carry fades out under it;
             // the torch raised still lifts the arm)
             const clipped = HOLD[tool] ? 1 - this.holdWeight : 1
-            this.holdPose(tool, carry, CARRY[tool].weight * Math.max(clipped, tool === 'torch' ? this.raised : 0), CARRY[tool].pole)
+            // a two-handed tool on the shoulder: the other hand lets go as the body gets going,
+            // that arm swinging with the run (one hand keeps it on the shoulder)
+            const second = 1 - THREE.MathUtils.smoothstep(player.speed, 1, 3.5)
+            this.holdPose(tool, carry, CARRY[tool].weight * Math.max(clipped, tool === 'torch' ? this.raised : 0), CARRY[tool].pole, second)
             this.last = carry
         }
         else
@@ -2348,9 +2351,13 @@ export default class Tools {
         // drawing or putting away, aiming the bow
         const busy = this.swing && !['running', 'leap', 'plunge'].includes(this.swing.name) ? 0.55 : this.transition ? 0.75 : this.aiming ? 0.5 : 1
         player.actionPace += (busy - player.actionPace) * (1 - Math.exp(- dt * 8))
-        // with a tool in hand: face where the camera looks (step back with S, sideways with A/D)
-        player.stance = !!tool && (this.inHand.has(tool) || this.transition !== null) && !player.swimming && !player.climbing && !player.mantle
-        player.aimYaw = this.aiming || this.swing !== null || player.stance ? player.camera.thirdPerson.theta : null
+        // with a tool in hand the body still turns the way it goes (S runs back toward the
+        // camera); only drawing the bow holds it facing where the camera looks (stepping back
+        // with S, sideways with A/D), and a stroke from standing turns it to the camera's look
+        const keys = this.state.controls.keys.down
+        const moving = !!(keys.forward || keys.backward || keys.strafeLeft || keys.strafeRight)
+        player.stance = !!tool && this.aiming && !player.swimming && !player.climbing && !player.mantle
+        player.aimYaw = this.aiming || (this.swing !== null && !moving) ? player.camera.thirdPerson.theta : null
         player.camera.thirdPerson.aim = this.aiming ? 1 : 0
         this.crosshair.hidden = !(this.aiming || (tool === 'bow' && (this.recover > 0 || this.hitMarker > 0)))
         this.crosshair.style.setProperty('--draw', this.draw.toFixed(3))
@@ -2585,7 +2592,11 @@ export default class Tools {
         const swing = this.swing
         const hold = tool && this.inHand.has(tool) && !this.transition && !this.aiming ? HOLD[tool] : undefined
         const k = (rate: number) => 1 - Math.exp(- dt * rate)
-        this.holdWeight += ((hold && !swing?.motion ? 1 : 0) - this.holdWeight) * k(9)
+        // the sword's guard is a stance: kept standing and stepping, eased off as the body runs
+        // (the run's own shoulders and arms carry the blade; a jog in the side-on guard twists the chest)
+        const speed = this.state.player.speed
+        const strength = tool === 'sword' ? 1 - 0.8 * THREE.MathUtils.smoothstep(speed, 1.2, 3.8) : 1
+        this.holdWeight += ((hold && !swing?.motion ? strength : 0) - this.holdWeight) * k(9)
         if (hold) this.holdClip = hold
         if (swing?.motion) {
             const fade = Math.min(1, swing.time / 0.08, Math.max(0, (swing.duration! - swing.time) / 0.15))

@@ -41,7 +41,7 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Tools',
-        note: 'Gear is worn as people carried it: the Ranger\'s sword in its scabbard at the left hip, the bow slung on the back, arrows in a quiver at the right hip, the torch behind the belt; the Villager\'s axe in the belt at the right hip, the sickle sheathed at the left hip, the hoe slung on the back. With a tool in hand you keep facing ahead: S backs away, A and D step aside. Each press goes on to the next move (the name shows above the toolbar). Only the axe fells trees: 5 to 20 chops, more the thicker the trunk; the tree falls toward the cut. Other tools mark the bark.',
+        note: 'Gear is worn as people carried it: the Ranger\'s sword in its scabbard at the left hip, the bow slung on the back, arrows in a quiver at the right hip, the torch behind the belt; the Villager\'s axe in the belt at the right hip, the sickle sheathed at the left hip, the hoe slung on the back. With a tool in hand you still run where you steer (S turns you back toward the camera); drawing the bow keeps you facing the mark: S backs away, A and D step aside. Each press goes on to the next move (the name shows above the toolbar). Only the axe fells trees: 5 to 20 chops, more the thicker the trunk; the tree falls toward the cut. Other tools mark the bark.',
         rows: [
             { keys: ['1', '2', '3'], label: 'Take out a tool (again: put it away)' },
             { keys: ['E'], label: 'Use the tool: the next move each press' },

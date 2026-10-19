@@ -30,7 +30,7 @@ push to `main` builds and deploys; there is no Netlify site.
 
 | File | What it does |
 |---|---|
-| `src/Game/State/Player.ts` | Physics: a runner's movement (start, run, turn radius by speed, plant-and-pivot reversals, skid stops, slopes), the tool stance (facing the camera; S backs away, A/D side-step), climbing (one limb at a time), swimming, sliding, collisions with trunks, stumps and fallen logs. |
+| `src/Game/State/Player.ts` | Physics: a runner's movement (start, run, turn radius by speed, plant-and-pivot reversals, skid stops, slopes), the stance while drawing the bow (facing the camera; S backs away, A/D side-step; with any other tool the body turns the way it goes), climbing (one limb at a time), swimming, sliding, collisions with trunks, stumps and fallen logs. |
 | `src/Game/View/Player.ts` | The character: gaits in speed bands kept in step, the lean into acceleration and turns, side-steps and walking backward, **performances** (animation-library clips played over the upper body while moving, the whole body standing still), hood and hair, wetness. |
 | `src/Game/View/CharacterPose.ts` | Procedural pose on top of the clips: two-bone IK for arms and legs, feet on the ground, climbing limbs and grips, slides, dives, the tool hands, the head kept level and looking where it should. |
 | `src/Game/View/Tools.ts` | The tools (2,700 lines; worth splitting): how each is worn, drawn and put away (a sheath on the belt, a guard taken off, slung on the back), holding and strokes (clip moves for sword/axe/sickle/torch, keyed moves for hoe/torch strokes), the bow (side-on stance, arrow from the quiver, nocked, drawn to the anchor), arrows (exact trunk/rock/ground contact), hits and their effects, marks on bark, felling. |

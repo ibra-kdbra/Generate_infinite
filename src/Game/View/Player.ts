@@ -83,6 +83,7 @@ export default class Player {
     private slideAmount = 0
     private strideDirection = 1                 // 1 walking forward, -1 backing away
     private strideYaw = 0                       // radians: the hips turned toward a side-step
+    private steadyAmount = 0                    // 0 .. 1: the shoulders held square while aiming
     private leanPitch = 0                       // radians forward into the acceleration
     private leanBank = 0                        // radians into a turn
     private lookDirection = new THREE.Vector3()
@@ -544,6 +545,7 @@ export default class Player {
         if (direction !== this.strideDirection && speed > 0.4)
             this.strideDirection = direction
         this.strideYaw += (yaw - this.strideYaw) * (1 - Math.exp(- dt * 9))
+        this.steadyAmount += ((player.stance ? 1 : 0) - this.steadyAmount) * (1 - Math.exp(- dt * 8))
     }
 
     private updateAnimation(dt: number) {
@@ -676,6 +678,7 @@ export default class Player {
             mantle,
             dt,
             stride: - this.strideYaw * this.footIK,
+            steady: this.steadyAmount * this.footIK,
             leanPitch: this.leanPitch,
             leanBank: this.leanBank,
             // a tool in hand: the eyes on where the camera looks; otherwise ahead, kept level
