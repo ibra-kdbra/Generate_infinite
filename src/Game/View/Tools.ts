@@ -887,6 +887,11 @@ export default class Tools {
                 return
             }
             if (event.button !== 0) return
+            // mouse look by capture: the first click into the game takes the mouse (no stroke)
+            if (event.pointerType === 'mouse' && this.settings.get('mouseLook') === 'capture' && !document.pointerLockElement) {
+                this.state.viewport.pointerLock.activate()
+                return
+            }
             downAt = performance.now()
             moved = 0
             pressing = true

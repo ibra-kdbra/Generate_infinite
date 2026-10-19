@@ -56,6 +56,11 @@ export const WEATHERS = {
     storm: 'Storm'
 } as const
 
+export const MOUSE_LOOK = {
+    capture: 'Click to capture',
+    drag: 'Drag to look'
+} as const
+
 export const DAY_LENGTHS = {
     '10': '10 min',
     '20': '20 min',
@@ -71,6 +76,7 @@ export type Resolution = keyof typeof RESOLUTIONS
 export type Weather = keyof typeof WEATHERS
 export type Antialiasing = keyof typeof ANTIALIASING
 export type Threads = keyof typeof THREADS
+export type MouseLook = keyof typeof MOUSE_LOOK
 
 type Values = {
     character: CharacterName
@@ -91,6 +97,7 @@ type Values = {
     antialiasing: Antialiasing
     threads: Threads
     hood: boolean
+    mouseLook: MouseLook
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -113,7 +120,8 @@ const defaults: Values = {
     hideHidden: true,
     antialiasing: 'smaa',
     threads: 'auto',
-    hood: true
+    hood: true,
+    mouseLook: 'capture'
 }
 
 /**

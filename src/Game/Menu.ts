@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import Game from './Game'
-import Settings, { ANTIALIASING, CHARACTERS, DAY_LENGTHS, GRASS_STYLES, QUALITIES, RESOLUTIONS, WEATHERS, Antialiasing, CharacterName, DayLength, GrassStyle, Quality, Resolution, Weather } from './Settings'
+import Settings, { ANTIALIASING, CHARACTERS, DAY_LENGTHS, GRASS_STYLES, MOUSE_LOOK, QUALITIES, RESOLUTIONS, WEATHERS, Antialiasing, CharacterName, DayLength, GrassStyle, MouseLook, Quality, Resolution, Weather } from './Settings'
 import State from './State/State'
 import View from './View/View'
 import Ui from './Ui'
@@ -69,8 +69,9 @@ const CONTROLS: Group[] = [
     {
         title: 'Camera',
         rows: [
-            { keys: ['Drag'], label: 'Look around' },
-            { keys: ['P'], label: 'Lock the pointer (mouse look)' },
+            { keys: ['Mouse'], label: 'Look around (after a click into the game; Esc frees the mouse)' },
+            { keys: ['Drag'], label: 'Look around (touch, or with "Drag to look")' },
+            { keys: ['P'], label: 'Capture or free the mouse' },
             { keys: ['Wheel'], label: 'Zoom' },
             { keys: ['V'], label: 'Free camera' }
         ]
@@ -183,6 +184,7 @@ export default class Menu {
                     <section class="tab-panel" role="tabpanel" id="panel-game" aria-labelledby="tab-game">
                         <h2 class="panel-title">Game</h2>
                         ${this.field('character', 'Character', CHARACTERS, 'choice-grid')}
+                        ${this.field('mouseLook', 'Mouse', MOUSE_LOOK, 'segmented', 'Click to capture: after a click into the game the mouse turns the camera, as in most games; Esc frees it. Drag to look: hold a button and drag.')}
                         <div data-extra="game"></div>
                     </section>
                     <section class="tab-panel" role="tabpanel" id="panel-graphics" aria-labelledby="tab-graphics" hidden>
@@ -254,16 +256,29 @@ export default class Menu {
             const button = (event.target as HTMLElement).closest('button[data-key]') as HTMLButtonElement | null
             if (!button)
                 return
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing' | 'mouseLook'
             const value = button.dataset.value!
             if (key === 'character') this.settings.set('character', value as CharacterName)
             if (key === 'quality') this.settings.set('quality', value as Quality)
             if (key === 'grass') this.settings.set('grass', value as GrassStyle)
             if (key === 'resolution') this.settings.set('resolution', value as Resolution)
             if (key === 'antialiasing') this.settings.set('antialiasing', value as Antialiasing)
+            if (key === 'mouseLook') this.settings.set('mouseLook', value as MouseLook)
             this.refresh()
         })
+        // mouse look by capture: Esc frees the mouse (the browser takes that key) and pauses in the menu
+        let locked = false, freedAt = - Infinity
+        document.addEventListener('pointerlockchange', () => {
+            const now = !!document.pointerLockElement
+            if (locked && !now && !this.open && !this.state.viewport.pointerLock.releasing && this.settings.get('mouseLook') === 'capture') {
+                freedAt = performance.now()
+                this.show(this.tab)
+            }
+            locked = now
+        })
         window.addEventListener('keydown', (event) => {
+            if (event.code === 'Escape' && performance.now() - freedAt < 400)
+                return          // the same Esc that freed the mouse (and opened the menu)
             const typing = (event.target as HTMLElement)?.matches?.('input[type="text"], textarea') && !(event.target as HTMLElement).classList.contains('keyboard-input')
             if (event.code === 'Escape') {
                 if (this.open) this.hide()
@@ -335,7 +350,7 @@ export default class Menu {
         this.settings.events.on('change:muted', () => kit.refresh())
         this.events.on('show', () => kit.refresh())
 
-        for (const key of ['character', 'quality', 'grass', 'resolution', 'antialiasing'])
+        for (const key of ['character', 'quality', 'grass', 'resolution', 'antialiasing', 'mouseLook'])
             this.settings.events.on(`change:${key}`, () => this.refresh())
         let remembered: Tab = 'game'
         try {
@@ -381,7 +396,7 @@ export default class Menu {
 
     private refresh() {
         for (const button of this.drawer.querySelectorAll<HTMLButtonElement>('button[data-key]')) {
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing' | 'mouseLook'
             const selected = this.settings.get(key) === button.dataset.value
             button.classList.toggle('is-selected', selected)
             button.setAttribute('aria-pressed', String(selected))

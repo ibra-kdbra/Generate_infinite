@@ -15,6 +15,7 @@ export default class Viewport {
     clampedPixelRatio: number | null
     pointerLock: {
         active: boolean
+        releasing: boolean          // freed on purpose (P, the menu), not by Esc
         toggle: () => void
         activate: () => void
         deactivate: () => void
@@ -41,6 +42,7 @@ export default class Viewport {
 
         this.pointerLock = {
             active: false,
+            releasing: false,
             toggle: () => { },
             activate: () => { },
             deactivate: () => { }
@@ -78,15 +80,20 @@ export default class Viewport {
         }
 
         this.pointerLock.activate = () => {
-            this.domElement.requestPointerLock()
+            // (refused for a moment after Esc frees it; the next click tries again)
+            const request = this.domElement.requestPointerLock() as unknown
+            if (request instanceof Promise) request.catch(() => { })
         }
 
         this.pointerLock.deactivate = () => {
+            this.pointerLock.releasing = true
             document.exitPointerLock()
         }
 
         document.addEventListener('pointerlockchange', () => {
             this.pointerLock.active = !!document.pointerLockElement
+            if (!this.pointerLock.active)
+                setTimeout(() => { this.pointerLock.releasing = false }, 0)
         })
     }
 
