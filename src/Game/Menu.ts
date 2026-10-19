@@ -41,7 +41,7 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Tools',
-        note: 'Tools live in the bag on your back, each under its cover: taking one out, you pull it from the bag and slide the cover off; putting it away, the cover goes back on first. With a tool in hand you keep facing ahead: S backs away, A and D step aside. Each press goes on to the next move (the name shows above the toolbar). A tree takes 5 to 20 chops, more the thicker it is.',
+        note: 'Gear is worn as people carried it: the Ranger\'s sword in its scabbard at the left hip, the bow slung on the back, arrows in a quiver at the right hip, the torch behind the belt; the Villager\'s axe in the belt at the right hip, the sickle sheathed at the left hip, the hoe slung on the back. With a tool in hand you keep facing ahead: S backs away, A and D step aside. Each press goes on to the next move (the name shows above the toolbar). Only the axe fells trees: 5 to 20 chops, more the thicker the trunk; the tree falls toward the cut. Other tools mark the bark.',
         rows: [
             { keys: ['1', '2', '3'], label: 'Take out a tool (again: put it away)' },
             { keys: ['E'], label: 'Use the tool: the next move each press' },
@@ -51,7 +51,7 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Sword',
-        note: 'Eight strokes in turn, one each press: forehand, backhand, level cut, thrust, rising cut, return cut, low cut, overhead. What you do while pressing picks others.',
+        note: 'Twelve strokes in turn, one each press: forehand, backhand, level cut, thrust, rising cut, return cut, low cut, rising cut from the left, double cut, high thrust, pommel strike, overhead. What you do while pressing picks others.',
         rows: [
             { keys: ['E'], label: 'The next stroke' },
             { keys: ['Shift', 'E'], label: 'Running cut, while sprinting', combo: true },
@@ -66,7 +66,7 @@ const CONTROLS: Group[] = [
     },
     {
         title: 'Axe, hoe and sickle',
-        note: 'Axe: chop, diagonal chop, backhand, low, overhead; the heavy chop counts twice on a trunk. Hoe: dig, draw back, chop, sweep; heavy: break the ground. Sickle: reap, reap back, low, hook; heavy: whirl.',
+        note: 'Axe: chop, diagonal chop, backhand, low, overhead, quick chop, wide swing, at the roots; the heavy chop counts twice on a trunk. Hoe: dig, draw back, chop, sweep, scrape, pry up; heavy: break the ground. Sickle: reap, reap back, low, hook, flick, gather; heavy: whirl. Torch: E raises it, Q thrusts or waves the flame (it scorches bark).',
         rows: [
             { keys: ['E'], label: 'The next move' },
             { keys: ['Q'], label: 'Heavy move' }

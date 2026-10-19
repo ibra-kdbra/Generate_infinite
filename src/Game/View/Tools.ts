@@ -39,7 +39,7 @@ type V3 = [number, number, number]
 // leads the motion), the chest's turn and lean, how far the knees bend. `ease` shapes the
 // way into this key: 'in' accelerates (a strike into the hit), 'out' slows (follow-through).
 type Key = { t: number, grip: V3, dir: V3, edge?: V3, twist?: number, lean?: number, lower?: number, ease?: 'in' | 'out' | 'inout' }
-type Kind = 'blade' | 'chop' | 'dig' | 'reap'
+type Kind = 'blade' | 'chop' | 'dig' | 'reap' | 'burn'
 type Step = 'forward' | 'back' | 'left' | 'right'
 type Swing = {
     keys: Key[]                  // the first is replaced by wherever the hands are, the last by the carry
@@ -206,6 +206,40 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 { t: 0.22, grip: [- 0.05, 0.85, 0.55], dir: [0.3, - 0.45, 0.84], lean: 0.35, lower: 0.2, ease: 'in' },
                 { t: 0.31, grip: [0.22, 0.74, 0.48], dir: [0.72, - 0.52, 0.46], twist: 0.5, lean: 0.4, lower: 0.22, ease: 'out' },
                 END(0.66)], active: [0.15, 0.31], kind: 'blade', step: [0.12, 2.8], chain: 0.31
+        },
+        // low on the left, rising across to high on the right
+        risingLeft: {
+            keys: [START,
+                { t: 0.12, grip: [0.25, 0.78, 0.3], dir: [0.55, - 0.45, 0.7], twist: 0.5, lean: 0.25, lower: 0.12 },
+                { t: 0.21, grip: [0, 1.15, 0.55], dir: [- 0.35, 0.4, 0.85], twist: - 0.1, lean: 0.1, ease: 'in' },
+                { t: 0.3, grip: [- 0.35, 1.5, 0.25], dir: [- 0.6, 0.7, - 0.1], twist: - 0.6, lean: - 0.1, ease: 'out' },
+                END(0.62)], active: [0.13, 0.29], kind: 'blade', step: [0.1, 2.6], chain: 0.29
+        },
+        // there and back in one breath: a cut from the right, a cut from the left
+        doubleCut: {
+            keys: [START,
+                { t: 0.1, grip: [- 0.35, 1.4, 0.1], dir: [- 0.4, 0.55, - 0.7], twist: - 0.5 },
+                { t: 0.18, grip: [0.1, 1.1, 0.5], dir: [0.6, - 0.2, 0.75], twist: 0.3, lean: 0.15, ease: 'in' },
+                { t: 0.26, grip: [0.28, 1.25, 0.3], dir: [0.7, 0.4, - 0.3], twist: 0.6, ease: 'out' },
+                { t: 0.34, grip: [- 0.1, 1.1, 0.55], dir: [- 0.6, - 0.15, 0.78], twist: - 0.2, lean: 0.15, ease: 'in' },
+                { t: 0.42, grip: [- 0.35, 1.0, 0.3], dir: [- 0.85, - 0.3, 0.3], twist: - 0.6, ease: 'out' },
+                END(0.74)], active: [0.12, 0.42], kind: 'blade', step: [0.1, 2.8], chain: 0.42
+        },
+        // a thrust at the height of the face
+        thrustHigh: {
+            keys: [START,
+                { t: 0.13, grip: [- 0.3, 1.35, - 0.05], dir: [0.05, 0.15, 1], edge: [0, - 1, 0.15], twist: - 0.45, lean: - 0.05 },
+                { t: 0.22, grip: [- 0.06, 1.45, 0.66], dir: [0.02, 0.12, 1], edge: [0, - 1, 0.1], twist: 0.25, lean: 0.2, ease: 'in' },
+                { t: 0.32, grip: [- 0.06, 1.43, 0.62], dir: [0.02, 0.12, 1], edge: [0, - 1, 0.1], twist: 0.25, lean: 0.2 },
+                END(0.6)], active: [0.16, 0.32], kind: 'blade', step: [0.14, 4.0], chain: 0.32
+        },
+        // close in: the hilt driven forward, the blade back over the shoulder
+        pommel: {
+            keys: [START,
+                { t: 0.1, grip: [- 0.2, 1.25, 0.15], dir: [- 0.1, 0.6, - 0.8], twist: - 0.3 },
+                { t: 0.18, grip: [- 0.08, 1.35, 0.6], dir: [- 0.05, 0.75, - 0.65], twist: 0.2, lean: 0.25, ease: 'in' },
+                { t: 0.26, grip: [- 0.08, 1.33, 0.56], dir: [- 0.05, 0.75, - 0.65], twist: 0.2, lean: 0.25 },
+                END(0.56)], active: [- 1, - 1], kind: 'blade', step: [0.12, 2.2], chain: 0.28
         }
     },
     // two-handed: wound up behind the right shoulder, brought round the right side and into
@@ -262,6 +296,35 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 { t: 0.92, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68] },
                 END(1.2)], active: [0.5, 0.7], kind: 'chop', step: [0.46, 1.0], chain: 0.78
         },
+        // a short, quick chop from the wrists
+        quick: {
+            keys: [START,
+                { t: 0.22, grip: [- 0.28, 1.35, 0.18], dir: [- 0.55, 0.6, - 0.3], twist: - 0.4 },
+                { t: 0.32, grip: [- 0.06, 1.1, 0.47], dir: [0.42, - 0.1, 0.9], twist: 0.1, lean: 0.15, ease: 'in' },
+                { t: 0.4, grip: [0.1, 1.02, 0.38], dir: [0.75, - 0.2, 0.6], twist: 0.3, lean: 0.15, ease: 'out' },
+                { t: 0.6, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(0.84)], active: [0.3, 0.4], kind: 'chop', chain: 0.5
+        },
+        // wide and level from far round on the right, a step into it
+        wide: {
+            keys: [START,
+                { t: 0.36, grip: [- 0.4, 1.25, - 0.1], dir: [- 0.8, 0.3, - 0.5], twist: - 0.9, lean: 0.05 },
+                { t: 0.48, grip: [- 0.36, 1.15, 0.3], dir: [- 0.9, 0.1, 0.42], twist: - 0.4, ease: 'in' },
+                { t: 0.57, grip: [- 0.04, 1.08, 0.5], dir: [0.45, - 0.05, 0.9], twist: 0.2, lean: 0.15, lower: 0.06, ease: 'in' },
+                { t: 0.68, grip: [0.22, 1.05, 0.34], dir: [0.92, - 0.1, 0.38], twist: 0.6, lean: 0.15, ease: 'out' },
+                { t: 0.9, grip: [- 0.06, 1.2, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(1.18)], active: [0.47, 0.68], kind: 'chop', step: [0.44, 2.0], chain: 0.76
+        },
+        // kneeling low, at the roots
+        roots: {
+            keys: [START,
+                { t: 0.34, grip: [- 0.3, 1.1, 0.05], dir: [- 0.5, 0.5, - 0.7], twist: - 0.6, lean: 0.3, lower: 0.3 },
+                { t: 0.47, grip: [- 0.3, 0.72, 0.3], dir: [- 0.85, - 0.05, 0.5], twist: - 0.3, lean: 0.55, lower: 0.48, ease: 'in' },
+                { t: 0.56, grip: [- 0.04, 0.47, 0.52], dir: [0.45, - 0.3, 0.84], twist: 0.1, lean: 0.6, lower: 0.5, ease: 'in' },
+                { t: 0.66, grip: [0.1, 0.45, 0.48], dir: [0.8, - 0.3, 0.5], twist: 0.4, lean: 0.6, lower: 0.5, ease: 'out' },
+                { t: 0.9, grip: [- 0.06, 1.15, 0.46], dir: [0.15, 0.72, 0.68] },
+                END(1.2)], active: [0.46, 0.66], kind: 'chop', chain: 0.76
+        },
         // heavy: the biggest wind-up and the whole body into it (counts twice on a trunk)
         mighty: {
             keys: [START,
@@ -309,6 +372,23 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 { t: 0.74, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
                 END(1.0)], active: [0.3, 0.52], kind: 'dig', chain: 0.56
         },
+        // shallow along the surface toward the feet
+        scrape: {
+            keys: [START,
+                { t: 0.26, grip: [- 0.12, 0.92, 0.72], dir: [0.1, - 0.55, 0.83], lean: 0.3, lower: 0.14 },
+                { t: 0.6, grip: [- 0.16, 0.82, 0.38], dir: [0.14, - 0.66, 0.74], lean: 0.25, lower: 0.14 },
+                { t: 0.8, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
+                END(1.04)], active: [0.26, 0.6], kind: 'dig', chain: 0.64
+        },
+        // driven in, then levered up to break the clod
+        pry: {
+            keys: [START,
+                { t: 0.3, grip: [- 0.1, 1.45, 0.3], dir: [0, 0.75, 0.66] },
+                { t: 0.46, grip: [- 0.16, 0.8, 0.66], dir: [0.14, - 0.74, 0.66], lean: 0.36, lower: 0.18, ease: 'in' },
+                { t: 0.72, grip: [- 0.12, 0.98, 0.46], dir: [0.1, - 0.45, 0.89], lean: 0.2, lower: 0.1 },
+                { t: 0.92, grip: [- 0.1, 1.12, 0.44], dir: [0, 0.72, 0.69] },
+                END(1.16)], active: [0.38, 0.62], kind: 'dig', chain: 0.74
+        },
         // heavy: the highest lift, driven deepest
         break: {
             keys: [START,
@@ -347,6 +427,20 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
                 { t: 0.35, grip: [- 0.2, 0.85, 0.35], dir: [0.1, 0.2, 0.98], twist: 0.1, lean: 0.3, lower: 0.15, ease: 'in' },
                 END(0.64)], active: [0.18, 0.35], kind: 'reap', chain: 0.38
         },
+        // a quick small cut in front
+        flick: {
+            keys: [START,
+                { t: 0.1, grip: [- 0.25, 0.85, 0.45], dir: [- 0.4, 0.3, 0.86], twist: - 0.3, lean: 0.3, lower: 0.15 },
+                { t: 0.22, grip: [0.1, 0.8, 0.5], dir: [0.45, 0.2, 0.86], twist: 0.2, lean: 0.3, lower: 0.15 },
+                END(0.44)], active: [0.1, 0.22], kind: 'reap', chain: 0.26
+        },
+        // reaching far ahead, low, and drawing the grass back
+        gather: {
+            keys: [START,
+                { t: 0.18, grip: [- 0.1, 0.56, 0.75], dir: [0.1, 0, 1], lean: 0.65, lower: 0.38 },
+                { t: 0.42, grip: [- 0.25, 0.56, 0.42], dir: [- 0.3, 0.05, 0.95], twist: - 0.3, lean: 0.55, lower: 0.38 },
+                END(0.7)], active: [0.18, 0.42], kind: 'reap', chain: 0.46
+        },
         // heavy: there and back in one breath
         whirl: {
             keys: [START,
@@ -357,22 +451,42 @@ const SWINGS: Partial<Record<ToolName, Record<string, Swing>>> = {
         }
     }
 }
+// the torch: thrust at something, or waved high (Q); the flame scorches what it touches
+SWINGS.torch = {
+    jab: {
+        keys: [START,
+            { t: 0.12, grip: [- 0.25, 1.2, 0.1], dir: [0, 0.6, 0.8], twist: - 0.3 },
+            { t: 0.22, grip: [- 0.1, 1.3, 0.6], dir: [0, 0.2, 0.98], twist: 0.2, lean: 0.2, ease: 'in' },
+            { t: 0.34, grip: [- 0.1, 1.28, 0.56], dir: [0, 0.22, 0.97], twist: 0.2, lean: 0.2 },
+            END(0.62)], active: [0.18, 0.34], kind: 'burn', step: [0.14, 2.2]
+    },
+    wave: {
+        keys: [START,
+            { t: 0.2, grip: [- 0.25, 1.68, 0.3], dir: [- 0.4, 0.9, 0.1] },
+            { t: 0.45, grip: [0.12, 1.72, 0.35], dir: [0.4, 0.9, 0.1] },
+            { t: 0.7, grip: [- 0.25, 1.68, 0.3], dir: [- 0.4, 0.9, 0.1] },
+            END(0.95)], active: [- 1, - 1], kind: 'burn'
+    }
+}
 // each press goes on to the next of these (back to the first after a pause)
 const SEQUENCE: Partial<Record<ToolName, string[]>> = {
-    sword: ['forehand', 'backhand', 'level', 'thrust', 'rising', 'reverse', 'lowCut', 'overhead'],
-    axe: ['chop', 'diagonal', 'backhand', 'low', 'overhead'],
-    hoe: ['dig', 'pull', 'chop', 'side'],
-    sickle: ['reap', 'back', 'low', 'hook']
+    sword: ['forehand', 'backhand', 'level', 'thrust', 'rising', 'reverse', 'lowCut', 'risingLeft', 'doubleCut', 'thrustHigh', 'pommel', 'overhead'],
+    axe: ['chop', 'diagonal', 'backhand', 'low', 'overhead', 'quick', 'wide', 'roots'],
+    hoe: ['dig', 'pull', 'chop', 'side', 'scrape', 'pry'],
+    sickle: ['reap', 'back', 'low', 'hook', 'flick', 'gather']
 }
 // Q (or the right button) goes through these
-const HEAVY: Partial<Record<ToolName, string[]>> = { sword: ['spin', 'leap', 'uppercut'], axe: ['mighty'], hoe: ['break'], sickle: ['whirl'] }
+const HEAVY: Partial<Record<ToolName, string[]>> = { sword: ['spin', 'leap', 'uppercut'], axe: ['mighty'], hoe: ['break'], sickle: ['whirl'], torch: ['jab', 'wave'] }
 const MOVE_LABELS: Record<string, string> = {
     forehand: 'Forehand', backhand: 'Backhand', level: 'Level cut', thrust: 'Thrust', rising: 'Rising cut', reverse: 'Return cut',
     lowCut: 'Low cut', overhead: 'Overhead', running: 'Running cut', plunge: 'Plunging cut', sweep: 'Low sweep', retreat: 'Step back and slash',
     sideLeft: 'Side-step cut', sideRight: 'Side-step cut', spin: 'Spin', leap: 'Leaping slam', uppercut: 'Uppercut',
     chop: 'Chop', diagonal: 'Diagonal chop', low: 'Low', mighty: 'Mighty chop',
     dig: 'Dig', pull: 'Draw back', side: 'Sweep', break: 'Break the ground',
-    reap: 'Reap', back: 'Reap back', hook: 'Hook', whirl: 'Whirl'
+    reap: 'Reap', back: 'Reap back', hook: 'Hook', whirl: 'Whirl',
+    risingLeft: 'Rising cut, left', doubleCut: 'Double cut', thrustHigh: 'High thrust', pommel: 'Pommel strike',
+    quick: 'Quick chop', wide: 'Wide swing', roots: 'At the roots', scrape: 'Scrape', pry: 'Pry up',
+    flick: 'Flick', gather: 'Gather', jab: 'Thrust the flame', wave: 'Wave the torch'
 }
 
 // Carried: how each tool is held while walking about (weight: how much the arm gives up its swing)
@@ -486,7 +600,7 @@ type Arrow = {
     inPlant?: Plant
 }
 type Mark = {
-    kind: 'notch' | 'slash' | 'scratch' | 'nick'
+    kind: 'notch' | 'slash' | 'scratch' | 'nick' | 'scorch'
     group: THREE.Group
     toward: THREE.Vector3          // out from the trunk's axis to where it was struck
     y: number                      // its height (world)
@@ -850,8 +964,8 @@ export default class Tools {
                 this.nockTime = 0         // an arrow from the quiver first
             return
         }
-        if (!SWINGS[tool])
-            return
+        if (!SWINGS[tool] || !SEQUENCE[tool])
+            return          // (the torch: E raises it; its strokes are on Q)
         if (!this.swing)
             this.startSwing(tool, this.lightStroke(tool))
         else if (!this.swing.recoil)
@@ -1285,6 +1399,14 @@ export default class Tools {
                     return
                 }
                 const motion = motionFrom ? tip.clone().sub(motionFrom) : new THREE.Vector3(1, 0, 0)
+                if (def.kind === 'burn') {
+                    // the flame on the bark: it scorches, a burst of embers
+                    this.cutInto(plant, point, motion, 'scorch', 0)
+                    particles.emit('ember', point, 10, normal, 1.6, 0.6)
+                    this.view.audio.play('hitWood', point, 0.3)
+                    this.rebound(0.04, 0.32)
+                    return
+                }
                 this.view.audio.play('hitWood', point, tool === 'axe' ? 1 : 0.6)
                 particles.emit('chip', point, tool === 'axe' ? 12 : 6, normal, tool === 'axe' ? 3.2 : 2.2, 0.65)
                 this.view.trees.strike(plant.x, plant.z, plant.x - p[0], plant.z - p[2], tool === 'axe' ? 1 : 0.45)
@@ -1326,6 +1448,11 @@ export default class Tools {
                     return
                 }
                 const at = new THREE.Vector3(point.x, ground + 0.03, point.z)
+                if (def.kind === 'burn') {
+                    particles.emit('ember', at, 8, UP, 1.4, 0.6)
+                    this.rebound(0.04, 0.32)
+                    return
+                }
                 this.view.audio.play(def.kind === 'dig' ? 'dig' : 'hitWood', at, def.kind === 'dig' ? 1 : 0.4)
                 particles.emit('dirt', at, def.kind === 'dig' ? 16 : 7, away.clone().negate().setY(1.2), 2.6, 0.55)
                 particles.emit('dust', at, 2, UP, 0.5, 0.8)
@@ -2222,7 +2349,7 @@ export default class Tools {
         const y = THREE.MathUtils.clamp(point.y, plant.y + 0.35, plant.y + 1.5)
         const marks = this.marks.get(plant) ?? []
         let mark = marks.find((m) => m.kind === kind && m.toward.angleTo(toward) < 0.6 && Math.abs(m.y - y) < 0.3)
-        if (!mark || kind === 'slash' || kind === 'scratch') {
+        if (!mark || kind === 'slash' || kind === 'scratch' || kind === 'scorch') {
             const fresh: Mark = { kind, group: this.markMesh(kind), toward, y, tilt, progress: 0 }
             this.view.scene.add(fresh.group)
             marks.push(fresh)
@@ -2261,8 +2388,9 @@ export default class Tools {
         // fresh wood, pale even in the shade; drawn pulled toward the eye by the cut's depth
         // (along the line of sight, so it stays where it is on screen): the bark it's cut into
         // doesn't hide it, anything nearer (the woodcutter) still does
-        const color = kind === 'nick' ? '#c9a878' : '#dcbc8c'
-        const material = new THREE.MeshStandardMaterial({ color, roughness: 0.9, vertexColors: true, side: THREE.DoubleSide, emissive: '#3c2c18' })
+        const scorch = kind === 'scorch'
+        const color = scorch ? '#17110c' : kind === 'nick' ? '#c9a878' : '#dcbc8c'
+        const material = new THREE.MeshStandardMaterial({ color, roughness: scorch ? 1 : 0.9, vertexColors: !scorch, side: THREE.DoubleSide, emissive: scorch ? '#000000' : '#3c2c18' })
         const pull = { value: 0 }
         material.onBeforeCompile = (shader) => {
             shader.uniforms.uPull = pull
@@ -2289,7 +2417,8 @@ export default class Tools {
             notch: [radius * (0.9 + p * 0.6), 0.07 + p * 0.2, 0.02 + p * radius * 1.05],
             slash: [radius * 1.5, 0.018, 0.025],
             scratch: [radius * 0.8, 0.012, 0.012],
-            nick: [radius * 0.5, 0.05, 0.03]
+            nick: [radius * 0.5, 0.05, 0.03],
+            scorch: [radius * 1.1, 0.2, 0.008]
         }
         group.scale.set(...size[mark.kind])
         ;(group.children[0].userData.pull as { value: number }).value = group.scale.z + radius * 0.35
