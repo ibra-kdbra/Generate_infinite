@@ -11,3 +11,5 @@ node_modules
 *.njsproj
 *.sln
 *.sw?
+tools/probe/out/
+tools/probe/.profile/

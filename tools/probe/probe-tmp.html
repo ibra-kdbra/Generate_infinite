@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="/src/style.css"></head>
+<body><div class="game"><div class="ui"><input type="text" class="keyboard-input" /></div></div>
+<script type="module" src="/src/index.ts"></script>
+<script>
+const log = (...a) => console.log('PROBE', ...a.map(x => typeof x === 'string' ? x : JSON.stringify(x)))
+const wait = (ms) => new Promise(r => setTimeout(r, ms))
+const shot = (name, quality = 0.85) => {
+    window.step(1, 1 / 60)
+    const canvas = window.game.view.renderer.instance.domElement
+    console.log('SHOT ' + name + ' ' + canvas.toDataURL('image/jpeg', quality))
+}
+const timing = () => {
+    const gl = window.game.view.renderer.instance.getContext()
+    const px = new Uint8Array(4)
+    const run = () => { const t = performance.now(); window.step(20, 1 / 60); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return (performance.now() - t) / 20 }
+    run()
+    return +Math.min(run(), run(), run()).toFixed(1)
+}
+window.addEventListener('error', (e) => log('ERROR', e.message, e.filename, e.lineno))
+window.addEventListener('unhandledrejection', (e) => log('REJECT', String(e.reason && e.reason.stack || e.reason)))
+;(async () => {
+    while (!window.game || !window.step) await wait(200)
+    try {
+        const module = await import((new URLSearchParams(location.search).get('probe') || '/tools/probe/probe-tmp.js') + '?' + Date.now())
+        await module.default({ w: window, log, wait, shot, timing })
+    } catch (e) { log('ERROR', String(e.stack || e)) }
+    log('DONE')
+})()
+</script>
+</body></html>
