@@ -169,18 +169,29 @@ export default class Controls {
                 this.pointer.down = true
         })
 
+        // Two ways the mouse turns the view: dragging (pointer events, mouse and touch alike),
+        // and the captured mouse, read from mouse events. With the mouse captured, Firefox sends
+        // two pointer events per movement, one with the movement and one with the pointer's
+        // offset from where it was captured (seen as 4, -13, 4, -12, 7, -9 ... 2, 63, 0, 63):
+        // the view turned many times too far. Its mouse events carry the movement alone.
+        window.addEventListener('pointermove', (event) => {
+            if (document.pointerLockElement)
+                return
+            this.pointer.deltaTemp.x += event.movementX
+            this.pointer.deltaTemp.y += event.movementY
+        })
+
         // the first movement after the mouse is captured can be a bogus jump (the pointer's way to
         // where it was locked): skip that one. Browsers send one event a frame with all the
-        // movement in it, so a quick flick is hundreds of pixels: it must not be cut.
+        // movement in it, so a quick flick is hundreds of pixels: it must not be cut. And where
+        // the system puts the captured pointer back in the middle of the window and that is
+        // reported too (as the same movement the other way, within a few events), it's dropped.
         let skipNext = false
         document.addEventListener('pointerlockchange', () => { skipNext = !!document.pointerLockElement })
-        // with the mouse captured on Linux, the pointer is put back in the middle of the window
-        // after a movement and some browsers report that too, as the same movement the other
-        // way (+60 then -60, or -60 after +20 +20 +20): the view lurched forth and back, or
-        // stood still when both came in one frame. A movement that undoes the last few (within
-        // 50 ms, to the pixel) is that, not a hand: dropped.
         let recent: { x: number, y: number, time: number }[] = []
-        window.addEventListener('pointermove', (event) => {
+        window.addEventListener('mousemove', (event) => {
+            if (!document.pointerLockElement)
+                return
             if (skipNext) {
                 skipNext = false
                 return
@@ -188,23 +199,21 @@ export default class Controls {
             const x = event.movementX, y = event.movementY
             if (Math.abs(x) > 4000 || Math.abs(y) > 4000)
                 return
-            if (document.pointerLockElement) {
-                recent = recent.filter((move) => event.timeStamp - move.time < 50)
-                if (Math.abs(x) + Math.abs(y) > 6) {
-                    let sumX = 0, sumY = 0
-                    for (let i = recent.length - 1; i >= Math.max(0, recent.length - 5); i--) {
-                        sumX += recent[i].x
-                        sumY += recent[i].y
-                        if (Math.abs(x + sumX) <= 1 && Math.abs(y + sumY) <= 1) {
-                            recent = []
-                            return
-                        }
+            recent = recent.filter((move) => event.timeStamp - move.time < 50)
+            if (Math.abs(x) + Math.abs(y) > 6) {
+                let sumX = 0, sumY = 0
+                for (let i = recent.length - 1; i >= Math.max(0, recent.length - 5); i--) {
+                    sumX += recent[i].x
+                    sumY += recent[i].y
+                    if (Math.abs(x + sumX) <= 1 && Math.abs(y + sumY) <= 1) {
+                        recent = []
+                        return
                     }
                 }
-                recent.push({ x, y, time: event.timeStamp })
             }
-            this.pointer.deltaTemp.x += event.movementX
-            this.pointer.deltaTemp.y += event.movementY
+            recent.push({ x, y, time: event.timeStamp })
+            this.pointer.deltaTemp.x += x
+            this.pointer.deltaTemp.y += y
         })
 
         window.addEventListener('pointerup', () => {
