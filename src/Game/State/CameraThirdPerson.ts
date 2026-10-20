@@ -97,9 +97,11 @@ export default class CameraThirdPerson {
 
         // ── orbit input ──
         if (this.controls.pointer.down || this.viewport.pointerLock.active) {
+            // finer while aiming the bow (the view narrowed over the shoulder)
             const look = this.viewport.look(this.controls.pointer.delta)
-            this.phi -= look.y
-            this.theta -= look.x
+            const fine = 1 - 0.4 * this.aimAmount
+            this.phi -= look.y * fine
+            this.theta -= look.x * fine
             this.phi = Math.min(this.phiLimits.max + this.aimAmount * Math.PI * 0.12, Math.max(this.phiLimits.min, this.phi))
         }
         this.aimAmount += (this.aim - this.aimAmount) * (1 - Math.exp(- dt * 9))
