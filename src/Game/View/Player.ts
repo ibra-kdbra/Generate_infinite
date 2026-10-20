@@ -123,9 +123,10 @@ export default class Player {
         // the Ranger's hood: G, or the menu
         this.settings.events.on('change:hood', () => this.applyHood())
         const controls = this.state.controls
+        // (raised or lowered with the hands: Tools.requestHood)
         controls.events.on('hoodDown', () => {
             if (!controls.keys.down.hood && this.settings.get('character').includes('ranger'))      // not on key repeat
-                this.settings.set('hood', !this.settings.get('hood'))
+                this.view.tools?.requestHood(!this.settings.get('hood'))
         })
     }
 

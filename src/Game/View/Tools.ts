@@ -576,6 +576,10 @@ const UNSHEATHE = { mouth: 0.45, in: 0.82, end: 1.06 }
 // go and the left lowers it into the carry; put back the other way round
 const UNSLING = { reach: 0.36, lift: 0.9, take: 1.1, end: 1.45 }
 const SLING = { raise: 0.32, take: 0.52, back: 1.05, end: 1.3 }
+// the Ranger's hood, with both hands (seconds): to its edge (behind the neck when it's down,
+// at the brow when it's up), drawn over the top of the head (it changes as the hands pass the
+// crown, hiding it), let go and the hands down again
+const HOOD = { reach: 0.38, over: 0.82, swap: 0.62, end: 1.12 }
 // where the right hand holds the bow while it changes hands: on the upper limb (m from the grip)
 const LIMB = 0.48
 // the bow standing in front of the chest, string toward the body, upper limb leaning right
@@ -787,6 +791,8 @@ export default class Tools {
     private nocked: THREE.Mesh
     private arrowInHand: THREE.Mesh                   // taken from the quiver, on its way to the string
     fist = { l: 0, r: 0 }
+    private hood: { time: number, up: boolean, swapped: boolean } | null = null     // raising or lowering it now
+    private hoodWanted: boolean | null = null        // to raise (true) or lower once the hands are free
     private bowHand: 'l' | 'r' = 'l'                 // which hand has the bow (the right, by the limb, while it changes hands)
     private bowHands = { l: 0, r: 0 }                 // how much each hand holds it then                            // how closed each hand is on what it holds (Player, HandGrip)
     private nockTime = - 1                            // since the hand went for an arrow (-1: none on the string, none coming)
@@ -981,7 +987,7 @@ export default class Tools {
      */
     select(slot: number | null) {
         const player = this.state.player
-        if (player.swimming || player.climbing || player.mantle)
+        if (player.swimming || player.climbing || player.mantle || this.hood || this.hoodWanted !== null)
             return
         const tool = slot === null ? null : this.set[slot]
         this.equipped = tool === this.equipped ? null : tool
@@ -1014,6 +1020,8 @@ export default class Tools {
 
     private useStart() {
         this.useHeld = true
+        if (this.hood || this.hoodWanted !== null)
+            return
         const tool = this.equipped
         const player = this.state.player
         if (!tool || player.swimming || player.climbing || player.mantle || this.transition || !this.inHand.has(tool))
@@ -1915,6 +1923,73 @@ export default class Tools {
     }
 
     /**
+     * The Ranger raises or lowers the hood with his own hands (HOOD); with something in hand,
+     * he first puts it away, as the key for it would. Swimming or climbing, his hands are busy:
+     * it waits.
+     */
+    requestHood(up: boolean) {
+        if (!this.settings.get('character').includes('ranger') || this.hood)
+            return
+        if (up === this.settings.get('hood') && this.hoodWanted === null)
+            return
+        this.hoodWanted = up
+        if (this.equipped) {
+            this.equipped = null
+            this.swing = null
+            this.aiming = false
+            if (!this.transition)
+                this.advance()
+            this.renderHotbar()
+        }
+    }
+
+    /** Start the hood once the hands are free; the hands through it while it lasts. */
+    private updateHood(dt: number) {
+        const player = this.state.player
+        if (!this.hood && this.hoodWanted !== null && !this.transition && !this.inHand.size && !this.swing
+            && !player.swimming && !player.climbing && !player.mantle) {
+            this.hood = { time: 0, up: this.hoodWanted, swapped: false }
+            this.hoodWanted = null
+        }
+        const hood = this.hood
+        if (!hood)
+            return false
+        hood.time += dt
+        const t = hood.time
+        const phase = (from: number, to: number) => smooth(THREE.MathUtils.clamp((t - from) / (to - from), 0, 1))
+        const head = this.view.player.bone('Head')
+        if (!head) {
+            this.hood = null
+            return false
+        }
+        const top = this.toLocal(head.getWorldPosition(new THREE.Vector3())).sub(this.view.player.chestShift)
+        // the hood's edge where it lies: down, bunched behind the neck; up, along the brow
+        const behind = (side: number) => top.clone().add(new THREE.Vector3(side * 0.1, - 0.1, - 0.1))
+        const crown = (side: number) => top.clone().add(new THREE.Vector3(side * 0.11, 0.14, - 0.02))
+        const brow = (side: number) => top.clone().add(new THREE.Vector3(side * 0.09, 0.07, 0.08))
+        const along = (side: number, u: number) => hood.up
+            ? bezier(behind(side), crown(side), brow(side), u)
+            : bezier(brow(side), crown(side), behind(side), u)
+        const u = phase(HOOD.reach, HOOD.over)
+        const weight = t < HOOD.reach ? phase(0, HOOD.reach) : 1 - phase(HOOD.over, HOOD.end)
+        if (!hood.swapped && t >= HOOD.swap) {
+            hood.swapped = true
+            this.settings.set('hood', hood.up)
+            this.view.audio.play('equip', undefined, 0.35)
+        }
+        this.pose = {
+            left: { position: along(1, u), quaternion: null, pole: new THREE.Vector3(1, - 0.1, - 0.4), weight },
+            right: { position: along(- 1, u), quaternion: null, pole: new THREE.Vector3(- 1, - 0.1, - 0.4), weight },
+            weight: 1, twist: 0, lean: 0, lower: 0, pitch: 0
+        }
+        // the fingers take hold of the cloth
+        this.fist.l = this.fist.r = 0.65 * weight
+        if (t >= HOOD.end)
+            this.hood = null
+        return true
+    }
+
+    /**
      * The bow off the back and back on (UNSLING, SLING), with both hands: the right takes the
      * upper limb over the right shoulder and lifts the bow round to stand in front of the chest,
      * the left takes it by the grip there and lowers it into the carry; put away, the other way
@@ -2345,7 +2420,9 @@ export default class Tools {
         }
 
         const tool = this.equipped
-        if (this.transition)
+        const hooding = this.updateHood(dt)
+        if (hooding) { /* the hands are on the hood */ }
+        else if (this.transition)
             this.updateTransition(dt)
         else if (this.swing)
             this.updateSwing(dt)
@@ -2686,6 +2763,8 @@ export default class Tools {
      * hook on the string, not a fist. Eased, so hands close as they take hold.
      */
     private updateFists(dt: number) {
+        if (this.hood)
+            return
         const held = [...this.inHand][0]
         const grabbing = this.transition && this.transition.grabbed ? this.transition.tool : null
         const tool = held ?? grabbing

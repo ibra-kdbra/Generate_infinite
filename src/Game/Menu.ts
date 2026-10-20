@@ -317,7 +317,7 @@ export default class Menu {
         const character = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Appearance')
         const mouse = kit.group(this.drawer.querySelector<HTMLElement>('[data-extra="game"]')!, 'Mouse')
         kit.slider(mouse, { label: 'Sensitivity', min: 0.1, max: 3, step: 0.05, get: () => this.settings.get('mouseSpeed'), set: (v) => this.settings.set('mouseSpeed', v), format: (v) => `${v.toFixed(2)}×` })
-        kit.toggle(character, 'Hood up', () => this.settings.get('hood'), (on) => this.settings.set('hood', on), 'Ranger only · G')
+        kit.toggle(character, 'Hood up', () => this.settings.get('hood'), (on) => this.view.tools.requestHood(on), 'Ranger only · G')
         const showHood = () => { character.parentElement!.hidden = !this.settings.get('character').includes('ranger') }
         showHood()
         this.settings.events.on('change:character', showHood)
