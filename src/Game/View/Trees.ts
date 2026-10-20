@@ -48,6 +48,13 @@ const BAND = 10
 const FULL = 0.4
 const LEAF_KEEP = 0.4
 const VIEWS = 8
+// the near/mid/far lists are rebuilt after the player has gone this far (m); the crowns thin by
+// the player's live distance, done this far before the near/mid split so that a tree changing
+// list between rebuilds is already as thin as its lighter copy (no pop at the split)
+const REBUILD = 3
+// trees nearer than this are never hidden behind hills (a tree popping out of a near rise shows;
+// the hiding pays off in the far forest)
+const HIDE_FROM = 60
 // trees lying felled at once (the oldest is cleared away for a new one)
 const FELLED = 4
 // billboard atlas cell (pixels per baked view), by quality when the trees are built
@@ -126,6 +133,7 @@ export default class Trees {
     private textures = new Map<string, THREE.Texture>()
     private materials = new Map<string, THREE.ShaderMaterial>()
     private version = -1
+    private cameraOffset = 0          // how far the camera trailed the player at the last rebuild (m)
     private builtAt = new THREE.Vector2(Infinity, Infinity)
     private felled: Felled[] = []
     private rustle = 0                    // seconds until a fallen crown rustles again
@@ -167,7 +175,7 @@ export default class Trees {
         this.uniforms.uFade.value.set(this.near, this.near + BAND)
         // the full trees thin their crowns over the last stretch before the lighter copies
         for (const variant of this.variants)
-            variant.leaves.material.uniforms.uLeafLod.value.set(this.fullEnd - 8, this.fullEnd, LEAF_KEEP)
+            variant.leaves.material.uniforms.uLeafLod.value.set(this.fullEnd - 8 - REBUILD, this.fullEnd - REBUILD, LEAF_KEEP)
         this.version = -1
     }
 
@@ -330,7 +338,7 @@ export default class Trees {
         const leavesMaterial = this.material('leaves', species.leaves, species.kind)
         const bark = new THREE.Mesh(decorate(barkGeometry, false), this.material('bark', species.bark, species.kind))
         // its own copy of the material: the full trees' level-of-detail distances
-        const leaves = new THREE.Mesh(decorate(leafGeometry, true), this.lodMaterial(leavesMaterial, this.fullEnd - 8, this.fullEnd))
+        const leaves = new THREE.Mesh(decorate(leafGeometry, true), this.lodMaterial(leavesMaterial, this.fullEnd - 8 - REBUILD, this.fullEnd - REBUILD))
         // mid distance: the same buffers, their own instances, the crown's first LEAF_KEEP only
         const midInstances = this.instances(64)
         const share = (geometry: THREE.InstancedBufferGeometry) => {
@@ -502,6 +510,12 @@ export default class Trees {
         const far: number[] = []
         const fullEnd = this.fullEnd
         const horizon = this.view.horizon
+        // the hand-over to billboards fades by the distance from the camera, which trails the
+        // player: both lists reach past the hand-over by that much (and a rebuild's step), so a
+        // tree there always has both versions to cross-fade (else it half-vanished for a moment)
+        const camera = this.view.camera.instance.position
+        this.cameraOffset = Math.hypot(camera.x - p[0], camera.z - p[2])
+        const overlap = this.cameraOffset + REBUILD + 1
         let hidden = 0
         for (const cell of this.state.vegetation.cells.values()) {
             for (const plant of cell.plants) {
@@ -511,15 +525,15 @@ export default class Trees {
                 const index = options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))]
                 const distance = Math.hypot(plant.x - p[0], plant.z - p[2])
                 // behind a hill: not drawn at all
-                if (distance > 30 && !horizon.visible(plant.x, plant.y + plant.scale, plant.z)) {
+                if (distance > HIDE_FROM && !horizon.visible(plant.x, plant.y + plant.scale, plant.z)) {
                     hidden++
                     continue
                 }
                 if (distance < fullEnd)
                     near[index].push(plant.x, plant.y, plant.z, plant.scale, plant.rotation)
-                else if (distance < this.near + BAND)
+                else if (distance < this.near + BAND + overlap)
                     mid[index].push(plant.x, plant.y, plant.z, plant.scale, plant.rotation)
-                if (distance > this.near)
+                if (distance > this.near - overlap)
                     far.push(plant.x, plant.y, plant.z, plant.scale, plant.rotation, index)
             }
         }
@@ -553,8 +567,6 @@ export default class Trees {
             variant.leavesMid.geometry.instanceCount = midCount
             this.counts.mid += midCount
         })
-        // the thinning is measured from where the bands were split (the player then)
-        this.uniforms.uLodCenter.value.set(p[0], p[1], p[2])
         const farCount = far.length / 6
         this.impostor.instances = this.reserve(this.impostor.instances, farCount, [this.impostor.mesh.geometry])
         fill(this.impostor.instances, far, 6)
@@ -769,8 +781,11 @@ export default class Trees {
         this.updateFelled(Math.min(this.state.time.delta, 0.05))
         this.updateThicket(Math.min(this.state.time.delta, 0.05))
         const p = this.state.player.position.current
-        if (this.version !== this.state.vegetation.version || this.horizonVersion !== this.view.horizon.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 6)
+        if (this.version !== this.state.vegetation.version || this.horizonVersion !== this.view.horizon.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > REBUILD
+            || Math.abs(Math.hypot(this.view.camera.instance.position.x - p[0], this.view.camera.instance.position.z - p[2]) - this.cameraOffset) > 2)
             this.rebuild()
+        // the crowns thin by the player's distance now (smoothly as they walk)
+        this.uniforms.uLodCenter.value.set(p[0], p[1], p[2])
         const sun = this.state.sun.position
         this.uniforms.uTime.value = this.state.time.elapsed
         for (const material of this.materials.values())
