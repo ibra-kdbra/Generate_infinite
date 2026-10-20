@@ -2,6 +2,7 @@
 // turned and scaled per instance; hazed and cloud-shadowed like the ground around them.
 
 uniform vec3 uSunPosition;
+uniform vec3 uEye;              // the view camera (also in the shadow pass)
 
 attribute vec4 aInstance;        // x, y, z, scale (metres across)
 attribute vec2 aInstanceExtra;   // rotation, tint
@@ -14,6 +15,7 @@ varying float vTint;
 varying vec3 vHaze;
 varying float vHazeAmount;
 varying float vSunVisibility;
+varying float vEyeDistance;
 
 #include ../partials/getSkyLut.glsl
 #include ../partials/getAerialFog.glsl
@@ -37,6 +39,7 @@ void main()
     vWorldPosition = world;
     vBase = p.y;
     vTint = aInstanceExtra.y;
+    vEyeDistance = distance(uEye.xz, aInstance.xz);
     #ifndef SHADOW
         vHazeAmount = getAerialHaze(world, vHaze);
         vSunVisibility = 1.0 - getCloudShadow(world, normalize(uSunPosition));

@@ -16,7 +16,9 @@ import fragmentShader from './Materials/shaders/ferns/fragment.glsl'
 const RADIUS: Record<Quality, number> = { low: 0, medium: 26, high: 34, ultra: 44 }
 const PATCH = 8
 const CANDIDATES = 18          // tries per patch (8 × 8 m): dense where the forest is thick
-const LIGHT_VARIANTS = 18      // beyond this distance only the two lighter scans are drawn
+const LIGHT_VARIANTS = 18      // beyond this distance only the two lighter scans are drawn (cross-fading over SWAP m)
+const SWAP = 4
+const REBUILD = 4              // the lists are refilled after the player has gone this far
 
 type Fern = { x: number, y: number, z: number, scale: number, rotation: number, tint: number, variant: number }
 
@@ -47,7 +49,9 @@ export default class Ferns {
         this.uniforms = {
             uTime: { value: 0 },
             uSunPosition: { value: new THREE.Vector3(0, 1, 0) },
-            uNoiseTexture: { value: this.view.noises.texture }
+            uNoiseTexture: { value: this.view.noises.texture },
+            uCenter: { value: new THREE.Vector3() },
+            uFernFade: { value: new THREE.Vector3(LIGHT_VARIANTS - SWAP / 2, LIGHT_VARIANTS + SWAP / 2, 0) }
         }
         for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
             this.uniforms[name] = this.view.sky.uniforms[name]
@@ -139,7 +143,7 @@ export default class Ferns {
         let total = 0
         let waiting = false
         if (this.radius > 0 && this.meshes.length) {
-            const r = this.radius
+            const r = this.radius + REBUILD
             for (let ix = Math.floor((p[0] - r) / PATCH); ix <= Math.floor((p[0] + r) / PATCH); ix++) {
                 for (let iz = Math.floor((p[2] - r) / PATCH); iz <= Math.floor((p[2] + r) / PATCH); iz++) {
                     if (Math.hypot((ix + 0.5) * PATCH - p[0], (iz + 0.5) * PATCH - p[2]) > r + PATCH)
@@ -149,13 +153,22 @@ export default class Ferns {
                         waiting = true
                         continue
                     }
+                    // (the lists reach a rebuild's step past where the fades, by the player's
+                    // distance now, end: what fades is always there to fade)
                     for (const fern of ferns) {
                         const distance = Math.hypot(fern.x - p[0], fern.z - p[2])
                         if (distance > r)
                             continue
-                        const variant = distance > LIGHT_VARIANTS ? fern.variant % 2 : fern.variant
-                        buckets[variant % this.meshes.length].push(fern.x, fern.y, fern.z, fern.scale, fern.rotation, fern.tint)
-                        total++
+                        const add = (variant: number, role: number) => {
+                            buckets[variant % this.meshes.length].push(fern.x, fern.y, fern.z, fern.scale, fern.rotation, fern.tint + role * 2)
+                            total++
+                        }
+                        if (fern.variant < 2)
+                            add(fern.variant, 0)
+                        else {
+                            if (distance < LIGHT_VARIANTS + SWAP / 2 + REBUILD) add(fern.variant, 1)
+                            if (distance > LIGHT_VARIANTS - SWAP / 2 - REBUILD) add(fern.variant % 2, 2)
+                        }
                     }
                 }
             }
@@ -207,8 +220,10 @@ export default class Ferns {
     update() {
         const p = this.state.player.position.current
         this.retry -= this.state.time.delta
-        if (this.meshes.length && (this.retry <= 0 || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 4))
+        if (this.meshes.length && (this.retry <= 0 || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > REBUILD))
             this.rebuild()
+        this.uniforms.uCenter.value.set(p[0], p[1], p[2])
+        this.uniforms.uFernFade.value.z = this.radius
         const sun = this.state.sun.position
         this.uniforms.uSunPosition.value.set(sun.x, sun.y, sun.z)
         this.uniforms.uTime.value = this.state.time.elapsed

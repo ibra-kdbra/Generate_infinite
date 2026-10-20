@@ -52,6 +52,8 @@ page.on('console', async (message) => {
     const shot = text.match(/^SHOT (\S+) data:image\/jpeg;base64,(.+)$/)
     if (shot)
         fs.writeFileSync(path.join(out, `${shot[1]}.jpg`), Buffer.from(shot[2], 'base64'))
+    else if (message.type() === 'error')
+        console.log('CONSOLE ERROR', text.slice(0, 600))
     else if (text.startsWith('PROBE')) {
         console.log(text.slice(6, 1200))
         if (text.includes('DONE')) done()
