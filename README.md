@@ -6,14 +6,16 @@
 
 <p align="center">
   <b>Pick a direction and walk. The land keeps coming.</b><br>
-  An open world with no edge: hills, forests, lakes and mountain ranges take shape around you as you go, under a sky that turns from dawn to starlight. It runs in your browser.
+  An open world with no edge, made as you walk through it: hills, forests, lakes and mountain ranges under a sky that turns from dawn to starlight. A ranger with a longbow, a villager with an axe, and a world that remembers what you did to it. In your browser, nothing to install.
 </p>
 
 <p align="center">
-  <a href="https://generate-infinite.vercel.app"><b>▶ Play now</b></a> ·
-  <a href="docs/FEATURES.md">Everything in it</a> ·
-  <a href="#controls">Controls</a> ·
-  <a href="#run-it-yourself">Run it yourself</a>
+  <a href="https://generate-infinite.vercel.app"><img src="https://img.shields.io/badge/%E2%96%B6%20Play%20now-generate--infinite.vercel.app-2f5a34?style=for-the-badge" alt="Play now"></a>
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/three.js-WebGL2-222?logo=threedotjs&logoColor=white" alt="three.js, WebGL2">
+  <img src="https://img.shields.io/badge/runs%20in-the%20browser-ee8a4a" alt="Runs in the browser">
 </p>
 
 <p align="center">
@@ -22,36 +24,54 @@
 
 ## A world with no edge
 
-There is no map to finish. The land is worked out as you come to it, so the hillside under your feet was never stored anywhere. Valleys open into lake basins, ridges climb into peaks, and forests gather where the slope and soil suit them, thinning out toward the tree line. Look back and the same land is still there, because the same seed always grows the same world. Add `?seed=` and any word to the address to visit another one.
+There is no map to finish. The land is worked out as you come to it, so the hillside under your feet was never stored anywhere. Valleys open into lake basins, ridges climb into peaks, forests gather where the slope and soil suit them and thin out toward the tree line. Look back and the same land is still there: the same seed always grows the same world, and the game remembers where you stood and every tree you brought down. Add `?seed=` and any word to the address to visit another world.
 
 <table>
   <tr>
     <td width="50%"><img src="docs/images/gallery-1.jpg" alt="Looking out from a hilltop at lakes and a far peak"></td>
-    <td width="50%"><img src="docs/images/gallery-2.jpg" alt="The Ranger at the edge of a sunlit forest"></td>
+    <td width="50%"><img src="docs/images/sunset.jpg" alt="A hilltop over the water at sunset"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/gallery-3.jpg" alt="A lake below the mountains"></td>
-    <td width="50%"><img src="docs/images/gallery-4.jpg" alt="A meadow in the late afternoon"></td>
+    <td width="50%"><img src="docs/images/gallery-2.jpg" alt="The Ranger at the edge of a sunlit forest"></td>
+    <td width="50%"><img src="docs/images/night.jpg" alt="The Ranger with a lit torch at night"></td>
+  </tr>
+</table>
+
+## Two lives to live
+
+<table>
+  <tr>
+    <td width="55%"><img src="docs/images/archer.jpg" alt="The Ranger at full draw, side-on to the mark"></td>
+    <td>
+      <h3>The Ranger</h3>
+      A sword at the hip, a longbow across the back, a torch at the belt. The bow is shot the way archers shot it: taken off the back over the shoulder, an arrow drawn from the quiver and nocked every time, the string pulled to the corner of the mouth, side-on to the mark. Arrows fly with gravity and drag and stay where they strike. He pulls his hood up and down with his own hands.
+    </td>
+  </tr>
+  <tr>
+    <td width="55%"><img src="docs/images/fall.gif" alt="A tree felled by the Villager going over"></td>
+    <td>
+      <h3>The Villager</h3>
+      An axe at the belt, a hoe across the back, a sickle in its sheath. Only the axe fells a tree: each chop bites a notch where it lands, and after five to twenty, by the trunk's thickness, the tree tips toward the cut, hinges on it and comes down, leaving a stump that stays there for good. The hoe turns the soil, the sickle mows the grass.
+    </td>
   </tr>
 </table>
 
 ## What you can do
 
-- **Explore on foot.** Walk, jog and sprint with a runner's weight, then climb rock faces one hold at a time, swim and dive in the lakes, slide down slopes.
-- **Live off the land.** The Ranger carries a sword, a bow and a torch; the Villager an axe, a hoe and a sickle. Each is worn the way people carried them and drawn step by step.
-- **Fell a tree.** Only the axe does it: notches bite where you strike, and the trunk falls toward the cut, leaving a stump and a log you can climb over.
-- **Shoot the bow like an archer.** Stand side-on, take an arrow from the quiver, draw to the cheek. Arrows fly with gravity and stick where they land.
-- **Watch the sky.** A physically based sky gives orange sunsets, deep blue dusk and moonlit nights. Clouds drift with the wind and rain rolls in.
-- **Listen.** Every sound is made as you play: wind, rain, birdsong by day, crickets at night, footsteps, splashes, the twang of the bow.
+- **Explore on foot.** Walk, jog and sprint with a runner's weight and lean; climb rock faces one hold at a time; swim and dive in the lakes; slide down slopes.
+- **Carry real tools.** Everything is worn where people carried it and taken out step by step: the sword drawn from its scabbard, guards slipped off by the other hand, hands that close round what they hold.
+- **Fight and hunt.** Sword strokes, combos and a dash strike from real animation; deer that graze, watch you come and bolt.
+- **Watch the sky.** A physically based sky gives white noon light, orange sunsets, deep blue dusk and moonlit nights; clouds drift with the wind and storms roll in.
+- **Listen.** Every sound is made as you play: wind and rain, birdsong by day, crickets at night, footsteps, splashes, the twang of the bow.
 
 ## Built for the browser
 
-- **Three.js and TypeScript**, rendered in linear HDR with ambient occlusion, bloom, filmic tone mapping and temporal anti-aliasing.
+- **Three.js and TypeScript**, lit in linear HDR: ambient occlusion, bloom, filmic tone mapping, temporal anti-aliasing.
 - **Cascaded sun shadows** reach kilometres out, so mountains shade the valleys at sunset.
-- **Detail where you look:** dense instanced grass that bends around your legs, photo-scanned rocks and ferns, trees with near, middle and far versions.
-- **Fast on modest hardware:** quality is chosen from your graphics card on the first visit, resolution can follow the frame time, ground textures are compressed on the GPU, and the terrain is generated in background threads.
+- **Detail where you look:** dense grass that bends round your legs, photo-scanned rocks and ferns, trees with full, thinned and billboard versions that cross-fade, so nothing pops as you walk.
+- **Fast on modest hardware:** quality is picked from your graphics card on the first visit, resolution can follow the frame time, ground textures are compressed on the GPU, the terrain is built in background threads, and the code is split so returning players keep the libraries cached.
 
-The full list, section by section, is in [docs/FEATURES.md](docs/FEATURES.md).
+The full list is in [docs/FEATURES.md](docs/FEATURES.md); where it goes next is in [docs/ENGINE-PLAN.md](docs/ENGINE-PLAN.md).
 
 ## Controls
 
@@ -62,8 +82,9 @@ The full list, section by section, is in [docs/FEATURES.md](docs/FEATURES.md).
 | Climb | walk into a steep face, then W/A/S/D, Space to lunge, C to let go |
 | Take out a tool (again to put it away) | 1 · 2 · 3 |
 | Use it (hold for the bow) · heavy attack | E or click · Q |
-| Look · zoom | drag, or P for pointer lock · mouse wheel |
-| Free camera | V |
+| Hood up or down (Ranger) | G |
+| Look | the mouse, after a click into the game (Esc frees it); or drag |
+| Zoom · free camera | mouse wheel · V |
 | Menu · keys · stats | Esc · H · B |
 
 With a tool out you still run where you steer. Only drawing the bow keeps you facing your mark, with S stepping back and A/D stepping aside.
@@ -79,7 +100,7 @@ npm run build        # the production build, in dist/
 npm run type-check
 ```
 
-Every push to `main` is deployed to [generate-infinite.vercel.app](https://generate-infinite.vercel.app). [docs/HANDOFF.md](docs/HANDOFF.md) maps the code and explains how changes are checked: `tools/probe/` drives the game in a headless browser and saves screenshots and measurements.
+Every push to `main` is deployed to [generate-infinite.vercel.app](https://generate-infinite.vercel.app). Changes are checked in the running game: [tools/probe](tools/probe/README.md) drives it in a headless browser and saves screenshots and measurements.
 
 ## Credits
 
