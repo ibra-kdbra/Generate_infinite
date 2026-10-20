@@ -34,6 +34,7 @@ push to `main` builds and deploys; there is no Netlify site.
 | `src/Game/View/Player.ts` | The character: gaits in speed bands kept in step, the lean into acceleration and turns, side-steps and walking backward, **performances** (animation-library clips played over the upper body while moving, the whole body standing still), hood and hair, wetness. |
 | `src/Game/View/CharacterPose.ts` | Procedural pose on top of the clips: two-bone IK for arms and legs, feet on the ground, climbing limbs and grips, slides, dives, the tool hands, the head kept level and looking where it should. |
 | `src/Game/View/Tools.ts` | The tools (2,700 lines; worth splitting): how each is worn, drawn and put away (a sheath on the belt, a guard taken off, slung on the back), holding and strokes (clip moves for sword/axe/sickle/torch, keyed moves for hoe/torch strokes), the bow (side-on stance, arrow from the quiver, nocked, drawn to the anchor), arrows (exact trunk/rock/ground contact), hits and their effects, marks on bark, felling. |
+| `src/Game/View/HandGrip.ts` | Hands that close on what they hold: each finger joint's bend measured on the bind pose, blended in by `Tools.fist` (no clip makes a fist). The grip point tools are held by is the centre of that fist. |
 | `src/Game/View/ToolModels.ts` | The tools, covers (scabbard, guards), quiver, pouch, sack, modelled in code. |
 | `src/Game/View/Trees.ts` + shaders `trees/*.glsl` | Trees; felling (the trunk pivots about the cut, its butt drops off the stump, below the cut is discarded and a stump mesh stands), trunk thickness by height (`trunkRadius`), fallen crowns rustling. |
 | `src/Game/State/Vegetation.ts` | Plants; collision at the trunk's real thickness; stumps; fallen logs (solid trunk, crown a thicket). |
@@ -57,7 +58,22 @@ push to `main` builds and deploys; there is no Netlify site.
   Sword_Idle (blade up and forward in the guard), the torch from Idle_Torch_Loop. Two-handed clips
   (the axe's chop) place the tool from both hands every frame (`inBothHands`).
 
+## Recent rework (October 20)
+
+- With a tool the body turns the way it goes; only drawing the bow holds it facing the camera
+  (S back, A/D aside, the shoulders held steady). Mouse capture on click, at 0.02° a count.
+- The bow: worn flat on the back, taken off over the right shoulder by the right hand and
+  handed to the left (`bowStep`, `UNSLING`/`SLING`, `bowHand`), carried in the left fist.
+- The hood: raised and lowered with both hands (`requestHood`, `updateHood`, `HOOD`).
+- Worn items placed against the posed skin with `probe-contact.js` (gaps in cm per item).
+- Trees: crowns thin by the live distance, near/mid/far lists overlap by the camera's lag, no
+  hiding behind hills within 60 m (no flicker ahead while walking).
+
 ## Checking changes: the probe harness
+
+Without Firefox (a cloud machine): `node tools/probe/run-chromium.mjs <seconds> '<EXTRA>' <outdir> [w,h]`
+runs the same probes in headless Chromium (software WebGL; `Q=ultra` for the quality, `PORT`
+for another dev server). It also prints CPU profiles a probe asks for.
 
 `tools/probe/` drives the running dev server in headless Firefox and saves screenshots and
 numbers. Start `npm run dev`, then:
@@ -80,6 +96,10 @@ Screenshots land in `tools/probe/out/` (ignored by git), log lines print. Probes
 | `probe-head.js` | the head's roll, pitch and turn in each state |
 | `probe-run.js`, `probe-stance.js` | running: start, turn, stop, lean; backing away and side-steps |
 | `probe-climb.js` | climbing a short or a tall face |
+| `probe-contact.js` | each worn and held item's gap to the skin (cm), from the posed mesh |
+| `probe-diag.js`, `probe-gear.js`, `probe-held.js`, `probe-hand.js` | moving in eight directions; the gear from four sides; tools held; the hand close up |
+| `probe-bow-all.js`, `probe-hood.js` | the bow from the back to the shot and back; the hood |
+| `probe-trees.js`, `probe-cpu.js`, `probe-hero.js` | trees switching on and off on a walk; the game's work per frame; README pictures |
 | `probe-ui.js`, `probe-phone.js` | the settings drawer (desktop and phone width) |
 
 Headless Firefox caps its window at about 1366x682; `probe-phone.js` loads the game in a
