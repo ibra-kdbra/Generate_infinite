@@ -2,6 +2,7 @@ import { EventEmitter } from 'events'
 
 import Game from '../Game'
 import State from './State'
+import MouseFilter from './MouseFilter'
 
 interface KeyMapItem {
     codes: string[]
@@ -9,6 +10,7 @@ interface KeyMapItem {
 }
 
 export default class Controls {
+    private mouseFilter: MouseFilter | null = null
     game: Game
     state: State
     events: EventEmitter
@@ -178,55 +180,40 @@ export default class Controls {
             this.pointer.deltaTemp.y += event.movementY
         })
 
-        // The captured mouse. What Firefox on Wayland sends, the mouse moved steadily right:
-        //   time 16257 move 2 · 16256 -151 · 16266 4 · 16264 -149 · 16276 2 · 16271 -148 ...
-        // after each movement a second event, stamped a little earlier, with the pointer's offset
-        // from where it was captured (and the button of the click that captured it): the view
-        // turned many times too far, in lurches. An event out of time order is that one: dropped.
-        // The movement itself comes in the screen's own pixels (2.2 of them a CSS pixel there,
-        // as in Chrome), so it's brought to the CSS pixels dragging gets: the same speed.
-        // The first movement after the capture can be a jump (the pointer's way to where it was
-        // locked): skipped. Where the system puts the pointer back in the middle of the window
-        // and reports that too (the same movement the other way, X11), it's dropped.
-        let skipNext = false, lastTime = - Infinity
-        document.addEventListener('pointerlockchange', () => {
-            skipNext = !!document.pointerLockElement
-            lastTime = - Infinity
-        })
+        // The captured mouse: its movement through MouseFilter (Firefox on Wayland sends the
+        // pointer's offset from where it was captured as every other movement); where the
+        // system puts the pointer back in the middle of the window and reports that too (the
+        // same movement the other way, X11), that's dropped. The movement comes in the screen's
+        // own pixels: the filter brings it to the CSS pixels dragging gets, the same speed.
+        const filter = new MouseFilter()
+        this.mouseFilter = filter
+        document.addEventListener('pointerlockchange', () => filter.reset())
         let recent: { x: number, y: number, time: number }[] = []
         // ?mouse in the address: once a second while captured, what came in and what was kept
         const report = new URLSearchParams(location.search).has('mouse')
-        const seen = { mouse: 0, pointer: 0, order: 0, mirror: 0, kept: 0, x: 0, y: 0, raw: [] as string[] }
+        const seen = { mouse: 0, pointer: 0, mirror: 0, kept: 0, x: 0, y: 0, raw: [] as string[] }
         if (report) {
             window.addEventListener('pointermove', () => { if (document.pointerLockElement) seen.pointer++ })
             setInterval(() => {
                 if (!document.pointerLockElement && !seen.mouse)
                     return
                 const side = Math.min(window.innerWidth, window.innerHeight)
-                console.info(`[mouse] 1 s: ${seen.mouse} mouse events (${seen.pointer} pointer) · kept ${seen.kept} · out of time order ${seen.order} · undoing ${seen.mirror} · kept movement ${seen.x.toFixed(0)}, ${seen.y.toFixed(0)} CSS px = ${(seen.x / side * 2 * 57.3).toFixed(0)}° at sensitivity 1 · dpr ${window.devicePixelRatio} · first: ${seen.raw.join(' | ')}`)
-                Object.assign(seen, { mouse: 0, pointer: 0, order: 0, mirror: 0, kept: 0, x: 0, y: 0, raw: [] })
+                console.info(`[mouse] 1 s: ${seen.mouse} mouse events (${seen.pointer} pointer) · kept ${seen.kept} · undoing ${seen.mirror} · kept movement ${seen.x.toFixed(0)}, ${seen.y.toFixed(0)} CSS px = ${(seen.x / side * 2 * 57.3).toFixed(0)}° at sensitivity 1 · dpr ${window.devicePixelRatio} · first: ${seen.raw.join(' | ')}`)
+                Object.assign(seen, { mouse: 0, pointer: 0, mirror: 0, kept: 0, x: 0, y: 0, raw: [] })
             }, 1000)
         }
         window.addEventListener('mousemove', (event) => {
             if (!document.pointerLockElement)
                 return
+            const x = event.movementX, y = event.movementY
             if (report) {
                 seen.mouse++
-                if (seen.raw.length < 8) seen.raw.push(`${event.timeStamp.toFixed(1)} ${event.movementX},${event.movementY} b${event.buttons}`)
+                if (seen.raw.length < 8) seen.raw.push(`${x},${y}`)
             }
-            if (event.timeStamp < lastTime) {
-                seen.order++
-                return
-            }
-            lastTime = event.timeStamp
-            if (skipNext) {
-                skipNext = false
-                return
-            }
-            const x = event.movementX, y = event.movementY
             if (Math.abs(x) > 4000 || Math.abs(y) > 4000)
                 return
-            recent = recent.filter((move) => event.timeStamp - move.time < 50)
+            const now = performance.now()
+            recent = recent.filter((move) => now - move.time < 50)
             if (Math.abs(x) + Math.abs(y) > 6) {
                 let sumX = 0, sumY = 0
                 for (let i = recent.length - 1; i >= Math.max(0, recent.length - 5); i--) {
@@ -239,13 +226,14 @@ export default class Controls {
                     }
                 }
             }
-            recent.push({ x, y, time: event.timeStamp })
-            const scale = 1 / (window.devicePixelRatio || 1)
-            seen.kept++
-            seen.x += x * scale
-            seen.y += y * scale
-            this.pointer.deltaTemp.x += x * scale
-            this.pointer.deltaTemp.y += y * scale
+            recent.push({ x, y, time: now })
+            for (const move of filter.push(x, y, window.devicePixelRatio || 1)) {
+                this.pointer.deltaTemp.x += move.x
+                this.pointer.deltaTemp.y += move.y
+                seen.kept++
+                seen.x += move.x
+                seen.y += move.y
+            }
         })
 
         window.addEventListener('pointerup', () => {
@@ -254,6 +242,10 @@ export default class Controls {
     }
 
     update() {
+        for (const move of this.mouseFilter?.flush() ?? []) {
+            this.pointer.deltaTemp.x += move.x
+            this.pointer.deltaTemp.y += move.y
+        }
         this.pointer.delta.x = this.pointer.deltaTemp.x
         this.pointer.delta.y = this.pointer.deltaTemp.y
 

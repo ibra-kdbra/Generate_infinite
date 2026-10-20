@@ -19,12 +19,15 @@ export default async function ({ w, log, wait }) {
     }
     send(50, 1000)           // the first after capture: skipped
     const before = cam.theta
-    let stamp = 2000, offset = -151, total = 0
+    // as logged on the owner's machine: each move, then the pointer's offset from where it was
+    // captured (the offset before plus this move, in CSS px); the moves stamped minus infinity
+    const ratio = w.devicePixelRatio || 1
+    let stamp = 2000, offset = 107, total = 0
     for (let i = 0; i < 30; i++) {
         const move = 2 + (i % 3) * 2
         total += move
-        send(move, stamp); send(offset, stamp - 2)        // the move, then the bogus offset stamped earlier
-        offset += move / 2.2
+        offset += move / ratio
+        send(move, -9223372036854776); send(Math.round(offset), stamp)
         stamp += 9
         if (i % 2) w.step(1)
     }
