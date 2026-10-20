@@ -81,9 +81,18 @@ export default class Viewport {
         }
 
         this.pointerLock.activate = () => {
-            // (refused for a moment after Esc frees it; the next click tries again)
-            const request = this.domElement.requestPointerLock() as unknown
-            if (request instanceof Promise) request.catch(() => { })
+            // the mouse's own movement, without the system's pointer acceleration, where the
+            // browser offers it (Chrome); else as the system moves the pointer. (Refused for a
+            // moment after Esc frees it; the next click tries again.)
+            const element = this.domElement as HTMLElement & { requestPointerLock(options?: { unadjustedMovement?: boolean }): Promise<void> | void }
+            try {
+                const request = element.requestPointerLock({ unadjustedMovement: true }) as unknown
+                if (request instanceof Promise)
+                    request.catch(() => { (element.requestPointerLock() as unknown as Promise<void> | undefined)?.catch?.(() => { }) })
+            }
+            catch {
+                element.requestPointerLock()
+            }
         }
 
         this.pointerLock.deactivate = () => {
@@ -123,14 +132,14 @@ export default class Viewport {
 
     /**
      * How far the mouse turns the camera (radians): a drag across the window's smaller side
-     * turns it about 2 radians; a captured mouse turns it by its own counts, as PC games do
-     * (0.02° a count: 10 cm turns about 55° at 800 DPI, 110° at 1600), the same for any
-     * window size. Both scaled by the sensitivity setting.
+     * turns it about 2 radians; a captured mouse turns it by its own counts (0.01° a count:
+     * 10 cm turns about 30° at 800 DPI, 55° at 1600), the same for any window size. Both
+     * scaled by the sensitivity setting.
      */
     look(pixelCoordinates: { x: number; y: number }) {
         const speed = Settings.getInstance().get('mouseSpeed')
         if (this.pointerLock.active)
-            return { x: pixelCoordinates.x * 0.00035 * speed, y: pixelCoordinates.y * 0.00035 * speed }
+            return { x: pixelCoordinates.x * 0.00018 * speed, y: pixelCoordinates.y * 0.00018 * speed }
         const normalised = this.normalise(pixelCoordinates)
         return { x: normalised.x * 2 * speed, y: normalised.y * 2 * speed }
     }
