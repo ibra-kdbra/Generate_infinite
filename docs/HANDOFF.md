@@ -1,7 +1,7 @@
 # Handoff: where Generate Infinite stands
 
-A working summary for whoever picks the project up next (a person or a Claude Code
-session). It records what was built across the long local sessions of October 2026, how the
+A working summary for whoever picks the project up next, in this session or a new
+one. It records what was built across the long local sessions of October 2026, how the
 pieces fit, how to check changes, what is still open, and the owner's working rules. The
 README describes the game itself; this file is about carrying the work on.
 

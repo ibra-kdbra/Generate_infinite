@@ -5,8 +5,8 @@
 <h1 align="center">Generate Infinite</h1>
 
 <p align="center">
-  <b>An endless world, generated as you walk.</b><br>
-  Hills, forests, lakes and mountains under a real sky, with a ranger or a villager to explore them. In your browser, nothing to install.
+  <b>Pick a direction and walk. The land keeps coming.</b><br>
+  An open world with no edge: hills, forests, lakes and mountain ranges take shape around you as you go, under a sky that turns from dawn to starlight. It runs in your browser.
 </p>
 
 <p align="center">
@@ -20,9 +20,9 @@
   <img src="docs/images/hero.jpg" alt="The Ranger on a grassy hilltop looking out over lakes toward a mountain" width="100%">
 </p>
 
-## A world without an edge
+## A world with no edge
 
-Every step reveals land nobody has seen before. The ground is shaped as you travel: lowland plains, rolling hills, ridged mountain ranges and lakes in the basins. Forests grow where the land suits them, and the sky moves through a full day and night. Walk in any direction and it never runs out. Give the address a seed (`?seed=anything`) and you get a different world, the same one every time.
+There is no map to finish. The land is worked out as you come to it, so the hillside under your feet was never stored anywhere. Valleys open into lake basins, ridges climb into peaks, and forests gather where the slope and soil suit them, thinning out toward the tree line. Look back and the same land is still there, because the same seed always grows the same world. Add `?seed=` and any word to the address to visit another one.
 
 <table>
   <tr>
