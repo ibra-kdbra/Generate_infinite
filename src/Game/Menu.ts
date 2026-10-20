@@ -330,6 +330,11 @@ export default class Menu {
             this.view.sky.cloudCoverOverride = null
         }, 'Weather', true)
         kit.choice(world, DAY_LENGTHS, () => this.settings.get('dayLength'), (value: DayLength) => this.settings.set('dayLength', value), 'Length of a day')
+        // the world is remembered between visits (State/WorldSave): where you are, what you felled
+        kit.buttons(world, [['Start this world afresh', () => {
+            this.state.save.forget()
+            location.reload()
+        }]])
         this.settings.events.on('change:weather', () => kit.refresh())
         this.settings.events.on('change:dayLength', () => kit.refresh())
 

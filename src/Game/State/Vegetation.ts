@@ -68,8 +68,10 @@ export default class Vegetation {
     radius = RADIUS.medium
     cells = new Map<string, Cell>()
     version = 0                    // changes whenever the set of plants changes
-    // plants cut down or felled (by position): never grown again in this world
+    // plants cut down (by position): never grown again in this world; felled trees: the
+    // height of the stump each leaves standing (WorldSave keeps both between visits)
     private removed = new Set<string>()
+    private stumps = new Map<string, number>()
 
     private seed: string
     private forestNoise: NoiseFunction2D
@@ -140,10 +142,17 @@ export default class Vegetation {
                 const coniferous = smoothstep(35, 120, e + this.detailNoise(x * 0.004, z * 0.004) * 45) * 0.8 + slope * 0.6
                 const conifer = pick < coniferous
                 const scale = conifer ? 9 + a * 11 : 8 + a * 8
-                plants.push({
+                const plant: Plant = {
                     kind: conifer ? PLANT.CONIFER : PLANT.BROADLEAF, x, y: e - 0.15, z, scale,
                     rotation: b * Math.PI * 2, tint: c, collision: conifer ? scale * 0.028 : scale * 0.035
-                })
+                }
+                // felled before: only its stump stands
+                const stump = this.stumps.get(this.key(x, z))
+                if (stump !== undefined) {
+                    plant.felled = true
+                    plant.stump = stump
+                }
+                plants.push(plant)
                 continue
             }
 
@@ -363,6 +372,29 @@ export default class Vegetation {
 
     private key(x: number, z: number) {
         return `${Math.round(x * 100)}:${Math.round(z * 100)}`
+    }
+
+    /** A felled tree's log cleared away: its stump stays, here and on later visits. */
+    keepStump(plant: Plant) {
+        if (plant.stump !== undefined)
+            this.stumps.set(this.key(plant.x, plant.z), plant.stump)
+        this.version++
+    }
+
+    /** What was changed in this world (WorldSave). */
+    memory() {
+        // a tree felled and lying now is remembered as its stump already
+        for (const log of this.logs)
+            if (log.plant.stump !== undefined)
+                this.stumps.set(this.key(log.plant.x, log.plant.z), log.plant.stump)
+        return { removed: [...this.removed], stumps: [...this.stumps] }
+    }
+
+    /** What a saved world had changed, before its plants are grown. */
+    restore(removed: string[], stumps: [string, number][]) {
+        for (const key of removed) this.removed.add(key)
+        for (const [key, height] of stumps) this.stumps.set(key, height)
+        this.version++
     }
 
     /** Take a plant out of the world for good (a bush cut down, a felled tree cleared away). */

@@ -133,6 +133,7 @@ export default class Trees {
     private textures = new Map<string, THREE.Texture>()
     private materials = new Map<string, THREE.ShaderMaterial>()
     private version = -1
+    private stumps = new Map<Plant, THREE.Group>()     // stumps of trees felled before, near the player
     private cameraOffset = 0          // how far the camera trailed the player at the last rebuild (m)
     private builtAt = new THREE.Vector2(Infinity, Infinity)
     private felled: Felled[] = []
@@ -517,11 +518,19 @@ export default class Trees {
         this.cameraOffset = Math.hypot(camera.x - p[0], camera.z - p[2])
         const overlap = this.cameraOffset + REBUILD + 1
         let hidden = 0
+        const stumps: Plant[] = []
+        const lying = new Set(this.felled.map((tree) => tree.plant))
         for (const cell of this.state.vegetation.cells.values()) {
             for (const plant of cell.plants) {
                 const options = byKind.get(plant.kind)
                 if (!options)
                     continue
+                // felled before: only its stump (a falling or lying one is drawn by its slot)
+                if (plant.felled && !lying.has(plant)) {
+                    if (Math.hypot(plant.x - p[0], plant.z - p[2]) < 110)
+                        stumps.push(plant)
+                    continue
+                }
                 const index = options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))]
                 const distance = Math.hypot(plant.x - p[0], plant.z - p[2])
                 // behind a hill: not drawn at all
@@ -574,6 +583,7 @@ export default class Trees {
         this.counts.far = farCount
 
         this.counts.hidden = hidden
+        this.updateStumps(stumps)
         this.version = this.state.vegetation.version
         this.horizonVersion = horizon.version
         this.builtAt.set(p[0], p[2])
@@ -626,7 +636,16 @@ export default class Trees {
         const radius = this.trunkRadius(plant, cut)
         plant.felled = true
         plant.stump = cut
-        // the stump: bark below the cut, the cut's fresh wood on top; the cut end of the trunk
+        // the stump; the cut end of the trunk
+        const stump = this.stump(plant, cut, radius)
+        const end = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.97, 14), this.stumpMaterials.wood)
+        this.scene.add(stump, end)
+        this.view.audio?.play('treeFall', new THREE.Vector3(plant.x, plant.y + 2, plant.z), 1.4)
+        this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false, cut, drop: 0, radius, stump, end })
+    }
+
+    /** A stump: bark below the cut, the cut's fresh wood on top. */
+    private stump(plant: Plant, cut: number, radius: number) {
         const stump = new THREE.Group()
         const side = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 1.12, cut + 0.15, 14, 1, true), this.stumpBark(plant, cut))
         side.position.y = (cut - 0.15) / 2
@@ -635,10 +654,36 @@ export default class Trees {
         top.position.y = cut
         stump.add(side, top)
         stump.position.set(plant.x, plant.y, plant.z)
-        const end = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.97, 14), this.stumpMaterials.wood)
-        this.scene.add(stump, end)
-        this.view.audio?.play('treeFall', new THREE.Vector3(plant.x, plant.y + 2, plant.z), 1.4)
-        this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false, cut, drop: 0, radius, stump, end })
+        return stump
+    }
+
+    private disposeStump(stump: THREE.Group) {
+        this.scene.remove(stump)
+        stump.traverse((object) => {
+            const mesh = object as THREE.Mesh
+            if (!mesh.isMesh) return
+            mesh.geometry.dispose()
+            if (mesh.material !== this.stumpMaterials.wood) (mesh.material as THREE.MeshStandardMaterial).dispose()
+        })
+    }
+
+    /**
+     * The stumps of trees felled before (their logs cleared away, or on an earlier visit),
+     * near the player: made as they come near, let go far behind.
+     */
+    private updateStumps(felled: Plant[]) {
+        const keep = new Set(felled)
+        for (const plant of felled)
+            if (!this.stumps.has(plant) && plant.stump !== undefined) {
+                const stump = this.stump(plant, plant.stump, this.trunkRadius(plant, plant.stump))
+                this.scene.add(stump)
+                this.stumps.set(plant, stump)
+            }
+        for (const [plant, stump] of this.stumps)
+            if (!keep.has(plant)) {
+                this.disposeStump(stump)
+                this.stumps.delete(plant)
+            }
     }
 
     /** The stump's bark: the tree's own bark texture, wrapped round it. */
@@ -652,16 +697,12 @@ export default class Trees {
         return new THREE.MeshStandardMaterial({ map, roughness: 0.95, color: '#b9b0a4' })
     }
 
+    /** A felled tree's log cleared away (far behind, or a newer one felled): its stump stays. */
     private clearFelled(tree: Felled) {
-        this.scene.remove(tree.stump, tree.end)
-        tree.stump.traverse((object) => {
-            const mesh = object as THREE.Mesh
-            if (!mesh.isMesh) return
-            mesh.geometry.dispose()
-            if (mesh.material !== this.stumpMaterials.wood) (mesh.material as THREE.MeshStandardMaterial).dispose()
-        })
+        this.disposeStump(tree.stump)
+        this.scene.remove(tree.end)
         tree.end.geometry.dispose()
-        this.state.vegetation.remove(tree.plant)
+        this.state.vegetation.keepStump(tree.plant)
     }
 
     private updateFelled(dt: number) {
