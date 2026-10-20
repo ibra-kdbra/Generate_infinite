@@ -53,9 +53,17 @@ export default async function ({ w, log, wait }) {
         object.updateMatrixWorld(true)
         object.traverse((m) => {
             if (!m.isMesh || !m.visible) return
-            const position = m.geometry.attributes.position, v = new V()
-            for (let i = 0; i < position.count; i += 1) {
-                v.fromBufferAttribute(position, i).applyMatrix4(m.matrixWorld)
+            // points every 2 cm along every edge (a long handle has vertices only at its ends)
+            const position = m.geometry.attributes.position, index = m.geometry.index
+            const samples = [], a = new V(), b = new V()
+            const tri = index ? index.count : position.count
+            for (let k = 0; k < tri; k += 3) for (let e = 0; e < 3; e++) {
+                const i0 = index ? index.getX(k + e) : k + e, i1 = index ? index.getX(k + (e + 1) % 3) : k + (e + 1) % 3
+                a.fromBufferAttribute(position, i0).applyMatrix4(m.matrixWorld); b.fromBufferAttribute(position, i1).applyMatrix4(m.matrixWorld)
+                const n = Math.max(1, Math.ceil(a.distanceTo(b) / 0.02))
+                for (let j = 0; j < n; j++) samples.push(a.clone().lerp(b, j / n))
+            }
+            for (const v of samples) {
                 const hit = nearest(body, v)
                 if (!hit) continue
                 count++
@@ -74,6 +82,7 @@ export default async function ({ w, log, wait }) {
         t.gear[st.get('character').includes('peasant') ? 'peasant' : 'ranger'].forEach((item, i) => log('gear', i, measure(item)))
     }
     worn()
+    if (q.get('against')) for (const tool of t.set) if (!t.inHand.has(tool)) log('worn', tool, 'against', q.get('against'), measure(t.models.get(tool), new RegExp(q.get('against'))))
     if (q.has('worn')) return
     t.set.forEach((tool, slot) => {
         t.select(slot); let n = 0; while ((t.transition || !t.inHand.has(tool)) && n++ < 400) step(1)

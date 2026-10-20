@@ -502,7 +502,8 @@ const CARRY: Record<ToolName, { key: Key, weight: number, pole?: V3 }> = {
     hoe: { key: { t: 0, grip: [- 0.24, 1.2, 0.26], dir: [- 0.08, 0.52, - 0.85], edge: [0, - 0.85, - 0.52] }, weight: 1, pole: [- 1, - 0.45, 0.1] },
     // a little out to the side and ahead, leaning forward and away from the face
     torch: { key: { t: 0, grip: [- 0.3, 1.1, 0.3], dir: [- 0.14, 0.95, 0.26], edge: [0, - 0.26, 0.95] }, weight: 1, pole: [- 0.8, - 0.8, - 0.2] },
-    bow: { key: { t: 0, grip: [0.24, 0.95, 0.12], dir: [0, 1, 0.08], edge: [0, - 0.08, 1] }, weight: 0.35 }
+    // in the left fist at the side, the upper limb forward and up, the fingers round the grip
+    bow: { key: { t: 0, grip: [0.23, 0.97, 0.14], dir: [0, 0.64, 0.77], edge: [- 0.45, - 0.85, 0.1] }, weight: 1, pole: [0.6, - 1, - 0.35] }
 }
 // two-handed tools: where the other (left) hand holds the handle, metres along it from the grip
 const SECOND_HAND: Partial<Record<ToolName, number>> = { axe: - 0.27, hoe: - 0.34 }
@@ -525,11 +526,15 @@ const TIP: Record<ToolName, number> = { sword: 0.86, axe: 0.45, hoe: 1.0, sickle
 // pushed aside by the legs.
 const HOLSTER: Record<ToolName, { bone: 'pelvis' | 'spine_03', position: V3, dir: V3, edge: V3, hang?: number }> = {
     sword: { bone: 'pelvis', position: [0.21, 0.06, 0.14], dir: [0.2, - 0.55, - 0.81], edge: [0, - 0.83, 0.56], hang: 0.12 },
-    bow: { bone: 'spine_03', position: [0.02, - 0.02, - 0.21], dir: [- 0.5, 0.86, 0], edge: [0, 0, - 1] },
-    torch: { bone: 'pelvis', position: [- 0.05, - 0.02, - 0.18], dir: [- 0.3, 0.9, - 0.3], edge: [0, 0.3, 0.95] },
-    axe: { bone: 'pelvis', position: [- 0.24, - 0.33, 0.03], dir: [- 0.05, 1, 0.06], edge: [0, - 0.06, - 1], hang: 0.4 },
-    hoe: { bone: 'spine_03', position: [- 0.08, - 0.4, - 0.25], dir: [0.3, 0.95, 0], edge: [0, 0, - 1] },
-    sickle: { bone: 'pelvis', position: [0.22, 0.12, 0.06], dir: [0.06, - 0.94, 0.33], edge: [0, 0.33, 0.94], hang: 0 }
+    // flat on the back, its upper end behind the right shoulder, the lower at the left hip, the
+    // string against the back too (toward the right hip); leaning in with the back, which comes
+    // forward 15 cm from the shoulder blades to the hips, so the lower limb lies on it too
+    bow: { bone: 'spine_03', position: [0, - 0.1, - 0.15], dir: [- 0.45, 0.89, - 0.09], edge: [0.89, 0.45, - 0.045] },
+    // through a ring on the belt at the right hip, the head at the belt, the handle down the thigh
+    torch: { bone: 'pelvis', position: [- 0.23, - 0.28, 0.05], dir: [0.03, 1, 0.05], edge: [0, 0, 1], hang: 0.4 },
+    axe: { bone: 'pelvis', position: [- 0.23, - 0.33, 0.03], dir: [- 0.05, 1, 0.06], edge: [0, - 0.06, - 1], hang: 0.4 },
+    hoe: { bone: 'spine_03', position: [- 0.08, - 0.4, - 0.106], dir: [0.3, 0.95, - 0.14], edge: [0, 0, - 1] },        // leaning in with the back
+    sickle: { bone: 'pelvis', position: [0.27, 0.12, 0.11], dir: [0.06, - 0.94, 0.33], edge: [0, 0.33, 0.94], hang: 0 }
 }
 // how a tool comes out: drawn from a sheath that stays on the belt (the scabbard, the
 // sickle's sheath), a guard the other hand takes off (axe, hoe, torch's cap), or nothing on it
@@ -538,15 +543,15 @@ const STYLE: Record<ToolName, 'sheath' | 'guard' | 'none'> = { sword: 'sheath', 
 // sack hanging at the left hip; and where the other hand puts a guard away (their mouths)
 const GEAR: Record<'ranger' | 'peasant', { kind: 'quiver' | 'pouch' | 'sack', bone: 'pelvis', position: V3, dir: V3, edge: V3 }[]> = {
     ranger: [
-        { kind: 'quiver', bone: 'pelvis', position: [- 0.21, - 0.05, - 0.1], dir: [- 0.12, 0.93, - 0.34], edge: [- 0.6, 0, 0.8] },
-        { kind: 'pouch', bone: 'pelvis', position: [0.17, - 0.06, - 0.13], dir: [0, 1, 0], edge: [0.55, 0, - 0.83] }
+        { kind: 'quiver', bone: 'pelvis', position: [- 0.285, - 0.05, - 0.12], dir: [- 0.12, 0.93, - 0.34], edge: [- 0.6, 0, 0.8] },
+        { kind: 'pouch', bone: 'pelvis', position: [0.175, - 0.06, - 0.14], dir: [0, 1, 0], edge: [0.55, 0, - 0.83] }
     ],
     peasant: [
-        { kind: 'sack', bone: 'pelvis', position: [0.2, - 0.12, - 0.15], dir: [0.1, 1, 0], edge: [0.6, 0, - 0.8] }
+        { kind: 'sack', bone: 'pelvis', position: [0.185, - 0.12, - 0.15], dir: [0.1, 1, 0], edge: [0.6, 0, - 0.8] }
     ]
 }
 const STASH: Record<'ranger' | 'peasant', V3> = { ranger: [0.17, 0.04, - 0.13], peasant: [0.21, 0.05, - 0.15] }
-const QUIVER_MOUTH: V3 = [- 0.23, 0.24, - 0.17]          // where the arrows' nocks stand (pelvis frame)
+const QUIVER_MOUTH: V3 = [- 0.305, 0.24, - 0.19]          // where the arrows' nocks stand (pelvis frame)
 // held up in front while the cover comes off or goes on (character space, as the keys)
 const PRESENT: Record<ToolName, Key> = {
     sword: { t: 0, grip: [- 0.12, 1.2, 0.34], dir: [0.32, 0.72, 0.62], edge: [0, - 0.65, 0.76] },
@@ -566,9 +571,15 @@ const STOW = { present: 0.34, bring: 0.68, slide: 1.0, put: 1.46, end: 1.74 }
 // put back: the point to the sheath's mouth, slid home, let go
 const SHEATHE = { reach: 0.3, out: 0.66, end: 1.05 }
 const UNSHEATHE = { mouth: 0.45, in: 0.82, end: 1.06 }
-// nothing on it (the bow): reach over the shoulder, bring it round, into the carry
-const UNSLING = { reach: 0.34, pull: 0.86, end: 1.16 }
-const SLING = { pull: 0.5, end: 0.78 }
+// the bow off the back: the right hand reaches over the right shoulder to the upper limb, lifts
+// the bow up over the shoulder to stand in front, the left hand takes the grip, the right lets
+// go and the left lowers it into the carry; put back the other way round
+const UNSLING = { reach: 0.36, lift: 0.9, take: 1.1, end: 1.45 }
+const SLING = { raise: 0.32, take: 0.52, back: 1.05, end: 1.3 }
+// where the right hand holds the bow while it changes hands: on the upper limb (m from the grip)
+const LIMB = 0.48
+// the bow standing in front of the chest, string toward the body, upper limb leaning right
+const BOW_PRESENT: Key = { t: 0, grip: [0.06, 1.1, 0.36], dir: [- 0.25, 0.96, 0.12], edge: [0, 0, 1] }
 // the bow: an arrow taken from the quiver and nocked before every draw
 const NOCK = { quiver: 0.22, bow: 0.5, end: 0.58 }
 // the body, to keep a held tool out of it: capsules from bone to bone (radius, m); the head
@@ -775,7 +786,9 @@ export default class Tools {
     private arrowMesh: THREE.InstancedMesh
     private nocked: THREE.Mesh
     private arrowInHand: THREE.Mesh                   // taken from the quiver, on its way to the string
-    fist = { l: 0, r: 0 }                            // how closed each hand is on what it holds (Player, HandGrip)
+    fist = { l: 0, r: 0 }
+    private bowHand: 'l' | 'r' = 'l'                 // which hand has the bow (the right, by the limb, while it changes hands)
+    private bowHands = { l: 0, r: 0 }                 // how much each hand holds it then                            // how closed each hand is on what it holds (Player, HandGrip)
     private nockTime = - 1                            // since the hand went for an arrow (-1: none on the string, none coming)
     private pendingRelease = false                    // let go before the arrow was on the string: loose it as soon as it is
     private flame: THREE.Group
@@ -1817,19 +1830,19 @@ export default class Tools {
         const holster = this.holsterPose(tool)
         if (!holster)
             return
+        if (tool === 'bow') {
+            this.bowStep(transition, holster)
+            return
+        }
         const style = STYLE[tool]
-        const result = style === 'sheath' ? this.sheathStep(transition, holster)
-            : style === 'none' ? this.slingStep(transition, holster)
-            : this.guardStep(transition, holster)
+        const result = style === 'sheath' ? this.sheathStep(transition, holster) : this.guardStep(transition, holster)
         const { pose, weight, off } = result
 
-        // the main hand (the left for the bow) on the tool, the other on the guard
+        // the right hand on the tool, the other on the guard
         const hand = frame(pose.dir, pose.edge).multiply(gripOf(tool).clone().invert())
         const main: HandTarget = { position: pose.grip.clone(), quaternion: hand }
         const other: HandTarget | null = off && off.weight > 0.001 ? { position: off.position, quaternion: off.quaternion, weight: off.weight } : null
-        this.pose = tool === 'bow'
-            ? { left: main, right: other, weight, twist: 0, lean: 0, lower: 0, pitch: 0 }
-            : { right: main, left: other, weight, twist: 0, lean: 0, lower: 0, pitch: 0 }
+        this.pose = { right: main, left: other, weight, twist: 0, lean: 0, lower: 0, pitch: 0 }
         this.last = pose
     }
 
@@ -1901,41 +1914,82 @@ export default class Tools {
         return { pose, weight, off: null }
     }
 
-    /** Reached for over the shoulder and brought round to the front (the bow), or put back. */
-    private slingStep(transition: NonNullable<Tools['transition']>, holster: Pose) {
-        const t = transition.time, tool = transition.tool
+    /**
+     * The bow off the back and back on (UNSLING, SLING), with both hands: the right takes the
+     * upper limb over the right shoulder and lifts the bow round to stand in front of the chest,
+     * the left takes it by the grip there and lowers it into the carry; put away, the other way
+     * round. The bow is in the right hand (by the limb) while it changes hands (bowHand).
+     */
+    private bowStep(transition: NonNullable<Tools['transition']>, worn: Pose) {
+        const t = transition.time
         const phase = (from: number, to: number) => smooth(THREE.MathUtils.clamp((t - from) / (to - from), 0, 1))
-        const carry = this.carryPose(tool)
-        let pose: Pose, weight = 1
+        const present: Pose = { grip: vector(BOW_PRESENT.grip), dir: vector(BOW_PRESENT.dir).normalize(), edge: vector(BOW_PRESENT.edge!), twist: 0, lean: 0, lower: 0 }
+        const carry = this.carryPose('bow')
+        // up over the right shoulder between the back and the front
+        const over = (u: number): Pose => ({
+            grip: bezier(worn.grip, new THREE.Vector3(- 0.12, 1.5, - 0.08), present.grip, u),
+            dir: arcBetween(worn.dir, present.dir, u),
+            edge: worn.edge.clone().lerp(present.edge, u).normalize(),
+            twist: 0, lean: 0, lower: 0
+        })
+        let pose: Pose, right = 0, left = 0
         if (transition.kind === 'draw') {
             const S = UNSLING
             if (t < S.reach) {
-                pose = holster
-                weight = phase(0, S.reach)
+                pose = worn
+                right = phase(0, S.reach)
+            }
+            else if (t < S.take) {
+                this.grab('bow')
+                this.bowHand = 'r'
+                pose = t < S.lift ? over(phase(S.reach, S.lift)) : present
+                right = 1
+                left = phase(S.lift, S.take)
             }
             else {
-                this.grab(tool)
-                pose = t < S.pull ? this.pullPath(tool, holster, carry, phase(S.reach, S.pull)) : carry
-                weight = 1 + (CARRY[tool].weight - 1) * phase(S.pull, S.end)
+                this.bowHand = 'l'
+                pose = this.swingTo(present, carry, phase(S.take, S.end))
+                left = 1
+                right = 1 - phase(S.take, S.take + 0.22)
             }
             if (t >= S.end) this.finish('draw')
         }
         else {
             const S = SLING
             const from = transition.from ?? carry
-            if (t < S.pull)
-                pose = this.pullPath(tool, holster, from, 1 - phase(0, S.pull))
+            if (t < S.take) {
+                pose = this.swingTo(from, present, phase(0, S.raise))
+                left = 1
+                right = phase(0, S.raise)
+                this.bowHand = t < (S.raise + S.take) / 2 ? 'l' : 'r'
+            }
+            else if (t < S.back) {
+                this.bowHand = 'r'
+                pose = over(1 - phase(S.take, S.back))
+                right = 1
+                left = 1 - phase(S.take, S.take + 0.2)
+            }
             else {
-                pose = holster
-                this.release(tool)
-                weight = 1 - phase(S.pull, S.end)
+                this.release('bow')
+                this.bowHand = 'l'
+                pose = worn
+                right = 1 - phase(S.back, S.end)
             }
             if (t >= S.end) {
-                this.release(tool)
+                this.release('bow')
+                this.bowHand = 'l'
                 this.finish('stow')
             }
         }
-        return { pose, weight, off: null }
+        // both hands hold the bow as a handle (its limb along the knuckles)
+        const hand = frame(pose.dir, pose.edge).multiply(gripOf('bow').clone().invert())
+        this.bowHands = { l: left, r: right }
+        this.pose = {
+            left: left > 0.001 ? { position: pose.grip.clone(), quaternion: hand, weight: left } : null,
+            right: right > 0.001 ? { position: pose.grip.clone().addScaledVector(pose.dir, LIMB), quaternion: hand.clone(), weight: right } : null,
+            weight: 1, twist: 0, lean: 0, lower: 0, pitch: 0
+        }
+        this.last = pose
     }
 
     /** From one pose to another in front of the body, the tool turning the long way over the top if it must. */
@@ -2381,14 +2435,17 @@ export default class Tools {
         for (const tool of set) {
             const model = this.models.get(tool)!
             if (this.inHand.has(tool)) {
-                const bone = this.view.player.bone(tool === 'bow' ? 'hand_l' : 'hand_r')
+                const byLimb = tool === 'bow' && this.bowHand === 'r'
+                const bone = this.view.player.bone(tool === 'bow' && !byLimb ? 'hand_l' : 'hand_r')
                 if (!bone)
                     continue
                 bone.updateWorldMatrix(true, false)
                 const handQuaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(bone.matrixWorld))
-                const grip = (tool === 'bow' ? GRIP_LEFT : GRIP_RIGHT).clone().applyQuaternion(handQuaternion)
+                const grip = (tool === 'bow' && !byLimb ? GRIP_LEFT : GRIP_RIGHT).clone().applyQuaternion(handQuaternion)
                 model.position.setFromMatrixPosition(bone.matrixWorld).add(grip)
                 model.quaternion.copy(handQuaternion).multiply(gripOf(tool))
+                if (byLimb)
+                    model.position.addScaledVector(UP.clone().applyQuaternion(model.quaternion), - LIMB)
                 if (this.swing?.motion?.twoHanded && this.swing.tool === tool)
                     this.inBothHands(tool, model)
             }
@@ -2634,6 +2691,10 @@ export default class Tools {
         const tool = held ?? grabbing
         let r = tool && tool !== 'bow' ? 1 : 0
         let l = tool === 'bow' ? 1 : 0
+        if (tool === 'bow' && this.transition) {
+            r = this.bowHands.r
+            l = this.bowHands.l
+        }
         if (tool === 'bow' && (this.nockTime >= 0 || this.aiming))
             r = 0.55
         if (tool && tool !== 'bow' && this.pose.left)
