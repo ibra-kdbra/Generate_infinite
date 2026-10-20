@@ -10,6 +10,7 @@ import { WATER_LEVEL } from '../Workers/TerrainShape'
 import { SHADOW_UNIFORMS } from './Shadows'
 import sunShadowShader from './Materials/shaders/partials/getSunShadow.glsl'
 import CharacterPose from './CharacterPose'
+import HandGrip from './HandGrip'
 
 // the packs' hair is a neutral grey meant to be tinted: each character's colour
 const HAIR_COLORS: Record<CharacterName, string> = {
@@ -83,6 +84,7 @@ export default class Player {
     private slideAmount = 0
     private strideDirection = 1                 // 1 walking forward, -1 backing away
     private strideYaw = 0                       // radians: the hips turned toward a side-step
+    private grip: HandGrip | null = null
     private steadyAmount = 0                    // 0 .. 1: the shoulders held square while aiming
     private leanPitch = 0                       // radians forward into the acceleration
     private leanBank = 0                        // radians into a turn
@@ -176,6 +178,7 @@ export default class Player {
         this.group.add(model)
         this.model = model
         this.pose = new CharacterPose(model)
+        this.grip = new HandGrip(model)          // measured on the bind pose, before any clip plays
         this.pose.onPlant = (limb, at, gear) => this.view.tools?.climbPlant(limb, at, gear)
         this.boneCache.clear()
         // each bone's turn in the bind pose, relative to the body: gear hung on a bone is placed
@@ -685,6 +688,12 @@ export default class Player {
             look: player.stance || this.view.tools?.aiming ? this.gaze() : null,
             tool: this.view.tools?.pose
         })
+        // the hands closed on what they hold
+        const fist = this.view.tools?.fist
+        if (fist && this.grip) {
+            this.grip.apply('r', fist.r)
+            this.grip.apply('l', fist.l)
+        }
     }
 
     update() {

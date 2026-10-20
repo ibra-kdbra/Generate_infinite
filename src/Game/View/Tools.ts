@@ -775,6 +775,7 @@ export default class Tools {
     private arrowMesh: THREE.InstancedMesh
     private nocked: THREE.Mesh
     private arrowInHand: THREE.Mesh                   // taken from the quiver, on its way to the string
+    fist = { l: 0, r: 0 }                            // how closed each hand is on what it holds (Player, HandGrip)
     private nockTime = - 1                            // since the hand went for an arrow (-1: none on the string, none coming)
     private pendingRelease = false                    // let go before the arrow was on the string: loose it as soon as it is
     private flame: THREE.Group
@@ -2351,6 +2352,7 @@ export default class Tools {
 
         // face where the camera looks while aiming or striking
         this.updatePerformances(dt)
+        this.updateFists(dt)
 
         // the feet slow while the hands are busy: a stroke (not the running cut or the leap),
         // drawing or putting away, aiming the bow
@@ -2619,6 +2621,33 @@ export default class Tools {
         if (this.acting)
             list.push(this.acting)
         this.view.player.performances = list
+    }
+
+    /**
+     * How closed each hand is: on a tool's handle (the right hand; the bow in the left), the
+     * other hand on a two-handed tool's handle or a guard it took off; the drawing hand a
+     * hook on the string, not a fist. Eased, so hands close as they take hold.
+     */
+    private updateFists(dt: number) {
+        const held = [...this.inHand][0]
+        const grabbing = this.transition && this.transition.grabbed ? this.transition.tool : null
+        const tool = held ?? grabbing
+        let r = tool && tool !== 'bow' ? 1 : 0
+        let l = tool === 'bow' ? 1 : 0
+        if (tool === 'bow' && (this.nockTime >= 0 || this.aiming))
+            r = 0.55
+        if (tool && tool !== 'bow' && this.pose.left)
+            l = Math.max(l, (this.pose.left.weight ?? 1) * this.pose.weight)
+        if (this.swing?.motion?.twoHanded)
+            l = 1
+        for (const [cover, state] of this.coverState)
+            if (state.at === 'hand') {
+                if (cover === 'bow') r = Math.max(r, 1)
+                else l = Math.max(l, 1)
+            }
+        const k = 1 - Math.exp(- dt * 14)
+        this.fist.r += (r - this.fist.r) * k
+        this.fist.l += (l - this.fist.l) * k
     }
 
     /** The quiver, pouch or sack on the belt. */

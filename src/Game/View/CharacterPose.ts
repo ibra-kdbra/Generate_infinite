@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 
+import { GRIP_CENTRE } from './HandGrip'
+
 /** A hand's target in the character's own space (x left, y up, z forward, from the feet). */
 export type HandTarget = { position: THREE.Vector3 | null, quaternion: THREE.Quaternion | null, pole?: THREE.Vector3, weight?: number }   // pole: where the elbow points (character space); weight: this hand's share of the tool pose's
 
@@ -44,9 +46,9 @@ const BONES = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 
     'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r']
 
 // where a tool's grip sits in the hand (hand bone space: y toward the fingers, z the thumb
-// side, the palm facing -x on the right hand, +x on the left)
-export const GRIP_RIGHT = new THREE.Vector3(- 0.012, 0.082, 0.018)
-export const GRIP_LEFT = new THREE.Vector3(0.012, 0.082, 0.018)
+// side, the palm facing -x on the right hand, +x on the left): through the closed fist (HandGrip)
+export const GRIP_RIGHT = GRIP_CENTRE.r
+export const GRIP_LEFT = GRIP_CENTRE.l
 
 const up = new THREE.Vector3(0, 1, 0)
 
