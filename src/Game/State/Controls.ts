@@ -194,11 +194,30 @@ export default class Controls {
             lastTime = - Infinity
         })
         let recent: { x: number, y: number, time: number }[] = []
+        // ?mouse in the address: once a second while captured, what came in and what was kept
+        const report = new URLSearchParams(location.search).has('mouse')
+        const seen = { mouse: 0, pointer: 0, order: 0, mirror: 0, kept: 0, x: 0, y: 0, raw: [] as string[] }
+        if (report) {
+            window.addEventListener('pointermove', () => { if (document.pointerLockElement) seen.pointer++ })
+            setInterval(() => {
+                if (!document.pointerLockElement && !seen.mouse)
+                    return
+                const side = Math.min(window.innerWidth, window.innerHeight)
+                console.info(`[mouse] 1 s: ${seen.mouse} mouse events (${seen.pointer} pointer) · kept ${seen.kept} · out of time order ${seen.order} · undoing ${seen.mirror} · kept movement ${seen.x.toFixed(0)}, ${seen.y.toFixed(0)} CSS px = ${(seen.x / side * 2 * 57.3).toFixed(0)}° at sensitivity 1 · dpr ${window.devicePixelRatio} · first: ${seen.raw.join(' | ')}`)
+                Object.assign(seen, { mouse: 0, pointer: 0, order: 0, mirror: 0, kept: 0, x: 0, y: 0, raw: [] })
+            }, 1000)
+        }
         window.addEventListener('mousemove', (event) => {
             if (!document.pointerLockElement)
                 return
-            if (event.timeStamp < lastTime)
+            if (report) {
+                seen.mouse++
+                if (seen.raw.length < 8) seen.raw.push(`${event.timeStamp.toFixed(1)} ${event.movementX},${event.movementY} b${event.buttons}`)
+            }
+            if (event.timeStamp < lastTime) {
+                seen.order++
                 return
+            }
             lastTime = event.timeStamp
             if (skipNext) {
                 skipNext = false
@@ -215,12 +234,16 @@ export default class Controls {
                     sumY += recent[i].y
                     if (Math.abs(x + sumX) <= 1 && Math.abs(y + sumY) <= 1) {
                         recent = []
+                        seen.mirror++
                         return
                     }
                 }
             }
             recent.push({ x, y, time: event.timeStamp })
             const scale = 1 / (window.devicePixelRatio || 1)
+            seen.kept++
+            seen.x += x * scale
+            seen.y += y * scale
             this.pointer.deltaTemp.x += x * scale
             this.pointer.deltaTemp.y += y * scale
         })

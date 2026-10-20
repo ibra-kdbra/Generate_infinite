@@ -122,7 +122,7 @@ const defaults: Values = {
     antialiasing: 'smaa',
     threads: 'auto',
     hood: true,
-    mouseLook: 'capture',
+    mouseLook: 'drag',
     mouseSpeed: 1
 }
 

@@ -1,7 +1,12 @@
 import glsl from 'vite-plugin-glsl'
 import { defineConfig } from 'vite'
+import { execSync } from 'child_process'
+
+// which commit this build is (Vercel names it; locally, git): the game says so in the console
+const commit = (process.env.VERCEL_GIT_COMMIT_SHA || (() => { try { return execSync('git rev-parse HEAD').toString() } catch { return 'unknown' } })()).trim().slice(0, 7)
 
 export default defineConfig({
+    define: { __BUILD__: JSON.stringify(commit) },
     plugins:
         [
             glsl({ watch: true })
