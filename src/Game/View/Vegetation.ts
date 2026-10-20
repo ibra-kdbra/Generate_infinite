@@ -218,7 +218,10 @@ export default class Vegetation {
             const instance = layer.instance.array as Float32Array
             const extra = layer.extra.array as Float32Array
             for (let i = 0; i < count; i++) {
-                instance.set(values.slice(i * 6, i * 6 + 4), i * 4)
+                instance[i * 4] = values[i * 6]
+                instance[i * 4 + 1] = values[i * 6 + 1]
+                instance[i * 4 + 2] = values[i * 6 + 2]
+                instance[i * 4 + 3] = values[i * 6 + 3]
                 extra[i * 2] = values[i * 6 + 4]
                 extra[i * 2 + 1] = values[i * 6 + 5]
             }

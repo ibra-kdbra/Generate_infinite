@@ -550,10 +550,13 @@ export default class Trees {
         const fill = (instances: Instances, values: number[], stride: number) => {
             const count = values.length / stride
             const a = instances.instance.array as Float32Array, b = instances.extra.array as Float32Array
-            for (let i = 0; i < count; i++) {
-                a.set(values.slice(i * stride, i * stride + 4), i * 4)
-                b[i * 2] = values[i * stride + 4]
-                b[i * 2 + 1] = stride > 5 ? values[i * stride + 5] : 0
+            for (let i = 0, j = 0; i < count; i++, j += stride) {
+                a[i * 4] = values[j]
+                a[i * 4 + 1] = values[j + 1]
+                a[i * 4 + 2] = values[j + 2]
+                a[i * 4 + 3] = values[j + 3]
+                b[i * 2] = values[j + 4]
+                b[i * 2 + 1] = stride > 5 ? values[j + 5] : 0
             }
             instances.instance.needsUpdate = true
             instances.extra.needsUpdate = true
