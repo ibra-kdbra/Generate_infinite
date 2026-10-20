@@ -174,13 +174,35 @@ export default class Controls {
         // movement in it, so a quick flick is hundreds of pixels: it must not be cut.
         let skipNext = false
         document.addEventListener('pointerlockchange', () => { skipNext = !!document.pointerLockElement })
+        // with the mouse captured on Linux, the pointer is put back in the middle of the window
+        // after a movement and some browsers report that too, as the same movement the other
+        // way (+60 then -60, or -60 after +20 +20 +20): the view lurched forth and back, or
+        // stood still when both came in one frame. A movement that undoes the last few (within
+        // 50 ms, to the pixel) is that, not a hand: dropped.
+        let recent: { x: number, y: number, time: number }[] = []
         window.addEventListener('pointermove', (event) => {
             if (skipNext) {
                 skipNext = false
                 return
             }
-            if (Math.abs(event.movementX) > 4000 || Math.abs(event.movementY) > 4000)
+            const x = event.movementX, y = event.movementY
+            if (Math.abs(x) > 4000 || Math.abs(y) > 4000)
                 return
+            if (document.pointerLockElement) {
+                recent = recent.filter((move) => event.timeStamp - move.time < 50)
+                if (Math.abs(x) + Math.abs(y) > 6) {
+                    let sumX = 0, sumY = 0
+                    for (let i = recent.length - 1; i >= Math.max(0, recent.length - 5); i--) {
+                        sumX += recent[i].x
+                        sumY += recent[i].y
+                        if (Math.abs(x + sumX) <= 1 && Math.abs(y + sumY) <= 1) {
+                            recent = []
+                            return
+                        }
+                    }
+                }
+                recent.push({ x, y, time: event.timeStamp })
+            }
             this.pointer.deltaTemp.x += event.movementX
             this.pointer.deltaTemp.y += event.movementY
         })

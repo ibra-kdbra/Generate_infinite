@@ -124,15 +124,12 @@ export default class Viewport {
     }
 
     /**
-     * How far the mouse turns the camera (radians): a drag across the window's smaller side
-     * turns it about 2 radians; a captured mouse turns it by its own counts (0.01° a count:
-     * 10 cm turns about 30° at 800 DPI, 55° at 1600), the same for any window size. Both
-     * scaled by the sensitivity setting.
+     * How far the mouse turns the camera (radians): moving it across the window's smaller side
+     * turns it about 2 radians, dragging or captured alike (both report screen pixels), scaled
+     * by the sensitivity setting.
      */
     look(pixelCoordinates: { x: number; y: number }) {
         const speed = Settings.getInstance().get('mouseSpeed')
-        if (this.pointerLock.active)
-            return { x: pixelCoordinates.x * 0.00018 * speed, y: pixelCoordinates.y * 0.00018 * speed }
         const normalised = this.normalise(pixelCoordinates)
         return { x: normalised.x * 2 * speed, y: normalised.y * 2 * speed }
     }

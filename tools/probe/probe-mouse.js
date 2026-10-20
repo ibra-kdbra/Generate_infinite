@@ -13,7 +13,7 @@ export default async function ({ w, log, wait }) {
     w.document.addEventListener('pointerlockerror', () => log('pointer lock ERROR event'))
     const orig = w.HTMLElement.prototype.requestPointerLock
     w.HTMLElement.prototype.requestPointerLock = function (...a) { log('requestPointerLock called with', JSON.stringify(a)); const r = orig.apply(this, a); if (r && r.catch) r.catch((e) => log('request rejected:', String(e))); return r }
-    log('ACTION click 300 200'); await wait(800)
+    log('ACTION click 300 200'); await wait(1500)
     log('locked', !!w.document.pointerLockElement, 'by', w.document.pointerLockElement && w.document.pointerLockElement.className, 'devicePixelRatio', w.devicePixelRatio)
     for (const [dx, steps] of [[100, 1], [100, 10], [400, 1], [400, 20]]) {
         moves = []; const before = cam.theta
