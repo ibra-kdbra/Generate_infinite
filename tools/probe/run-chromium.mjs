@@ -68,6 +68,7 @@ page.on('console', async (message) => {
     }
 })
 page.on('pageerror', (error) => console.log('PAGE ERROR', error.message))
+if (process.env.INIT_STORAGE) await page.addInitScript((pairs) => { for (const [k, v] of Object.entries(pairs)) localStorage.setItem(k, v) }, JSON.parse(process.env.INIT_STORAGE))
 await page.goto(`http://127.0.0.1:${process.env.PORT ?? 5173}/tools/probe/probe-tmp.html?q=${process.env.Q ?? 'high'}&${extra}`)
 await Promise.race([finished, new Promise((resolve) => setTimeout(resolve, Number(seconds) * 1000))])
 await browser.close()

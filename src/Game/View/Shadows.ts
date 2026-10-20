@@ -101,9 +101,16 @@ export default class Shadows {
             return
         }
         this.splits = preset.splits
+        const renderer = this.view.renderer.instance
         for (let i = 0; i < 3; i++) {
             const size = preset.sizes[i]
             const target = this.createTarget(size)
+            // cleared at once: a shadow map not yet drawn into isn't set up for comparison, and
+            // WebGL (Firefox) refuses every draw that samples it; at night none is drawn (the sun
+            // is down), so a game begun at night drew no ground, plants or character at all
+            renderer.setRenderTarget(target)
+            renderer.clear(false, true, false)
+            renderer.setRenderTarget(null)
             this.cascades.push({
                 target,
                 camera: new THREE.OrthographicCamera(),
