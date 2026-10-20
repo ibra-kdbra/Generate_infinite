@@ -97,9 +97,9 @@ export default class CameraThirdPerson {
 
         // ── orbit input ──
         if (this.controls.pointer.down || this.viewport.pointerLock.active) {
-            const normalisedPointer = this.viewport.normalise(this.controls.pointer.delta)
-            this.phi -= normalisedPointer.y * 2
-            this.theta -= normalisedPointer.x * 2
+            const look = this.viewport.look(this.controls.pointer.delta)
+            this.phi -= look.y
+            this.theta -= look.x
             this.phi = Math.min(this.phiLimits.max + this.aimAmount * Math.PI * 0.12, Math.max(this.phiLimits.min, this.phi))
         }
         this.aimAmount += (this.aim - this.aimAmount) * (1 - Math.exp(- dt * 9))

@@ -1,6 +1,7 @@
 import Game from '../Game'
 import State from './State'
 import Controls from './Controls'
+import Settings from '../Settings'
 
 export default class Viewport {
     game: Game
@@ -118,6 +119,19 @@ export default class Viewport {
         document.addEventListener('fullscreenchange', () => {
             this.fullscreen.active = !!document.fullscreenElement
         })
+    }
+
+    /**
+     * How far the mouse turns the camera (radians): a drag across the window's smaller side
+     * turns it about 2 radians; a captured mouse turns it by its own movement (the same for
+     * any window size), much finer. Both scaled by the sensitivity setting.
+     */
+    look(pixelCoordinates: { x: number; y: number }) {
+        const speed = Settings.getInstance().get('mouseSpeed')
+        if (this.pointerLock.active)
+            return { x: pixelCoordinates.x * 0.0009 * speed, y: pixelCoordinates.y * 0.0009 * speed }
+        const normalised = this.normalise(pixelCoordinates)
+        return { x: normalised.x * 2 * speed, y: normalised.y * 2 * speed }
     }
 
     normalise(pixelCoordinates: { x: number; y: number }) {

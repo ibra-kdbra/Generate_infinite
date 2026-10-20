@@ -98,6 +98,7 @@ type Values = {
     threads: Threads
     hood: boolean
     mouseLook: MouseLook
+    mouseSpeed: number          // a factor on how far the mouse turns the camera
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -121,7 +122,8 @@ const defaults: Values = {
     antialiasing: 'smaa',
     threads: 'auto',
     hood: true,
-    mouseLook: 'capture'
+    mouseLook: 'capture',
+    mouseSpeed: 1
 }
 
 /**

@@ -170,6 +170,10 @@ export default class Controls {
         })
 
         window.addEventListener('pointermove', (event) => {
+            // with the mouse captured, browsers now and then report a wild jump (as the capture
+            // starts, on some Linux and high-rate mice): no hand moves a mouse that far in one event
+            if (document.pointerLockElement && (Math.abs(event.movementX) > 250 || Math.abs(event.movementY) > 250))
+                return
             this.pointer.deltaTemp.x += event.movementX
             this.pointer.deltaTemp.y += event.movementY
         })
