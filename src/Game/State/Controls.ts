@@ -169,10 +169,17 @@ export default class Controls {
                 this.pointer.down = true
         })
 
+        // the first movement after the mouse is captured can be a bogus jump (the pointer's way to
+        // where it was locked): skip that one. Browsers send one event a frame with all the
+        // movement in it, so a quick flick is hundreds of pixels: it must not be cut.
+        let skipNext = false
+        document.addEventListener('pointerlockchange', () => { skipNext = !!document.pointerLockElement })
         window.addEventListener('pointermove', (event) => {
-            // with the mouse captured, browsers now and then report a wild jump (as the capture
-            // starts, on some Linux and high-rate mice): no hand moves a mouse that far in one event
-            if (document.pointerLockElement && (Math.abs(event.movementX) > 250 || Math.abs(event.movementY) > 250))
+            if (skipNext) {
+                skipNext = false
+                return
+            }
+            if (Math.abs(event.movementX) > 4000 || Math.abs(event.movementY) > 4000)
                 return
             this.pointer.deltaTemp.x += event.movementX
             this.pointer.deltaTemp.y += event.movementY

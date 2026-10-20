@@ -81,18 +81,11 @@ export default class Viewport {
         }
 
         this.pointerLock.activate = () => {
-            // the mouse's own movement, without the system's pointer acceleration, where the
-            // browser offers it (Chrome); else as the system moves the pointer. (Refused for a
-            // moment after Esc frees it; the next click tries again.)
-            const element = this.domElement as HTMLElement & { requestPointerLock(options?: { unadjustedMovement?: boolean }): Promise<void> | void }
-            try {
-                const request = element.requestPointerLock({ unadjustedMovement: true }) as unknown
-                if (request instanceof Promise)
-                    request.catch(() => { (element.requestPointerLock() as unknown as Promise<void> | undefined)?.catch?.(() => { }) })
-            }
-            catch {
-                element.requestPointerLock()
-            }
+            // (no "raw movement" option: Chrome on Linux refuses the request outright, and a
+            // second try after it is no longer part of the click, so it fails too. Refused for
+            // a moment after Esc frees it; the next click tries again.)
+            const request = this.domElement.requestPointerLock() as unknown
+            if (request instanceof Promise) request.catch(() => { })
         }
 
         this.pointerLock.deactivate = () => {

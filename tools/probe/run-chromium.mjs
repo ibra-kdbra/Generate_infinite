@@ -15,9 +15,9 @@ const where = process.env.PLAYWRIGHT ?? path.join(execSync('npm root -g').toStri
 const { chromium } = await import(fs.existsSync('node_modules/playwright') ? 'playwright' : path.join(where, 'index.mjs'))
 fs.mkdirSync(out, { recursive: true })
 const [width, height] = size.split(',').map(Number)
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
+const browser = await chromium.launch({ headless: !process.env.HEADFUL, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 const page = await browser.newPage({ viewport: { width, height } })
-let done
+let done, mouse = { x: 0, y: 0 }
 const finished = new Promise((resolve) => { done = resolve })
 // a probe can profile part of its run: log('PROFILE start') ... log('PROFILE stop <name>'); the
 // functions that took the most time (their own, and with what they call) are printed
@@ -48,6 +48,14 @@ const report = ({ profile }, name) => {
 page.on('console', async (message) => {
     const text = message.text()
     if (text === 'PROBE PROFILE start') { await cdp.send('Profiler.start'); return }
+    // a probe can have the real mouse clicked and moved: log('ACTION click x y'), log('ACTION move dx dy steps')
+    const action = text.match(/^PROBE ACTION (click|move) (-?[\d.]+) (-?[\d.]+) ?(\d+)?/)
+    if (action) {
+        const [, kind, a, b, steps] = action
+        if (kind === 'click') { await page.mouse.move(+a, +b); await page.mouse.click(+a, +b); mouse = { x: +a, y: +b } }
+        else { mouse = { x: mouse.x + +a, y: mouse.y + +b }; await page.mouse.move(mouse.x, mouse.y, { steps: +(steps ?? 1) }) }
+        return
+    }
     if (text.startsWith('PROBE PROFILE stop')) { report(await cdp.send('Profiler.stop'), text.slice(19)); return }
     const shot = text.match(/^SHOT (\S+) data:image\/jpeg;base64,(.+)$/)
     if (shot)
