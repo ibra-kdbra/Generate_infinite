@@ -170,10 +170,7 @@ export default class Controls {
         })
 
         // Two ways the mouse turns the view: dragging (pointer events, mouse and touch alike),
-        // and the captured mouse, read from mouse events. With the mouse captured, Firefox sends
-        // two pointer events per movement, one with the movement and one with the pointer's
-        // offset from where it was captured (seen as 4, -13, 4, -12, 7, -9 ... 2, 63, 0, 63):
-        // the view turned many times too far. Its mouse events carry the movement alone.
+        // and the captured mouse (mouse events).
         window.addEventListener('pointermove', (event) => {
             if (document.pointerLockElement)
                 return
@@ -181,17 +178,28 @@ export default class Controls {
             this.pointer.deltaTemp.y += event.movementY
         })
 
-        // the first movement after the mouse is captured can be a bogus jump (the pointer's way to
-        // where it was locked): skip that one. Browsers send one event a frame with all the
-        // movement in it, so a quick flick is hundreds of pixels: it must not be cut. And where
-        // the system puts the captured pointer back in the middle of the window and that is
-        // reported too (as the same movement the other way, within a few events), it's dropped.
-        let skipNext = false
-        document.addEventListener('pointerlockchange', () => { skipNext = !!document.pointerLockElement })
+        // The captured mouse. What Firefox on Wayland sends, the mouse moved steadily right:
+        //   time 16257 move 2 · 16256 -151 · 16266 4 · 16264 -149 · 16276 2 · 16271 -148 ...
+        // after each movement a second event, stamped a little earlier, with the pointer's offset
+        // from where it was captured (and the button of the click that captured it): the view
+        // turned many times too far, in lurches. An event out of time order is that one: dropped.
+        // The movement itself comes in the screen's own pixels (2.2 of them a CSS pixel there,
+        // as in Chrome), so it's brought to the CSS pixels dragging gets: the same speed.
+        // The first movement after the capture can be a jump (the pointer's way to where it was
+        // locked): skipped. Where the system puts the pointer back in the middle of the window
+        // and reports that too (the same movement the other way, X11), it's dropped.
+        let skipNext = false, lastTime = - Infinity
+        document.addEventListener('pointerlockchange', () => {
+            skipNext = !!document.pointerLockElement
+            lastTime = - Infinity
+        })
         let recent: { x: number, y: number, time: number }[] = []
         window.addEventListener('mousemove', (event) => {
             if (!document.pointerLockElement)
                 return
+            if (event.timeStamp < lastTime)
+                return
+            lastTime = event.timeStamp
             if (skipNext) {
                 skipNext = false
                 return
@@ -212,8 +220,9 @@ export default class Controls {
                 }
             }
             recent.push({ x, y, time: event.timeStamp })
-            this.pointer.deltaTemp.x += x
-            this.pointer.deltaTemp.y += y
+            const scale = 1 / (window.devicePixelRatio || 1)
+            this.pointer.deltaTemp.x += x * scale
+            this.pointer.deltaTemp.y += y * scale
         })
 
         window.addEventListener('pointerup', () => {
