@@ -29,7 +29,7 @@ There is no map to finish. The land is worked out as you come to it, so the hill
 <table>
   <tr>
     <td width="50%"><img src="docs/images/gallery-1.jpg" alt="Looking out from a hilltop at lakes and a far peak"></td>
-    <td width="50%"><img src="docs/images/sunset.jpg" alt="A hilltop over the water at sunset"></td>
+    <td width="50%"><img src="docs/images/gallery-3.jpg" alt="A lake below the mountains"></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/images/gallery-2.jpg" alt="The Ranger at the edge of a sunlit forest"></td>
