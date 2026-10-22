@@ -71,7 +71,7 @@ There is no map to finish. The land is worked out as you come to it, so the hill
 - **Detail where you look:** dense grass that bends round your legs, photo-scanned rocks and ferns, trees with full, thinned and billboard versions that cross-fade, so nothing pops as you walk.
 - **Fast on modest hardware:** quality is picked from your graphics card on the first visit (down to Very low for older laptops), frames are capped at 60 a second unless you ask for more and slow down when the window is in the background, resolution can follow the frame time, ground textures are compressed on the GPU, the terrain is built in background threads, and the code is split so returning players keep the libraries cached.
 
-The full list is in [docs/FEATURES.md](docs/FEATURES.md); where it goes next is in [docs/ENGINE-PLAN.md](docs/ENGINE-PLAN.md).
+The full list is in [docs/FEATURES.md](docs/FEATURES.md), every release in [CHANGELOG.md](CHANGELOG.md) (in the game too: Settings → About → Changelog), and where it goes next in [docs/ENGINE-PLAN.md](docs/ENGINE-PLAN.md).
 
 ## Controls
 

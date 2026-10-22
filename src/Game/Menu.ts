@@ -4,6 +4,7 @@ import Settings, { ANTIALIASING, CHARACTERS, DAY_LENGTHS, FRAME_RATES, GRASS_STY
 import State from './State/State'
 import View from './View/View'
 import Ui from './Ui'
+import Changelog from './Changelog'
 
 export type Tab = 'game' | 'graphics' | 'sound' | 'sky' | 'world' | 'visuals' | 'player' | 'stats' | 'controls' | 'about'
 type Row = { keys: string[], label: string, combo?: boolean }   // combo: pressed together, else any of them
@@ -141,6 +142,7 @@ export default class Menu {
     private gpu: string
     private hintText = ''
     private lastFocus: HTMLElement | null = null
+    private changelog!: Changelog
 
     constructor() {
         this.settings = Settings.getInstance()
@@ -218,7 +220,9 @@ export default class Menu {
                         <p class="about-lead">An endless landscape generated as you walk: hills, lakes, forests and mountains grown from a seed, with a full day and night, weather and living grass.</p>
                         <dl class="readout">
                             <div><dt>World seed</dt><dd>${this.escape(Game.getInstance().seed)}</dd></div>
+                            <div><dt>Version</dt><dd>${__VERSION__} · <span class="readout-faint">${__BUILD__}</span></dd></div>
                         </dl>
+                        <button class="text-button" data-changelog>Changelog</button>
                         <p class="about-credit">Created for saruma.</p>
                         <h3>Made with</h3>
                         <ul class="credits">
@@ -235,6 +239,8 @@ export default class Menu {
         ui.appendChild(this.drawer)
 
         this.drawer.querySelector('[data-close]')!.addEventListener('click', () => this.hide())
+        this.changelog = new Changelog(ui)
+        this.drawer.querySelector('[data-changelog]')!.addEventListener('click', () => this.changelog.open())
         const rail = this.drawer.querySelector('.rail')!
         rail.addEventListener('click', (event) => {
             const tab = (event.target as HTMLElement).closest('[data-tab]') as HTMLElement | null
@@ -283,7 +289,9 @@ export default class Menu {
                 return          // the same Esc that freed the mouse (and opened the menu)
             const typing = (event.target as HTMLElement)?.matches?.('input[type="text"], textarea') && !(event.target as HTMLElement).classList.contains('keyboard-input')
             if (event.code === 'Escape') {
-                if (this.open) this.hide()
+                // the changelog closes back to the menu
+                if (this.changelog.isOpen) this.changelog.close()
+                else if (this.open) this.hide()
                 else this.show(this.tab, true)
             }
             else if (event.code === 'KeyH' && !typing && !event.repeat) {

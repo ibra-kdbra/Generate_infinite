@@ -268,7 +268,7 @@ export default class Controls {
         const element = target as HTMLElement | null
         if (!element || !element.closest || element.classList?.contains('keyboard-input'))
             return false
-        return element.matches('input[type="text"], textarea, select') || !!element.closest('.drawer:not([hidden])')
+        return element.matches('input[type="text"], textarea, select') || !!element.closest('.drawer:not([hidden]), .changelog:not([hidden])')
     }
 
     setMobile() {

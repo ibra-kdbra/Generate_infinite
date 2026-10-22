@@ -1,6 +1,5 @@
 import Game from './Game/Game'
 
-declare const __BUILD__: string
 console.info(`[game] build ${__BUILD__}`)
 
 /** The game couldn't start (no WebGL: hardware acceleration off, a blocked or old graphics driver): say so, not a black page. */

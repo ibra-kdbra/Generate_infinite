@@ -1,16 +1,22 @@
 import glsl from 'vite-plugin-glsl'
 import { defineConfig } from 'vite'
 import { execSync } from 'child_process'
+import { readFileSync } from 'fs'
+import changelog from './tools/changelog/plugin.js'
 
+// the game's version (About, the Changelog page)
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 // which commit this build is (Vercel names it; locally, git): the game says so in the console
 const commit = (process.env.VERCEL_GIT_COMMIT_SHA || (() => { try { return execSync('git rev-parse HEAD').toString() } catch { return 'unknown' } })()).trim().slice(0, 7)
 
 export default defineConfig(({ command }) => ({
-    define: { __BUILD__: JSON.stringify(commit) },
+    define: { __BUILD__: JSON.stringify(commit), __VERSION__: JSON.stringify(version) },
     plugins:
         [
             // shaders minified in the build (comments and spaces out: a smaller download)
-            glsl({ watch: true, minify: command === 'build' })
+            glsl({ watch: true, minify: command === 'build' }),
+            // the Changelog page's text: CHANGELOG.md and the commits since (tools/changelog)
+            changelog()
         ],
     // the dev server listens on this machine only: anyone on the same network could otherwise
     // reach it (and read files through it). For a phone on the same Wi-Fi: npm run dev -- --host
