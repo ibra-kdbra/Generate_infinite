@@ -11,10 +11,8 @@ export default defineConfig({
         [
             glsl({ watch: true })
         ],
-    server:
-    {
-        host: true
-    },
+    // the dev server listens on this machine only: anyone on the same network could otherwise
+    // reach it (and read files through it). For a phone on the same Wi-Fi: npm run dev -- --host
     build:
     {
         rollupOptions:

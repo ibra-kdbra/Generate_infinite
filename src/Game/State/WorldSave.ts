@@ -58,7 +58,7 @@ export default class WorldSave {
             saved = text ? JSON.parse(text) as Saved : null
         }
         catch { saved = null }
-        if (!saved || saved.version !== VERSION)
+        if (!valid(saved))
             return
         const { player, day, vegetation } = this.state
         const p = player.position.current
@@ -91,4 +91,20 @@ export default class WorldSave {
         try { localStorage.setItem(this.key, JSON.stringify(saved)) }
         catch { /* storage full or blocked */ }
     }
+}
+
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+/** A save as written by this version: anything else (an older format, a damaged or edited entry) starts the world fresh rather than putting the player at NaN. */
+function valid(saved: unknown): saved is Saved {
+    if (!saved || typeof saved !== 'object')
+        return false
+    const s = saved as Saved
+    const p = s.player
+    return s.version === VERSION
+        && !!p && finite(p.x) && finite(p.y) && finite(p.z) && finite(p.rotation)
+        && Math.abs(p.x) < 1e7 && Math.abs(p.z) < 1e7 && Math.abs(p.y) < 1e5
+        && finite(s.day)
+        && Array.isArray(s.removed) && s.removed.every((key) => typeof key === 'string')
+        && Array.isArray(s.stumps) && s.stumps.every((stump) => Array.isArray(stump) && typeof stump[0] === 'string' && finite(stump[1]))
 }

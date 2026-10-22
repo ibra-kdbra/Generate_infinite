@@ -4,7 +4,6 @@
         └── 📁social
             ├── share-1200x600.png
             ├── share-1200x630.png
-            ├── share-1200x630.psd
     └── 📁src
         └── 📁Game
             └── 📁Debug
