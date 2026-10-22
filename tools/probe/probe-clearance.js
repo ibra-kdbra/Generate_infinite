@@ -1,3 +1,5 @@
+// Tools against the body while moving: each worn and held tool's clearance to the body's capsules
+// (bones joined as limbs), through its strokes and on the run.
 export default async function ({ w, log, wait, shot }) {
     const g = w.game, t0 = performance.now(); while (!g.loading.done && performance.now() - t0 < 60000) await wait(200)
     const st = g.view.player.settings, t = g.view.tools, pl = g.state.player, keys = g.state.controls.keys.down, vp = g.view.player

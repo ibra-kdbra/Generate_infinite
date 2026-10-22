@@ -24,7 +24,7 @@ const ZERO = new THREE.Vector3()
 
 const LOCOMOTION = ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop'] as const
 // performed on top of the gait (Tools): holding and using a tool, from the animation libraries
-export const PERFORMANCES = ['Sword_Idle', 'Sword_Attack', 'Idle_Torch_Loop', 'Sword_Regular_A', 'Sword_Regular_A_Rec', 'Sword_Regular_B',
+const PERFORMANCES = ['Sword_Idle', 'Sword_Attack', 'Idle_Torch_Loop', 'Sword_Regular_A', 'Sword_Regular_A_Rec', 'Sword_Regular_B',
     'Sword_Regular_B_Rec', 'Sword_Regular_C', 'Sword_Regular_Combo', 'Sword_Heavy_Combo', 'Sword_Dash', 'Sword_Block', 'TreeChopping_Loop',
     'Farm_Harvest', 'Farm_PlantSeed', 'Farm_Watering', 'Idle_Lantern_Loop', 'ClimbUp_1m'] as const
 export type PerformanceName = typeof PERFORMANCES[number]

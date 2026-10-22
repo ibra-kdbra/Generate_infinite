@@ -29,7 +29,7 @@ window.addEventListener('unhandledrejection', (e) => log('REJECT', String(e.reas
 ;(async () => {
     while (!window.game || !window.step) await wait(200)
     try {
-        const module = await import((new URLSearchParams(location.search).get('probe') || '/tools/probe/probe-tmp.js') + '?' + Date.now())
+        const module = await import((new URLSearchParams(location.search).get('probe') || '/tools/probe/probe-frame.js') + '?' + Date.now())
         await module.default({ w: window, log, wait, shot, timing })
     } catch (e) { log('ERROR', String(e.stack || e)) }
     log('DONE')

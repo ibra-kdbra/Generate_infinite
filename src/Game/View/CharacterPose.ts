@@ -54,7 +54,7 @@ const up = new THREE.Vector3(0, 1, 0)
 
 // hand space from a held tool's space: the handle through the fist toward the thumb (hand
 // +z), the edge in line with the knuckles (hand +y); the same both ways (Tools.ts too)
-export const HAND_IN_TOOL = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+const HAND_IN_TOOL = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
     new THREE.Vector3(- 1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)))
 
 /**

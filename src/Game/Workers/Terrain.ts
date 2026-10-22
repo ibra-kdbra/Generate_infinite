@@ -23,11 +23,8 @@ onmessage = function (event) {
 
     const segments = subdivisions + 1
     
-    // Alea-like seed based random for Simplex
-    // Since we don't have Alea here, we can use a simple hash or just use seedrandom if it was available.
-    // But SimplexNoise uses buildPermutationTable(random).
-    // The previous version used 'alea(seed)'.
-    // I will use a simple pseudo-random generator based on the seed string.
+    // a small seeded generator (a string hash, then a 32-bit mix) for the noises' permutation
+    // tables: the same seed always builds the same world
     const createRandom = (seed: string) => {
         let h = 0;
         for (let i = 0; i < seed.length; i++) h = Math.imul(31, h) + seed.charCodeAt(i) | 0;

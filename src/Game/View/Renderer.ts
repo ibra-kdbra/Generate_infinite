@@ -106,7 +106,6 @@ export default class Renderer {
         this.instance.domElement.style.height = '100%'
 
         this.instance.setClearColor(this.clearColor, 1)
-        // Add '!' to assert that these values are not null
         this.instance.setSize(this.viewport.width!, this.viewport.height!)
         this.instance.setPixelRatio(this.pixelRatio())
 

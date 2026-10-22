@@ -36,11 +36,10 @@ export default class Game {
         // the world: ?seed=... in the address (the developer panel can change it)
         this.seed = new URLSearchParams(location.search).get('seed') || 'p'
         
-        // Ensure modules are created before they are needed by others
+        // the state first: the view reads it as it's built
         this.state = new State()
         this.view = new View()
 
-        // This line now works correctly because the View and Renderer have been fully constructed
         if (this.view && this.view.renderer && this.view.renderer.instance) {
             this.domElement.append(this.view.renderer.instance.domElement)
         }
@@ -93,9 +92,5 @@ export default class Game {
     resize() {
         this.state.resize()
         this.view.resize()
-    }
-
-    destroy() {
-
     }
 }

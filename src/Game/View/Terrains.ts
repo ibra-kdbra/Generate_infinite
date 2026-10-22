@@ -129,7 +129,4 @@ export default class Terrains {
         this.material.uniforms.uGrassDryness.value = dryness
         this.material.uniforms.uGrassDistance.value = Math.max(radius * 2, 1e-3)
     }
-
-    resize() {
-    }
 }

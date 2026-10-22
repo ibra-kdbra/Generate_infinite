@@ -18,7 +18,7 @@ type Style = {
 
 // Grass styles from the settings menu. `dryness` also tints the terrain under and beyond
 // the field (View/Terrains.ts) so the ground keeps matching the blades.
-export const GRASS_STYLE_PARAMETERS: Record<GrassStyle, Style> = {
+const GRASS_STYLE_PARAMETERS: Record<GrassStyle, Style> = {
     meadow: { height: [0.28, 0.7], density: 60, dryness: 0, flowers: 0 },
     wild: { height: [0.45, 1.15], density: 64, dryness: 0.12, flowers: 0.01 },
     flowers: { height: [0.3, 0.75], density: 60, dryness: 0, flowers: 0.06 },

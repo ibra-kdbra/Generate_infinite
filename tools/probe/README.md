@@ -32,6 +32,13 @@ rx, ry)` for a free camera); `shot(name)` saves the canvas.
 | `probe-seams.js` | height steps along the seams between terrain pieces, against the skirt that hides them |
 | `probe-depth.js` | the same far view with the camera's near plane at 0.1 and 1 m (depth precision) |
 | `probe-memory.js` | script heap, GPU geometries, textures and programs, chunks over a ~10 km walk (`GC=1` for exact heap numbers) |
+| `probe-cost.js`, `probe-rate.js` | loading time and a frame's cost per quality; the frame-rate cap and the background rate |
+| `probe-horizon.js` | distant land from the ground and from a hill, by day and at sunset |
+| `probe-clearance.js` | each tool's clearance to the body through its strokes and on the run |
+| `probe-vis.js` | the tools filmed while walking and running (`walk`, `bare`), or through their strokes |
+| `probe-fist.js`, `probe-grip.js`, `probe-where.js` | the closed hand's centre, the fingers closing on a tool, where a worn tool sits on a bone |
+| `probe-capture.js`, `probe-mouse.js`, `probe-look.js` | the captured mouse with Firefox's extra events faked; end to end with the real mouse; how a turn arrives |
+| `probe-night.js` | a game begun at night: every shadow map set up |
 | `probe-save.js` | the world remembered: a tree felled, walked away from and back to, saved, reloaded |
 | `probe-contact.js` | each worn and held item's gap to the skin (cm), from the posed mesh |
 | `probe-gear.js`, `probe-held.js`, `probe-hand.js` | the gear worn from four sides; tools held; the hand close up |

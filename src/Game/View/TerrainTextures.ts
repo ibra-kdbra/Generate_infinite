@@ -13,7 +13,7 @@ import CompressWorker from '../Workers/TextureCompress?worker'
  * for the next ones: a quarter of the graphics memory (64 MB instead of 256 MB at 2048²) and
  * of the bandwidth the terrain shader spends reading them, which is most of its cost.
  */
-export const GROUND_LAYERS = [
+const GROUND_LAYERS = [
     'forrest_ground_01',     // 0 grassy ground (grass, twigs, dry leaves)
     'rocky_terrain_02',      // 1 soil on slopes (stony)
     'cliff_side',            // 2 rock

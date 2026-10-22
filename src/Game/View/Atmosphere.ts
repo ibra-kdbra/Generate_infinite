@@ -46,7 +46,7 @@ function opticalDepth(height: number, cosZenith: number, steps = 8): Vec3 {
 }
 
 /** Transmittance toward the sun from this height (0 when the planet is in the way, softly). */
-export function sunTransmittance(height: number, cosZenith: number): Vec3 {
+function sunTransmittance(height: number, cosZenith: number): Vec3 {
     const r = PLANET_RADIUS + height
     // below the geometric horizon the planet hides the sun (soft over the sun's own size)
     const horizon = - Math.sqrt(Math.max(0, 1 - (PLANET_RADIUS / r) ** 2))

@@ -56,10 +56,8 @@ export default class Terrain {
     }
 
     getElevationForPosition(x: number, z: number) {
-        if (!this.ready) {
-            // console.warn('terrain not ready')
+        if (!this.ready)
             return
-        }
 
         // this chunk's own resolution (it may predate a quality change): its data texture is
         // segments x segments x 4

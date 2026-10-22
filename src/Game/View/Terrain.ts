@@ -113,10 +113,6 @@ export default class Terrain {
         return texture
     }
 
-    update() {
-
-    }
-
     destroy() {
         if (this.created) {
             this.geometry.dispose()

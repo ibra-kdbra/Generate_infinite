@@ -147,7 +147,6 @@ export default class Terrains {
         this.terrains.set(terrain.id, terrain)
 
         // Post to worker
-        // console.time(`terrains: worker (${terrain.id})`)
         const worker = this.workers[this.workerIndex++]
         if (this.workerIndex >= this.workers.length)
             this.workerIndex = 0
@@ -170,9 +169,6 @@ export default class Terrains {
 
     recreate() {
         for (const [, terrain] of this.terrains) {
-            // this.create(terrain.size, terrain.x, terrain.z)
-
-            // console.time(`terrains: worker (${terrain.id})`)
             const iterations = this.getIterationsForPrecision(terrain.precision)
 
             const worker = this.workers[this.workerIndex++]

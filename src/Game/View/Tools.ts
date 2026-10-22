@@ -15,7 +15,7 @@ const SETS: Record<'ranger' | 'peasant', ToolName[]> = {
     ranger: ['sword', 'bow', 'torch'],
     peasant: ['axe', 'hoe', 'sickle']
 }
-export const TOOL_LABELS: Record<ToolName, string> = { sword: 'Sword', bow: 'Bow', torch: 'Torch', axe: 'Axe', hoe: 'Hoe', sickle: 'Sickle' }
+const TOOL_LABELS: Record<ToolName, string> = { sword: 'Sword', bow: 'Bow', torch: 'Torch', axe: 'Axe', hoe: 'Hoe', sickle: 'Sickle' }
 const ACTIONS: Record<ToolName, string> = {
     sword: 'Strike, again for the next move · Q heavy',
     bow: 'Hold to draw · release to shoot',
@@ -24,7 +24,7 @@ const ACTIONS: Record<ToolName, string> = {
     hoe: 'Dig, again for the next move · Q heavy',
     sickle: 'Reap, again for the next move · Q heavy'
 }
-export const TOOL_ICONS: Record<ToolName, string> = {
+const TOOL_ICONS: Record<ToolName, string> = {
     sword: '<path d="M19.5 4.5 9.5 14.5"/><path d="M19.5 4.5h-3.2M19.5 4.5v3.2"/><path d="m7 12 5 5"/><path d="m8.5 15.5-4 4"/>',
     bow: '<path d="M6.5 3.5c9 3 9 14 0 17"/><path d="M6.5 3.5v17"/><path d="M3.5 12h15"/><path d="m15.5 9 3 3-3 3"/>',
     torch: '<path d="M10.2 11h3.6L13 20.5h-2z"/><path d="M12 3c2.6 2.4 2.6 5.4 0 7-2.6-1.6-2.6-4.6 0-7z"/>',
@@ -679,7 +679,7 @@ function frame(dir: THREE.Vector3, edge: THREE.Vector3) {
 }
 
 /** How many chops fell a tree: 5 for the thinnest trunks, 20 for the thickest. */
-export function chopsToFell(plant: Plant) {
+function chopsToFell(plant: Plant) {
     return Math.round(THREE.MathUtils.clamp(5 + (plant.collision - 0.25) / 0.31 * 15, 5, 20))
 }
 
