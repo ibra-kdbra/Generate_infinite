@@ -60,8 +60,10 @@ void main()
     vec3 sun = normalize(uSunPosition);
     float night = smoothstep(0.02, - 0.16, sun.y);
 
-    // below the horizon (seldom seen past the terrain) the horizon's colour, darkening
-    vec3 color = getSkyLut(vec3(direction.x, max(direction.y, 0.0), direction.z)) * (1.0 - smoothstep(0.0, - 0.25, direction.y) * 0.6);
+    // below the horizon: seen only past the end of the terrain (from high up), where the
+    // ground has faded into the horizon's colour (getAerialFog): the same colour, so the edge
+    // never shows
+    vec3 color = getSkyLut(vec3(direction.x, max(direction.y, 0.0), direction.z));
 
     // the Milky Way: a band about the galactic plane, clumpy, split by dark dust lanes
     if (night > 0.0 && uMilkyWay > 0.0 && direction.y > - 0.05) {

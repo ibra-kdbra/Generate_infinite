@@ -10,6 +10,7 @@ export default class Terrain {
     precision: number
     halfSize: number
     ready: boolean
+    visible = false              // drawn (State/Chunks: not while a coarser one covers the land)
     renderInstance: any
     events: EventEmitter
     positions!: Float32Array
@@ -45,6 +46,13 @@ export default class Terrain {
         this.ready = true
 
         this.events.emit('ready')
+    }
+
+    setVisible(visible: boolean) {
+        if (visible === this.visible)
+            return
+        this.visible = visible
+        this.events.emit('visibility', visible)
     }
 
     getElevationForPosition(x: number, z: number) {

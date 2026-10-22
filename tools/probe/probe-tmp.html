@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="/src/style.css"></head>
 <body><div class="game"><div class="ui"><input type="text" class="keyboard-input" /></div></div>
+<script>
+// ?q=low|medium|high|ultra: the quality the game starts at (stored settings are read on start)
+try {
+    const q = new URLSearchParams(location.search).get('q')
+    if (q) { const key = 'generate-infinite:settings'; const v = JSON.parse(localStorage.getItem(key) || '{}'); v.quality = q; localStorage.setItem(key, JSON.stringify(v)) }
+} catch { /* storage blocked */ }
+</script>
 <script type="module" src="/src/index.ts"></script>
 <script>
 const log = (...a) => console.log('PROBE', ...a.map(x => typeof x === 'string' ? x : JSON.stringify(x)))

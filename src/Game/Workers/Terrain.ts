@@ -19,6 +19,7 @@ onmessage = function (event) {
     const iterations = event.data.iterations
     const iterationsOffsets = event.data.iterationsOffsets
     const shape = event.data.shape || defaultTerrainShape
+    const skirt = event.data.skirt ?? 15        // how far the edges hang down (State/Terrains.ts)
 
     const segments = subdivisions + 1
     
@@ -178,7 +179,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal
@@ -220,7 +221,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal
@@ -262,7 +263,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal
@@ -303,7 +304,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal

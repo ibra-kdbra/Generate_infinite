@@ -31,6 +31,10 @@ export default class Terrain {
         this.terrainState.events.on('ready', () => {
             this.create()
         })
+        this.terrainState.events.on('visibility', (visible: boolean) => {
+            if (this.created)
+                this.mesh.visible = visible
+        })
     }
 
     create() {
@@ -80,6 +84,7 @@ export default class Terrain {
 
             // Create mesh
             this.mesh = new THREE.Mesh(this.geometry, this.material)
+            this.mesh.visible = this.terrainState.visible
             const shadows = View.getInstance().shadows
             shadows.addCaster(this.mesh, shadows.depthMaterial, true)
             this.scene.add(this.mesh)

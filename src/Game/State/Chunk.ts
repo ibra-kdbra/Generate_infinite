@@ -59,7 +59,8 @@ export default class Chunk {
         zMax: number
     }
     events: EventEmitter
-    terrain!: Terrain
+    terrain: Terrain | null = null
+    destroyed = false
 
     constructor(id: string, chunks: Chunks, parent: Chunk | null, quadPosition: string, size: number, x: number, z: number, depth: number) {
         this.state = State.getInstance()
@@ -220,7 +221,8 @@ export default class Chunk {
 
         for (const [, chunk] of this.children) {
             chunk.events.on('ready', () => {
-                this.testReady()
+                if (!this.destroyed)
+                    this.testReady()
             })
         }
     }
@@ -240,13 +242,15 @@ export default class Chunk {
     createTerrain() {
         this.destroyTerrain()
 
-        this.terrain = this.state.terrains.create(
+        const terrain = this.state.terrains.create(
             this.size,
             this.x,
             this.z,
             this.precision
         )
-        this.terrain.events.on('ready', () => {
+        this.terrain = terrain
+        terrain.events.on('ready', () => {
+            this.chunks.visibilityNeedsUpdate = true
             this.testReady()
         })
     }
@@ -256,6 +260,9 @@ export default class Chunk {
             return
 
         this.state.terrains.destroyTerrain(this.terrain.id)
+        // gone: not to be taken for ready ground (an unsplit would drop its children over a hole)
+        this.terrain = null
+        this.chunks.visibilityNeedsUpdate = true
     }
 
     createFinal() {
@@ -276,28 +283,23 @@ export default class Chunk {
         this.destroyTerrain()
     }
 
+    /** Gone for good (out of range, or its parent unsplit): itself, its children and their ground. */
     destroy() {
+        if (this.destroyed)
+            return
+        this.destroyed = true
+
+        // children of a split chunk too, or their ground stayed drawn over whatever came next
         for (const [, chunk] of this.children)
-            chunk.events.off('ready', () => { })
-
-        if (this.splitted) {
-            this.unsplit()
-        }
-        else {
-            // Was unsplitting
-            if (this.unsplitting) {
-                // Destroy chunks
-                for (const [, chunk] of this.children)
-                    chunk.destroy()
-
-                this.children.clear()
-            }
-        }
+            chunk.destroy()
+        this.children.clear()
+        this.splitted = this.splitting = this.unsplitting = false
 
         this.destroyFinal()
-        // this.chunkHelper.destroy()
+        this.chunks.allChunks.delete(Number(this.id))
 
         this.events.emit('destroy')
+        this.events.removeAllListeners()
     }
 
     isInside(x: number, z: number) {

@@ -11,6 +11,7 @@ import Settings, { Quality } from '../Settings'
 // Mesh resolution per chunk size: chunks are 64 m around the player and double in size
 // with distance; far ones need far fewer vertices for the same detail on screen
 const SUBDIVISIONS: Record<Quality, Record<number, number>> = {
+    lowest: { 64: 40, 128: 32, 256: 26, 512: 20, 1024: 16 },
     low: { 64: 56, 128: 48, 256: 36, 512: 28, 1024: 20 },
     medium: { 64: 72, 128: 64, 256: 48, 512: 36, 1024: 28 },
     high: { 64: 96, 128: 88, 256: 80, 512: 72, 1024: 64 },
@@ -94,12 +95,14 @@ export default class Terrains {
 
     /**
      * The terrain is generated in background workers (Settings: threads): more of them fill
-     * the world in faster, at the cost of more of the processor; "auto" leaves one core free
-     * for the game itself.
+     * the world in faster, at the cost of more of the processor. "Auto" leaves one core free
+     * for the game itself and takes four at most: past that the world fills in hardly faster
+     * (the chunks come a few at a time as the player moves), while each worker holds memory of
+     * its own and a big processor would be kept busy for nothing.
      */
     setWorkers() {
         const threads = Settings.getInstance().get('threads')
-        const workersCount = threads === 'auto' ? Math.max(1, (navigator.hardwareConcurrency || 4) - 1) : Number(threads)
+        const workersCount = threads === 'auto' ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)) : Number(threads)
 
         for (let i = 0; i < workersCount; i++) {
             const worker = new TerrainWorker()
@@ -187,6 +190,18 @@ export default class Terrains {
         return table[size] ?? table[1024]
     }
 
+    /**
+     * How far each piece's edges hang down below it (its skirt). Side by side, a coarse piece's
+     * straight edge between vertices and its finer neighbour's can part by tens of metres on a
+     * mountain (a piece can neighbour one up to four times its size); the skirt fills the step,
+     * or you'd see through the ground. The step grows with the coarsest pieces' vertex spacing:
+     * measured up to 66 m at 51 m spacing (low quality) by tools/probe/probe-seams.js. Hanging
+     * below the ground, a deeper skirt is never seen otherwise, and costs nothing.
+     */
+    skirtDepth() {
+        return Math.round(15 + 2.5 * 1024 / this.subdivisionsFor(1024))
+    }
+
     private post(worker: Worker, terrain: Terrain, iterations: number) {
         worker.postMessage({
             id: terrain.id,
@@ -198,7 +213,8 @@ export default class Terrains {
             subdivisions: this.subdivisionsFor(terrain.size),
             iterations: iterations,
             iterationsOffsets: this.iterationsOffsets,
-            shape: this.shape
+            shape: this.shape,
+            skirt: this.skirtDepth()
         })
     }
 

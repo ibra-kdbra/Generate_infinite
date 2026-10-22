@@ -13,11 +13,14 @@ float getAerialHaze(vec3 worldPosition, out vec3 haze)
     float dist = length(toPoint);
     vec3 direction = toPoint / max(dist, 1e-4);
 
-    haze = getSkyLut(vec3(direction.x, max(direction.y, 0.0) * 0.25 + 0.012, direction.z));
+    float edge = smoothstep(uHazeRange * 0.5, uHazeRange * 0.97, length(toPoint.xz));
+    // the air's own colour: the sky low over the horizon; toward the edge, exactly the sky
+    // behind the point (skyBackground), so the end of the terrain is never seen against it
+    float up = max(direction.y, 0.0);
+    haze = getSkyLut(vec3(direction.x, mix(up * 0.25 + 0.012, up, edge), direction.z));
 
     float meanHeight = max(0.0, (worldPosition.y + cameraPosition.y) * 0.5);
     float air = 1.0 - exp(- 0.00012 * exp(- meanHeight / 1400.0) * dist);
-    float edge = smoothstep(uHazeRange * 0.5, uHazeRange * 0.97, length(toPoint.xz));
     return 1.0 - (1.0 - air) * (1.0 - edge);
 }
 
