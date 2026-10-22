@@ -15,7 +15,7 @@ Q=ultra node tools/probe/run-chromium.mjs 300 'probe=/tools/probe/probe-bench.js
 Screenshots land in `tools/probe/out/` (ignored by git); the probe's log lines are printed.
 The Chromium runner also prints the page's console errors (a shader that fails to compile) and
 CPU profiles a probe asks for (`log('PROFILE start')` … `log('PROFILE stop name')`). `Q` sets
-the quality, `PORT` another dev server.
+the quality (lowest, low, medium, high, ultra), `PORT` another dev server.
 
 A probe is an ES module exporting `async function ({ w, log, wait, shot, timing })`: `w` is the
 game page's window (`w.game`, and the dev helpers `w.step(frames)` to advance the game in exact
@@ -28,6 +28,10 @@ rx, ry)` for a free camera); `shot(name)` saves the canvas.
 | `probe-cpu.js` | the game's work per frame standing, running, turning, with a tool; CPU profiles |
 | `probe-frame.js` | ms per frame standing and running with a tool (drawing included) |
 | `probe-trees.js` | trees switching in and out of view on a walk, by cause |
+| `probe-far.js` | the far terrain as the player travels: pieces drawn over each other or holes; mountains and lakes from high above |
+| `probe-seams.js` | height steps along the seams between terrain pieces, against the skirt that hides them |
+| `probe-depth.js` | the same far view with the camera's near plane at 0.1 and 1 m (depth precision) |
+| `probe-memory.js` | script heap, GPU geometries, textures and programs, chunks over a ~10 km walk (`GC=1` for exact heap numbers) |
 | `probe-save.js` | the world remembered: a tree felled, walked away from and back to, saved, reloaded |
 | `probe-contact.js` | each worn and held item's gap to the skin (cm), from the posed mesh |
 | `probe-gear.js`, `probe-held.js`, `probe-hand.js` | the gear worn from four sides; tools held; the hand close up |

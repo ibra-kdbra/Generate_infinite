@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import Game from './Game'
-import Settings, { ANTIALIASING, CHARACTERS, DAY_LENGTHS, GRASS_STYLES, MOUSE_LOOK, QUALITIES, RESOLUTIONS, WEATHERS, Antialiasing, CharacterName, DayLength, GrassStyle, MouseLook, Quality, Resolution, Weather } from './Settings'
+import Settings, { ANTIALIASING, CHARACTERS, DAY_LENGTHS, FRAME_RATES, GRASS_STYLES, MOUSE_LOOK, QUALITIES, RESOLUTIONS, WEATHERS, Antialiasing, CharacterName, DayLength, FrameRate, GrassStyle, MouseLook, Quality, Resolution, Weather } from './Settings'
 import State from './State/State'
 import View from './View/View'
 import Ui from './Ui'
@@ -192,6 +192,7 @@ export default class Menu {
                         ${this.field('quality', 'Quality', QUALITIES)}
                         <p class="field-note" data-note hidden>Anti-aliasing changes after a reload.</p>
                         ${this.field('resolution', 'Resolution', RESOLUTIONS, 'segmented', 'Auto lowers it when frames run slow and raises it again when there\'s room.')}
+                        ${this.field('frameRate', 'Frame rate', FRAME_RATES, 'segmented', 'The most frames drawn a second. Fewer frames are less work for the graphics card: a cooler, quieter machine and a longer battery. Screen\'s: every frame the screen can show.')}
                         ${this.field('antialiasing', 'Anti-aliasing', ANTIALIASING, 'segmented', 'Temporal: steadier edges and grass. SMAA: crisper in fast motion.')}
                         ${this.field('grass', 'Grass', GRASS_STYLES, 'choice-wrap')}
                         <dl class="readout"><div><dt>Graphics card</dt><dd>${this.gpu}</dd></div></dl>
@@ -256,12 +257,13 @@ export default class Menu {
             const button = (event.target as HTMLElement).closest('button[data-key]') as HTMLButtonElement | null
             if (!button)
                 return
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing' | 'mouseLook'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'frameRate' | 'antialiasing' | 'mouseLook'
             const value = button.dataset.value!
             if (key === 'character') this.settings.set('character', value as CharacterName)
             if (key === 'quality') this.settings.set('quality', value as Quality)
             if (key === 'grass') this.settings.set('grass', value as GrassStyle)
             if (key === 'resolution') this.settings.set('resolution', value as Resolution)
+            if (key === 'frameRate') this.settings.set('frameRate', value as FrameRate)
             if (key === 'antialiasing') this.settings.set('antialiasing', value as Antialiasing)
             if (key === 'mouseLook') this.settings.set('mouseLook', value as MouseLook)
             this.refresh()
@@ -357,7 +359,7 @@ export default class Menu {
         this.settings.events.on('change:muted', () => kit.refresh())
         this.events.on('show', () => kit.refresh())
 
-        for (const key of ['character', 'quality', 'grass', 'resolution', 'antialiasing', 'mouseLook'])
+        for (const key of ['character', 'quality', 'grass', 'resolution', 'frameRate', 'antialiasing', 'mouseLook'])
             this.settings.events.on(`change:${key}`, () => this.refresh())
         let remembered: Tab = 'game'
         try {
@@ -403,12 +405,13 @@ export default class Menu {
 
     private refresh() {
         for (const button of this.drawer.querySelectorAll<HTMLButtonElement>('button[data-key]')) {
-            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'antialiasing' | 'mouseLook'
+            const key = button.dataset.key as 'character' | 'quality' | 'grass' | 'resolution' | 'frameRate' | 'antialiasing' | 'mouseLook'
             const selected = this.settings.get(key) === button.dataset.value
             button.classList.toggle('is-selected', selected)
             button.setAttribute('aria-pressed', String(selected))
         }
-        const lowChanged = (this.settings.get('quality') === 'low') !== (this.startQuality === 'low')
+        const unsmoothed = (quality: Quality) => quality === 'low' || quality === 'lowest'
+        const lowChanged = unsmoothed(this.settings.get('quality')) !== unsmoothed(this.startQuality)
         this.drawer.querySelector<HTMLElement>('[data-note]')!.hidden = !lowChanged
     }
 

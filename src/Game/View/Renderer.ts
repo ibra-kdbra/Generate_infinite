@@ -16,13 +16,14 @@ import { WATER_LEVEL } from '../Workers/TerrainShape'
 
 // Render resolution cap per quality (CSS pixel multiples). A 4K laptop panel at 225 %
 // scaling would otherwise render ~3400 x 1900 pixels, far too many for an integrated GPU.
-const MAX_PIXEL_RATIO: Record<Quality, number> = { low: 0.75, medium: 1, high: 1.5, ultra: 2 }
+const MAX_PIXEL_RATIO: Record<Quality, number> = { lowest: 0.6, low: 0.75, medium: 1, high: 1.5, ultra: 2 }
 
 // Post-processing by quality: ambient occlusion (N8AO; half resolution is much cheaper),
 // bloom on the brightest highlights and SMAA anti-aliasing. (No multisampling: N8AO can't
 // read a multisampled depth buffer, the occlusion silently disappears.)
 type AoQuality = 'Performance' | 'Low' | 'Medium' | 'High' | 'Ultra'
 const POST: Record<Quality, { ao: AoQuality | null, aoHalfRes: boolean, bloom: boolean, smaa: SMAAPreset | null }> = {
+    lowest: { ao: null, aoHalfRes: true, bloom: false, smaa: null },
     low: { ao: null, aoHalfRes: true, bloom: false, smaa: null },
     medium: { ao: 'Performance', aoHalfRes: true, bloom: true, smaa: SMAAPreset.MEDIUM },
     high: { ao: 'Low', aoHalfRes: true, bloom: true, smaa: SMAAPreset.HIGH },
@@ -267,7 +268,9 @@ export default class Renderer {
             return
         }
 
-        if (median > 1 / 56 && adaptive.hold <= 0) {
+        // aiming at the frame rate asked for (60 at most: past it a lower resolution isn't worth it)
+        const target = Math.min(60, this.game.frameRate || 60)
+        if (median > 1 / (target * 0.93) && adaptive.hold <= 0) {
             adaptive.headroom = 0
             if (adaptive.scale > adaptive.min) {
                 adaptive.lastMedian = median
@@ -275,7 +278,7 @@ export default class Renderer {
                 this.setScale(Math.max(adaptive.min, adaptive.scale * 0.88))
             }
         }
-        else if (median < 1 / 72 && adaptive.scale < 1) {
+        else if (median < 1 / (target * 1.2) && adaptive.scale < 1) {
             // only after a few seconds of headroom, so it doesn't flip between two sizes
             if (++adaptive.headroom >= 3) {
                 adaptive.headroom = 0

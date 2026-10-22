@@ -13,7 +13,7 @@ import vertexShader from './Materials/shaders/ferns/vertex.glsl'
 import fragmentShader from './Materials/shaders/ferns/fragment.glsl'
 
 // How far ferns are drawn, by quality (none on low)
-const RADIUS: Record<Quality, number> = { low: 0, medium: 26, high: 34, ultra: 44 }
+const RADIUS: Record<Quality, number> = { lowest: 0, low: 0, medium: 26, high: 34, ultra: 44 }
 const PATCH = 8
 const CANDIDATES = 18          // tries per patch (8 × 8 m): dense where the forest is thick
 const LIGHT_VARIANTS = 18      // beyond this distance only the two lighter scans are drawn (cross-fading over SWAP m)

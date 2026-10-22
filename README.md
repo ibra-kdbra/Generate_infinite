@@ -69,7 +69,7 @@ There is no map to finish. The land is worked out as you come to it, so the hill
 - **Three.js and TypeScript**, lit in linear HDR: ambient occlusion, bloom, filmic tone mapping, temporal anti-aliasing.
 - **Cascaded sun shadows** reach kilometres out, so mountains shade the valleys at sunset.
 - **Detail where you look:** dense grass that bends round your legs, photo-scanned rocks and ferns, trees with full, thinned and billboard versions that cross-fade, so nothing pops as you walk.
-- **Fast on modest hardware:** quality is picked from your graphics card on the first visit, resolution can follow the frame time, ground textures are compressed on the GPU, the terrain is built in background threads, and the code is split so returning players keep the libraries cached.
+- **Fast on modest hardware:** quality is picked from your graphics card on the first visit (down to Very low for older laptops), frames are capped at 60 a second unless you ask for more and slow down when the window is in the background, resolution can follow the frame time, ground textures are compressed on the GPU, the terrain is built in background threads, and the code is split so returning players keep the libraries cached.
 
 The full list is in [docs/FEATURES.md](docs/FEATURES.md); where it goes next is in [docs/ENGINE-PLAN.md](docs/ENGINE-PLAN.md).
 
@@ -95,7 +95,7 @@ You need [Node.js](https://nodejs.org/).
 
 ```sh
 npm install
-npm run dev          # http://localhost:5173
+npm run dev          # http://localhost:5173 (this machine only; add -- --host for a phone on the same Wi-Fi)
 npm run build        # the production build, in dist/
 npm run type-check
 ```

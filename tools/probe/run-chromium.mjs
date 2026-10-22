@@ -15,7 +15,7 @@ const where = process.env.PLAYWRIGHT ?? path.join(execSync('npm root -g').toStri
 const { chromium } = await import(fs.existsSync('node_modules/playwright') ? 'playwright' : path.join(where, 'index.mjs'))
 fs.mkdirSync(out, { recursive: true })
 const [width, height] = size.split(',').map(Number)
-const browser = await chromium.launch({ headless: !process.env.HEADFUL, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
+const browser = await chromium.launch({ headless: !process.env.HEADFUL, args: [...(process.env.GC ? ['--js-flags=--expose-gc'] : []), '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 const page = await browser.newPage({ viewport: { width, height } })
 let done, mouse = { x: 0, y: 0 }
 const finished = new Promise((resolve) => { done = resolve })

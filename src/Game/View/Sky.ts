@@ -15,6 +15,7 @@ import starsFragment from './Materials/shaders/stars/fragment.glsl'
 // Volumetric cloud ray-march steps (0 = one flat layer), light steps and resolution (of the
 // screen's CSS size; a quarter of those pixels is marched each frame), by quality
 const CLOUDS: Record<Quality, { steps: number, lightSteps: number, resolution: number }> = {
+    lowest: { steps: 0, lightSteps: 0, resolution: 0.2 },
     low: { steps: 0, lightSteps: 0, resolution: 0.25 },
     medium: { steps: 36, lightSteps: 4, resolution: 0.5 },
     high: { steps: 48, lightSteps: 5, resolution: 0.6 },

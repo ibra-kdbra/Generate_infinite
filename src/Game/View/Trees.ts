@@ -41,7 +41,7 @@ const LEAF_TINT: Record<Leaves, string> = { oak: '#c9d6b0', ash: '#c7d4ad', aspe
 const SWAY: Record<PlantKind, number> = { [PLANT.CONIFER]: 0.012, [PLANT.BROADLEAF]: 0.02, [PLANT.BUSH]: 0.03, [PLANT.ROCK]: 0 }
 
 // Full trees up to this distance, billboards beyond (a dithered hand-over across BAND m)
-const NEAR: Record<Quality, number> = { low: 28, medium: 50, high: 80, ultra: 125 }
+const NEAR: Record<Quality, number> = { lowest: 20, low: 28, medium: 50, high: 80, ultra: 125 }
 const BAND = 10
 // Every leaf card up to this share of NEAR; beyond, the crowns thin to LEAF_KEEP of their
 // cards (each grown to keep the crown as full) and a lighter copy draws only those
@@ -58,7 +58,7 @@ const HIDE_FROM = 60
 // trees lying felled at once (the oldest is cleared away for a new one)
 const FELLED = 4
 // billboard atlas cell (pixels per baked view), by quality when the trees are built
-const CELLS: Record<Quality, number> = { low: 192, medium: 256, high: 384, ultra: 448 }
+const CELLS: Record<Quality, number> = { lowest: 128, low: 192, medium: 256, high: 384, ultra: 448 }
 
 type Instances = { instance: THREE.InstancedBufferAttribute, extra: THREE.InstancedBufferAttribute }
 type Felled = {

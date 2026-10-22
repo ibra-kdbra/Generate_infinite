@@ -33,7 +33,7 @@ export type Log = {
 type Cell = { ix: number, iz: number, plants: Plant[], chunkSize: number }
 
 // How far around the player the world is populated
-const RADIUS: Record<Quality, number> = { low: 300, medium: 480, high: 640, ultra: 820 }
+const RADIUS: Record<Quality, number> = { lowest: 220, low: 300, medium: 480, high: 640, ultra: 820 }
 
 const smoothstep = (a: number, b: number, v: number) => {
     const t = Math.min(1, Math.max(0, (v - a) / (b - a)))

@@ -46,7 +46,8 @@ export default class Loading {
         const p = state.player.position.current
         const chunk = state.chunks.getDeepestChunkForPosition(p[0], p[2])
         const underfoot = !!(chunk && chunk.terrain && chunk.terrain.ready)
-        const textures = view.terrains.material.uniforms.uGroundReady.value === 1
+        // (on the lowest quality there's none to wait for)
+        const textures = view.terrains.material.uniforms.uGroundReady.value === 1 || !view.terrains.groundLoading
         const character = view.player.model !== null
         const trees = view.trees.ready
         const parts = [land >= 0.97 && underfoot, textures, character, trees]

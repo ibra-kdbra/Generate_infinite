@@ -10,6 +10,7 @@ import Settings, { Quality } from '../Settings'
 // 2: only the terrain, far out, for the mountains' shadows.
 type Preset = { sizes: [number, number, number], splits: [number, number, number], intervals: [number, number, number] }
 const CASCADES: Record<Quality, Preset | null> = {
+    lowest: null,
     low: null,
     medium: { sizes: [1024, 1024, 1024], splits: [22, 100, 2200], intervals: [1, 2, 4] },
     high: { sizes: [2048, 1536, 1536], splits: [30, 150, 2600], intervals: [1, 2, 4] },

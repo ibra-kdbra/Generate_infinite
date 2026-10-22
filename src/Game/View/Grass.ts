@@ -28,6 +28,7 @@ export const GRASS_STYLE_PARAMETERS: Record<GrassStyle, Style> = {
 
 // How much grass the quality setting draws
 const QUALITY: Record<Quality, { radius: number, density: number }> = {
+    lowest: { radius: 14, density: 0.22 },
     low: { radius: 20, density: 0.35 },
     medium: { radius: 26, density: 0.7 },
     high: { radius: 32, density: 1 },
