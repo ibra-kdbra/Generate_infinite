@@ -161,8 +161,6 @@ export default class Player {
         if (id !== this.loadId)
             return      // another character was picked meanwhile
 
-        this.disposeModel()
-
         const model = gltf.scene
         model.traverse((child) => {
             const mesh = child as THREE.Mesh
@@ -176,6 +174,13 @@ export default class Player {
             material.onBeforeCompile = (shader) => this.addUnderwaterTint(shader)
             this.view.shadows.addCaster(mesh, this.depthMaterial)
         })
+        // its shaders compiled before it's shown: the old character stays until then, instead of
+        // the game stalling on the new one's first frame
+        await this.view.renderer.precompile(model).catch(() => {})
+        if (id !== this.loadId)
+            return
+
+        this.disposeModel()
         this.group.add(model)
         this.model = model
         this.pose = new CharacterPose(model)

@@ -16,7 +16,7 @@ The far landscape cleaned up, a security pass, and a game that no longer works t
 - Frame rate setting: 30, 60 (the default) or every frame the screen shows.
 - Very low quality, for older laptops and integrated graphics: no shadows, no photo-scanned ground, a shorter grass field, coarser distant land. Software renderers start on it.
 - This changelog, under Settings → About.
-- Probes for the far terrain, its seams, depth precision, memory over a long walk, frame cost per quality and the frame-rate cap.
+- Probes for the far terrain, its seams, depth precision, memory over a long walk, frame cost per quality, the frame-rate cap and every shader compiled after loading.
 
 ### Changed
 - A window in the background draws 20 frames a second; automatic resolution aims at the chosen frame rate.
@@ -31,6 +31,7 @@ The far landscape cleaned up, a security pass, and a game that no longer works t
 - The captured mouse on Firefox under Wayland: no more jumps at the screen's edges or when events go missing.
 - Terrain pieces were never released: 492 kept after 1.8 km, now about 100.
 - Loading waited for ground textures that the lowest quality never loads.
+- Stutters the first time it rained, the torch was lit or a character was picked: their shaders were compiled for the screen instead of the effects' buffer the scene is drawn into, so they compiled again in the middle of play. Loading now compiles every shader once, the right way (38 programs instead of 58), shadow passes included, and a new character is compiled before it is shown.
 
 ### Security
 - Content security policy and other security headers on the site.

@@ -1,4 +1,3 @@
-import * as THREE from 'three'
 
 import Game from './Game'
 
@@ -76,9 +75,7 @@ export default class Loading {
                 }
                 this.phase = 'shaders'
                 this.status.textContent = 'Preparing the light…'
-                const renderer = view.renderer.instance as THREE.WebGLRenderer & { compileAsync?: (scene: THREE.Object3D, camera: THREE.Camera) => Promise<unknown> }
-                const compile = renderer.compileAsync ? renderer.compileAsync(view.scene, view.camera.instance) : Promise.resolve()
-                compile.catch(() => {}).finally(() => { this.phase = 'settle' })
+                view.renderer.precompile(view.scene).catch(() => {}).finally(() => { this.phase = 'settle' })
             }
         }
         else if (this.phase === 'settle') {

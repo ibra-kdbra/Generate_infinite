@@ -69,7 +69,7 @@ export default class View {
         
         // ✅ CORRECT ORDER: Create dependencies first.
         this.camera = new Camera()
-        this.renderer = new Renderer() // Now the Renderer can safely access the camera.
+        this.renderer = new Renderer()      // after the camera: it renders through it
         this.shadows = new Shadows()       // before the materials that receive the shadows
 
         this.noises = new Noises()

@@ -38,6 +38,7 @@ rx, ry)` for a free camera); `shot(name)` saves the canvas.
 | `probe-vis.js` | the tools filmed while walking and running (`walk`, `bare`), or through their strokes |
 | `probe-fist.js`, `probe-grip.js`, `probe-where.js` | the closed hand's centre, the fingers closing on a tool, where a worn tool sits on a bone |
 | `probe-capture.js`, `probe-mouse.js`, `probe-look.js` | the captured mouse with Firefox's extra events faked; end to end with the real mouse; how a turn arrives |
+| `probe-shaders.js` | every shader compiled after the loading screen, through a tour of the game (`sets=male_peasant`, `from=2`, `toolsonly` for part of it): each one would be a hitch |
 | `probe-night.js` | a game begun at night: every shadow map set up |
 | `probe-save.js` | the world remembered: a tree felled, walked away from and back to, saved, reloaded |
 | `probe-contact.js` | each worn and held item's gap to the skin (cm), from the posed mesh |

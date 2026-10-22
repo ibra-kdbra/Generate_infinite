@@ -839,9 +839,7 @@ export default class Tools {
         this.flameLight = new THREE.PointLight('#ffa248', 0, 14, 2)
         this.view.scene.add(this.flameLight)
         // compile the nocked arrow's shader now rather than at the first draw of the bow
-        this.nocked.visible = true
-        this.view.renderer.instance.compile(this.nocked, this.view.camera.instance, this.view.scene)
-        this.nocked.visible = false
+        this.view.renderer.precompile(this.nocked).catch(() => {})
 
         const ui = document.querySelector('.ui')!
         this.hud = document.createElement('div')

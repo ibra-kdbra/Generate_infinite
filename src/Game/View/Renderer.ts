@@ -193,6 +193,41 @@ export default class Renderer {
         this.updateOutput()
     }
 
+    /**
+     * Compiles an object's shaders before it's first drawn, the way the scene is drawn: into the
+     * effects' buffer (linear light). Compiled for the screen instead (no buffer bound), they'd be
+     * the wrong variant and compile again when first seen: a hitch in the middle of the game.
+     * Hidden objects are included (the rain while it's dry, the torch's flame while it's out), and
+     * so are the shadow pass's own materials (Shadows.addCaster), which are only swapped in while
+     * the shadows are drawn.
+     */
+    precompile(object: THREE.Object3D, targetScene: THREE.Scene = this.scene) {
+        const previous = this.instance.getRenderTarget()
+        this.instance.setRenderTarget(this.composer.inputBuffer)
+        const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = []
+        try {
+            object.traverse((child) => {
+                const mesh = child as THREE.Mesh
+                if (mesh.isMesh && mesh.userData.shadowMaterial) {
+                    swapped.push([mesh, mesh.material])
+                    mesh.material = mesh.userData.shadowMaterial
+                }
+            })
+            if (swapped.length)
+                this.instance.compile(object, this.camera.instance, targetScene)
+            for (const [mesh, material] of swapped)
+                mesh.material = material
+            swapped.length = 0
+            // the programs are made right away (the promise waits for them to be ready)
+            return this.instance.compileAsync(object, this.camera.instance, targetScene)
+        }
+        finally {
+            for (const [mesh, material] of swapped)
+                mesh.material = material
+            this.instance.setRenderTarget(previous)
+        }
+    }
+
     /** The last pass that runs draws to the screen. */
     private updateOutput() {
         // sharpen when rendering noticeably below the display's own resolution
