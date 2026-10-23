@@ -31,6 +31,7 @@ The far landscape cleaned up, a security pass, and a game that no longer works t
 - The captured mouse on Firefox under Wayland: no more jumps at the screen's edges or when events go missing.
 - Terrain pieces were never released: 492 kept after 1.8 km, now about 100.
 - Loading waited for ground textures that the lowest quality never loads.
+- Firefox warned that its renderer-info extension is going away: the graphics card is now read the way it asks (the extension only where the plain name is generic).
 - Stutters the first time it rained, the torch was lit or a character was picked: their shaders were compiled for the screen instead of the effects' buffer the scene is drawn into, so they compiled again in the middle of play. Loading now compiles every shader once, the right way (38 programs instead of 58), shadow passes included, and a new character is compiled before it is shown.
 
 ### Security

@@ -139,6 +139,19 @@ const defaults: Values = {
 }
 
 /**
+ * The graphics card's name. Firefox gives it as the context's RENDERER (its renderer-info
+ * extension is deprecated there and will go); Chrome and Safari give a generic name there and
+ * the real one only through the extension.
+ */
+export function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext) {
+    const plain = String(gl.getParameter(gl.RENDERER))
+    if (!/^(webkit webgl|mozilla)$/i.test(plain.trim()))
+        return plain
+    const info = gl.getExtension('WEBGL_debug_renderer_info')
+    return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : plain
+}
+
+/**
  * A starting quality for this graphics card: integrated chips (Intel) get low, dedicated
  * NVIDIA and AMD cards high, anything else medium. (Firefox reports a representative model
  * per vendor, so only the vendor and family are reliable.)
@@ -149,8 +162,7 @@ function suggestedQuality(): Quality {
         const gl = canvas.getContext('webgl2', { powerPreference: 'high-performance' })
         if (!gl)
             return 'lowest'
-        const info = gl.getExtension('WEBGL_debug_renderer_info')
-        const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+        const name = rendererName(gl)
         gl.getExtension('WEBGL_lose_context')?.loseContext()
         if (/nvidia|geforce|quadro|rtx/i.test(name)) return 'high'
         if (/radeon.*(rx|pro)|amd.*rx/i.test(name)) return 'high'

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import Game from './Game'
-import Settings, { ANTIALIASING, CHARACTERS, DAY_LENGTHS, FRAME_RATES, GRASS_STYLES, MOUSE_LOOK, QUALITIES, RESOLUTIONS, WEATHERS, Antialiasing, CharacterName, DayLength, FrameRate, GrassStyle, MouseLook, Quality, Resolution, Weather } from './Settings'
+import Settings, { rendererName, ANTIALIASING, CHARACTERS, DAY_LENGTHS, FRAME_RATES, GRASS_STYLES, MOUSE_LOOK, QUALITIES, RESOLUTIONS, WEATHERS, Antialiasing, CharacterName, DayLength, FrameRate, GrassStyle, MouseLook, Quality, Resolution, Weather } from './Settings'
 import State from './State/State'
 import View from './View/View'
 import Ui from './Ui'
@@ -393,9 +393,7 @@ export default class Menu {
 
     /** Which graphics card the browser renders with (laptops often default to the integrated one). */
     private gpuName() {
-        const gl = this.view.renderer.instance.getContext()
-        const info = gl.getExtension('WEBGL_debug_renderer_info')
-        const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+        const name = rendererName(this.view.renderer.instance.getContext())
         // Firefox reports a representative model per vendor instead of the real one (privacy):
         // every NVIDIA card shows up as "GeForce GTX 980", so name the vendor only
         if (/nvidia|geforce|quadro/i.test(name)) return 'NVIDIA (dedicated)'
