@@ -7,6 +7,7 @@ import Player from './Player'
 import Terrains from './Terrains'
 import Chunks from './Chunks'
 import Vegetation from './Vegetation'
+import WorldSave from './WorldSave'
 
 export default class State {
     static instance: State
@@ -20,6 +21,7 @@ export default class State {
     terrains!: Terrains
     chunks!: Chunks
     vegetation!: Vegetation
+    save!: WorldSave
 
     static getInstance() {
         return State.instance
@@ -41,6 +43,7 @@ export default class State {
         this.terrains = new Terrains()
         this.chunks = new Chunks()
         this.vegetation = new Vegetation()
+        this.save = new WorldSave()          // after the player and the plants: it restores them
     }
 
     resize() {
@@ -55,5 +58,6 @@ export default class State {
         this.player.update()
         this.chunks.update()
         this.vegetation.update()
+        this.save.update()
     }
 }

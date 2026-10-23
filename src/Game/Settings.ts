@@ -13,6 +13,7 @@ export const CHARACTERS = {
 } as const
 
 export const QUALITIES = {
+    lowest: 'Very low',
     low: 'Low',
     medium: 'Medium',
     high: 'High',
@@ -32,6 +33,14 @@ export const RESOLUTIONS = {
     full: 'Full',
     '75': '75 %',
     '50': '50 %'
+} as const
+
+// frames drawn a second at most: fewer, the less the graphics card works (cooler, quieter, a
+// laptop's battery lasts longer); 'display' draws every frame the screen shows
+export const FRAME_RATES = {
+    '30': '30',
+    '60': '60',
+    display: 'Screen\'s'
 } as const
 
 export const ANTIALIASING = {
@@ -56,6 +65,11 @@ export const WEATHERS = {
     storm: 'Storm'
 } as const
 
+export const MOUSE_LOOK = {
+    capture: 'Click to capture',
+    drag: 'Drag to look'
+} as const
+
 export const DAY_LENGTHS = {
     '10': '10 min',
     '20': '20 min',
@@ -70,7 +84,9 @@ export type DayLength = keyof typeof DAY_LENGTHS
 export type Resolution = keyof typeof RESOLUTIONS
 export type Weather = keyof typeof WEATHERS
 export type Antialiasing = keyof typeof ANTIALIASING
+export type FrameRate = keyof typeof FRAME_RATES
 export type Threads = keyof typeof THREADS
+export type MouseLook = keyof typeof MOUSE_LOOK
 
 type Values = {
     character: CharacterName
@@ -78,6 +94,7 @@ type Values = {
     grass: GrassStyle
     dayLength: DayLength
     resolution: Resolution
+    frameRate: FrameRate
     weather: Weather
     volume: number
     muted: boolean
@@ -91,6 +108,8 @@ type Values = {
     antialiasing: Antialiasing
     threads: Threads
     hood: boolean
+    mouseLook: MouseLook
+    mouseSpeed: number          // a factor on how far the mouse turns the camera
 }
 
 const STORAGE_KEY = 'generate-infinite:settings'
@@ -101,6 +120,7 @@ const defaults: Values = {
     grass: 'meadow',
     dayLength: '20',
     resolution: 'auto',
+    frameRate: '60',
     weather: 'auto',
     volume: 0.6,
     muted: false,
@@ -113,7 +133,22 @@ const defaults: Values = {
     hideHidden: true,
     antialiasing: 'smaa',
     threads: 'auto',
-    hood: true
+    hood: true,
+    mouseLook: 'drag',
+    mouseSpeed: 1
+}
+
+/**
+ * The graphics card's name. Firefox gives it as the context's RENDERER (its renderer-info
+ * extension is deprecated there and will go); Chrome and Safari give a generic name there and
+ * the real one only through the extension.
+ */
+export function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext) {
+    const plain = String(gl.getParameter(gl.RENDERER))
+    if (!/^(webkit webgl|mozilla)$/i.test(plain.trim()))
+        return plain
+    const info = gl.getExtension('WEBGL_debug_renderer_info')
+    return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : plain
 }
 
 /**
@@ -126,14 +161,15 @@ function suggestedQuality(): Quality {
         const canvas = document.createElement('canvas')
         const gl = canvas.getContext('webgl2', { powerPreference: 'high-performance' })
         if (!gl)
-            return 'low'
-        const info = gl.getExtension('WEBGL_debug_renderer_info')
-        const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+            return 'lowest'
+        const name = rendererName(gl)
         gl.getExtension('WEBGL_lose_context')?.loseContext()
         if (/nvidia|geforce|quadro|rtx/i.test(name)) return 'high'
         if (/radeon.*(rx|pro)|amd.*rx/i.test(name)) return 'high'
         if (/iris\s*xe|apple m\d/i.test(name)) return 'medium'
-        if (/intel|uhd|hd graphics|mesa|llvmpipe|swiftshader/i.test(name)) return 'low'
+        // drawn by the processor, not a graphics card
+        if (/llvmpipe|swiftshader|softpipe|software|basic render/i.test(name)) return 'lowest'
+        if (/intel|uhd|hd graphics|mesa/i.test(name)) return 'low'
         return 'medium'
     }
     catch {
@@ -186,6 +222,7 @@ export default class Settings {
             if (stored.grass in GRASS_STYLES) valid.grass = stored.grass
             if (stored.dayLength in DAY_LENGTHS) valid.dayLength = stored.dayLength
             if (stored.resolution in RESOLUTIONS) valid.resolution = stored.resolution
+            if (stored.frameRate in FRAME_RATES) valid.frameRate = stored.frameRate
             if (stored.weather in WEATHERS) valid.weather = stored.weather
             if (typeof stored.textureCompression === 'boolean') valid.textureCompression = stored.textureCompression
             if (typeof stored.hideHidden === 'boolean') valid.hideHidden = stored.hideHidden

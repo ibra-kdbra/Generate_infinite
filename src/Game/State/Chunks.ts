@@ -7,7 +7,7 @@ import Settings, { Quality } from '../Settings'
 // Rings of the largest chunks (1024 m) around the one under the player: the terrain reaches
 // at least this many kilometres in every direction (the haze hides its edge). The outer
 // chunks are coarse and cheap.
-const RINGS: Record<Quality, number> = { low: 2, medium: 3, high: 4, ultra: 4 }
+const RINGS: Record<Quality, number> = { lowest: 2, low: 2, medium: 3, high: 4, ultra: 4 }
 
 export default class Chunks {
     state: State
@@ -21,6 +21,7 @@ export default class Chunks {
     allChunks: Map<number, Chunk>
     playerChunkKey: string | null
     rings: number
+    visibilityNeedsUpdate = false
 
     constructor() {
         this.state = State.getInstance()
@@ -91,6 +92,29 @@ export default class Chunks {
         // Update main chunks
         for (const [, chunk] of this.mainChunks)
             chunk.update()
+
+        if (this.visibilityNeedsUpdate) {
+            this.visibilityNeedsUpdate = false
+            for (const [, chunk] of this.mainChunks)
+                this.updateVisibility(chunk, false)
+        }
+    }
+
+    /**
+     * Which ground is drawn: a chunk's own once it's ready, unless one of its parents still draws
+     * its own over the same land. A chunk splitting keeps its coarse ground until all four
+     * children are ready; until then their finer ground (ready one by one) stays hidden, or the
+     * two levels of detail would be drawn through each other (the coarse one's peaks poking out
+     * of the fine one, a clutter of both). A chunk merging back draws its children until its own
+     * is ready, and they go at that moment.
+     */
+    private updateVisibility(chunk: Chunk, covered: boolean) {
+        const terrain = chunk.terrain
+        const own = chunk.final && !!terrain && terrain.ready
+        if (terrain)
+            terrain.setVisible(own && !covered)
+        for (const [, child] of chunk.children)
+            this.updateVisibility(child, covered || own)
     }
 
     create(parent: Chunk | null, quadPosition: string, halfSize: number, x: number, z: number, depth: number) {
@@ -281,7 +305,7 @@ export default class Chunks {
         // a chunk just split has no terrain yet: its parent's (coarser) is still there
         while (chunk && !(chunk.terrain && chunk.terrain.ready))
             chunk = chunk.parent
-        if (!chunk)
+        if (!chunk || !chunk.terrain)
             return false
         return chunk.terrain.getElevationForPosition(x, z)
     }

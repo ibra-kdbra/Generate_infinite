@@ -9,8 +9,11 @@ import Shadows, { SHADOW_UNIFORMS } from './Shadows'
 import vertexShader from './Materials/shaders/rocks/vertex.glsl'
 import fragmentShader from './Materials/shaders/rocks/fragment.glsl'
 
-// Full scans near the player, simplified ones farther; tiny far rocks aren't drawn
+// Full scans near the player, simplified ones farther (cross-fading over BAND m, by the
+// camera's distance); tiny far rocks aren't drawn
 const NEAR = 45
+const BAND = 8
+const REBUILD = 12
 const MIN_ANGULAR_SIZE = 0.0025
 
 type Layer = { mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>, instance: THREE.InstancedBufferAttribute, extra: THREE.InstancedBufferAttribute }
@@ -33,6 +36,7 @@ export default class Vegetation {
 
     private version = -1
     private builtAt = new THREE.Vector2(Infinity, Infinity)
+    private cameraOffset = 0
 
     constructor() {
         this.view = View.getInstance()
@@ -41,7 +45,8 @@ export default class Vegetation {
 
         this.uniforms = {
             uSunPosition: { value: new THREE.Vector3(0, 1, 0) },
-            uSkyLut: { value: this.view.skyLut.texture }
+            uSkyLut: { value: this.view.skyLut.texture },
+            uEye: { value: new THREE.Vector3() }
         }
         for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
             this.uniforms[name] = this.view.sky.uniforms[name]
@@ -55,11 +60,16 @@ export default class Vegetation {
         const gltf = await new GLTFLoader().loadAsync('/models/nature/rocks.glb')
         const loader = new THREE.TextureLoader()
         const materials = new Map<string, THREE.ShaderMaterial>()
-        const material = (set: string) => {
-            let result = materials.get(set)
+        const textures = new Map<string, THREE.Texture>()       // shared by both levels
+        const material = (set: string, lod: number) => {
+            let result = materials.get(`${set}:${lod}`)
             if (!result) {
                 const texture = (name: string) => {
+                    const cached = textures.get(`${set}_${name}`)
+                    if (cached)
+                        return cached
                     const map = loader.load(`/textures/nature/${set}_${name}.webp`)
+                    textures.set(`${set}_${name}`, map)
                     map.flipY = false                 // glTF texture coordinates
                     map.anisotropy = 8
                     map.colorSpace = THREE.NoColorSpace     // the shader decodes the colour (toLinear)
@@ -68,9 +78,9 @@ export default class Vegetation {
                 result = new THREE.ShaderMaterial({
                     vertexShader,
                     fragmentShader,
-                    uniforms: { ...this.uniforms, uMap: { value: texture('color') }, uNormalMap: { value: texture('normal') } }
+                    uniforms: { ...this.uniforms, uMap: { value: texture('color') }, uNormalMap: { value: texture('normal') }, uLodFade: { value: new THREE.Vector3(NEAR - BAND / 2, NEAR + BAND / 2, lod) } }
                 })
-                materials.set(set, result)
+                materials.set(`${set}:${lod}`, result)
             }
             return result
         }
@@ -96,7 +106,7 @@ export default class Vegetation {
             geometry.setAttribute('aInstanceExtra', extra)
             geometry.instanceCount = 0
             geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Infinity)
-            const mesh = new THREE.Mesh(geometry, material(set))
+            const mesh = new THREE.Mesh(geometry, material(set, lod))
             mesh.frustumCulled = false
             this.view.shadows.addCaster(mesh, Shadows.shadowVariant(mesh.material))
             this.scene.add(mesh)
@@ -174,6 +184,11 @@ export default class Vegetation {
         for (const key of this.layers.keys())
             buckets.set(key, [])
 
+        // both levels reach past the hand-over by the camera's lag behind the player and a
+        // rebuild's step, so a rock there always has both to cross-fade
+        const eye = this.view.camera.instance.position
+        this.cameraOffset = Math.hypot(eye.x - p[0], eye.z - p[2])
+        const overlap = this.cameraOffset + REBUILD + 1
         let total = 0
         for (const cell of this.state.vegetation.cells.values()) {
             for (const plant of cell.plants) {
@@ -183,12 +198,16 @@ export default class Vegetation {
                 if (plant.scale / Math.max(distance, 1) < MIN_ANGULAR_SIZE)
                     continue
                 const shape = Math.floor((plant.tint * 7.31 + plant.rotation * 0.37) % 1 * this.shapes)
-                const bucket = buckets.get(`${shape}:${distance < NEAR ? 0 : 1}`)
-                if (!bucket)
-                    continue
-                // the state sinks its rocks by a third of their size; the scans sit lower
-                bucket.push(plant.x, plant.y + plant.scale * 0.2, plant.z, plant.scale * 1.15, plant.rotation, plant.tint)
-                total++
+                for (const lod of [0, 1]) {
+                    if (lod === 0 ? distance > NEAR + BAND / 2 + overlap : distance < NEAR - BAND / 2 - overlap)
+                        continue
+                    const bucket = buckets.get(`${shape}:${lod}`)
+                    if (!bucket)
+                        continue
+                    // the state sinks its rocks by a third of their size; the scans sit lower
+                    bucket.push(plant.x, plant.y + plant.scale * 0.2, plant.z, plant.scale * 1.15, plant.rotation, plant.tint)
+                    total++
+                }
             }
         }
 
@@ -199,7 +218,10 @@ export default class Vegetation {
             const instance = layer.instance.array as Float32Array
             const extra = layer.extra.array as Float32Array
             for (let i = 0; i < count; i++) {
-                instance.set(values.slice(i * 6, i * 6 + 4), i * 4)
+                instance[i * 4] = values[i * 6]
+                instance[i * 4 + 1] = values[i * 6 + 1]
+                instance[i * 4 + 2] = values[i * 6 + 2]
+                instance[i * 4 + 3] = values[i * 6 + 3]
                 extra[i * 2] = values[i * 6 + 4]
                 extra[i * 2 + 1] = values[i * 6 + 5]
             }
@@ -214,8 +236,11 @@ export default class Vegetation {
 
     update() {
         const p = this.state.player.position.current
-        if (this.shapes && (this.version !== this.state.vegetation.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 12))
+        const eye = this.view.camera.instance.position
+        if (this.shapes && (this.version !== this.state.vegetation.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > REBUILD
+            || Math.abs(Math.hypot(eye.x - p[0], eye.z - p[2]) - this.cameraOffset) > 2))
             this.rebuild()
+        this.uniforms.uEye.value.copy(eye)
 
         const sun = this.state.sun.position
         this.uniforms.uSunPosition.value.set(sun.x, sun.y, sun.z)

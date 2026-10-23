@@ -1,6 +1,7 @@
 import Game from '../Game'
 import State from './State'
 import Controls from './Controls'
+import Settings from '../Settings'
 
 export default class Viewport {
     game: Game
@@ -15,6 +16,7 @@ export default class Viewport {
     clampedPixelRatio: number | null
     pointerLock: {
         active: boolean
+        releasing: boolean          // freed on purpose (P, the menu), not by Esc
         toggle: () => void
         activate: () => void
         deactivate: () => void
@@ -41,6 +43,7 @@ export default class Viewport {
 
         this.pointerLock = {
             active: false,
+            releasing: false,
             toggle: () => { },
             activate: () => { },
             deactivate: () => { }
@@ -78,15 +81,22 @@ export default class Viewport {
         }
 
         this.pointerLock.activate = () => {
-            this.domElement.requestPointerLock()
+            // (no "raw movement" option: Chrome on Linux refuses the request outright, and a
+            // second try after it is no longer part of the click, so it fails too. Refused for
+            // a moment after Esc frees it; the next click tries again.)
+            const request = this.domElement.requestPointerLock() as unknown
+            if (request instanceof Promise) request.catch(() => { })
         }
 
         this.pointerLock.deactivate = () => {
+            this.pointerLock.releasing = true
             document.exitPointerLock()
         }
 
         document.addEventListener('pointerlockchange', () => {
             this.pointerLock.active = !!document.pointerLockElement
+            if (!this.pointerLock.active)
+                setTimeout(() => { this.pointerLock.releasing = false }, 0)
         })
     }
 
@@ -111,6 +121,17 @@ export default class Viewport {
         document.addEventListener('fullscreenchange', () => {
             this.fullscreen.active = !!document.fullscreenElement
         })
+    }
+
+    /**
+     * How far the mouse turns the camera (radians): moving it across the window's smaller side
+     * turns it about 2 radians, dragging or captured alike (both report screen pixels), scaled
+     * by the sensitivity setting.
+     */
+    look(pixelCoordinates: { x: number; y: number }) {
+        const speed = Settings.getInstance().get('mouseSpeed')
+        const normalised = this.normalise(pixelCoordinates)
+        return { x: normalised.x * 2 * speed, y: normalised.y * 2 * speed }
     }
 
     normalise(pixelCoordinates: { x: number; y: number }) {

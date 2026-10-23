@@ -4,12 +4,17 @@
 uniform vec3 uSunPosition;
 uniform sampler2D uMap;
 uniform sampler2D uNormalMap;
+uniform vec3 uFernFade;          // the swap to the lighter scans (start, end) and how far ferns reach (m from the player)
 
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 varying float vHeight;
 varying float vTint;
+varying float vRole;
+varying float vDistance;
+
+float dither(vec2 pixel) { return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715)))); }
 
 #include ../partials/getTerrainLight.glsl
 #include ../partials/toLinear.glsl
@@ -20,6 +25,13 @@ varying float vTint;
 
 void main()
 {
+    // dithered fades: in at the edge of their reach, and a fern's detailed scan into a lighter one
+    float pick = dither(gl_FragCoord.xy);
+    if (pick < smoothstep(uFernFade.z - 6.0, uFernFade.z, vDistance))
+        discard;
+    float swap = smoothstep(uFernFade.x, uFernFade.y, vDistance);
+    if ((vRole > 0.5 && vRole < 1.5 && pick < swap) || (vRole > 1.5 && pick >= swap))
+        discard;
     vec4 color = texture2D(uMap, vUv);
     if (color.a < 0.5)
         discard;

@@ -1,7 +1,6 @@
 // 📁sources/Game/View/View.ts (Corrected)
 
 import Camera from './Camera'
-import Chunks from './Chunks'
 import Grass from './Grass'
 import Noises from './Noises'
 import Player from './Player'
@@ -52,7 +51,6 @@ export default class View {
     horizon!: Horizon
     wildlife!: Wildlife
     terrains!: Terrains
-    chunks!: Chunks
     player!: Player
     grass!: Grass
 
@@ -71,7 +69,7 @@ export default class View {
         
         // ✅ CORRECT ORDER: Create dependencies first.
         this.camera = new Camera()
-        this.renderer = new Renderer() // Now the Renderer can safely access the camera.
+        this.renderer = new Renderer()      // after the camera: it renders through it
         this.shadows = new Shadows()       // before the materials that receive the shadows
 
         this.noises = new Noises()
@@ -79,7 +77,6 @@ export default class View {
         this.skyLut = new SkyLut()
         this.water = new Water()
         this.terrains = new Terrains()
-        this.chunks = new Chunks()
         this.player = new Player()
         this.grass = new Grass()
         this.vegetation = new Vegetation()
@@ -109,7 +106,6 @@ export default class View {
         this.camera.resize()
         this.renderer.resize()
         this.sky.resize()
-        this.terrains.resize()
     }
 
     update() {
@@ -117,7 +113,6 @@ export default class View {
         this.skyLut.update()
         this.water.update()
         this.terrains.update()
-        this.chunks.update()
         this.tools.update()           // hand targets for this frame's pose
         this.player.update()
         this.tools.place()            // the tool in the posed hand
@@ -138,8 +133,5 @@ export default class View {
         this.camera.update()
         this.shadows.update()
         this.renderer.update()
-    }
-
-    destroy() {
     }
 }

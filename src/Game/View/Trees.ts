@@ -41,17 +41,24 @@ const LEAF_TINT: Record<Leaves, string> = { oak: '#c9d6b0', ash: '#c7d4ad', aspe
 const SWAY: Record<PlantKind, number> = { [PLANT.CONIFER]: 0.012, [PLANT.BROADLEAF]: 0.02, [PLANT.BUSH]: 0.03, [PLANT.ROCK]: 0 }
 
 // Full trees up to this distance, billboards beyond (a dithered hand-over across BAND m)
-const NEAR: Record<Quality, number> = { low: 28, medium: 50, high: 80, ultra: 125 }
+const NEAR: Record<Quality, number> = { lowest: 20, low: 28, medium: 50, high: 80, ultra: 125 }
 const BAND = 10
 // Every leaf card up to this share of NEAR; beyond, the crowns thin to LEAF_KEEP of their
 // cards (each grown to keep the crown as full) and a lighter copy draws only those
 const FULL = 0.4
 const LEAF_KEEP = 0.4
 const VIEWS = 8
+// the near/mid/far lists are rebuilt after the player has gone this far (m); the crowns thin by
+// the player's live distance, done this far before the near/mid split so that a tree changing
+// list between rebuilds is already as thin as its lighter copy (no pop at the split)
+const REBUILD = 3
+// trees nearer than this are never hidden behind hills (a tree popping out of a near rise shows;
+// the hiding pays off in the far forest)
+const HIDE_FROM = 60
 // trees lying felled at once (the oldest is cleared away for a new one)
 const FELLED = 4
 // billboard atlas cell (pixels per baked view), by quality when the trees are built
-const CELLS: Record<Quality, number> = { low: 192, medium: 256, high: 384, ultra: 448 }
+const CELLS: Record<Quality, number> = { lowest: 128, low: 192, medium: 256, high: 384, ultra: 448 }
 
 type Instances = { instance: THREE.InstancedBufferAttribute, extra: THREE.InstancedBufferAttribute }
 type Felled = {
@@ -126,6 +133,8 @@ export default class Trees {
     private textures = new Map<string, THREE.Texture>()
     private materials = new Map<string, THREE.ShaderMaterial>()
     private version = -1
+    private stumps = new Map<Plant, THREE.Group>()     // stumps of trees felled before, near the player
+    private cameraOffset = 0          // how far the camera trailed the player at the last rebuild (m)
     private builtAt = new THREE.Vector2(Infinity, Infinity)
     private felled: Felled[] = []
     private rustle = 0                    // seconds until a fallen crown rustles again
@@ -167,7 +176,7 @@ export default class Trees {
         this.uniforms.uFade.value.set(this.near, this.near + BAND)
         // the full trees thin their crowns over the last stretch before the lighter copies
         for (const variant of this.variants)
-            variant.leaves.material.uniforms.uLeafLod.value.set(this.fullEnd - 8, this.fullEnd, LEAF_KEEP)
+            variant.leaves.material.uniforms.uLeafLod.value.set(this.fullEnd - 8 - REBUILD, this.fullEnd - REBUILD, LEAF_KEEP)
         this.version = -1
     }
 
@@ -330,7 +339,7 @@ export default class Trees {
         const leavesMaterial = this.material('leaves', species.leaves, species.kind)
         const bark = new THREE.Mesh(decorate(barkGeometry, false), this.material('bark', species.bark, species.kind))
         // its own copy of the material: the full trees' level-of-detail distances
-        const leaves = new THREE.Mesh(decorate(leafGeometry, true), this.lodMaterial(leavesMaterial, this.fullEnd - 8, this.fullEnd))
+        const leaves = new THREE.Mesh(decorate(leafGeometry, true), this.lodMaterial(leavesMaterial, this.fullEnd - 8 - REBUILD, this.fullEnd - REBUILD))
         // mid distance: the same buffers, their own instances, the crown's first LEAF_KEEP only
         const midInstances = this.instances(64)
         const share = (geometry: THREE.InstancedBufferGeometry) => {
@@ -502,24 +511,38 @@ export default class Trees {
         const far: number[] = []
         const fullEnd = this.fullEnd
         const horizon = this.view.horizon
+        // the hand-over to billboards fades by the distance from the camera, which trails the
+        // player: both lists reach past the hand-over by that much (and a rebuild's step), so a
+        // tree there always has both versions to cross-fade (else it half-vanished for a moment)
+        const camera = this.view.camera.instance.position
+        this.cameraOffset = Math.hypot(camera.x - p[0], camera.z - p[2])
+        const overlap = this.cameraOffset + REBUILD + 1
         let hidden = 0
+        const stumps: Plant[] = []
+        const lying = new Set(this.felled.map((tree) => tree.plant))
         for (const cell of this.state.vegetation.cells.values()) {
             for (const plant of cell.plants) {
                 const options = byKind.get(plant.kind)
                 if (!options)
                     continue
+                // felled before: only its stump (a falling or lying one is drawn by its slot)
+                if (plant.felled && !lying.has(plant)) {
+                    if (Math.hypot(plant.x - p[0], plant.z - p[2]) < 110)
+                        stumps.push(plant)
+                    continue
+                }
                 const index = options[Math.min(options.length - 1, Math.floor(plant.tint * options.length))]
                 const distance = Math.hypot(plant.x - p[0], plant.z - p[2])
                 // behind a hill: not drawn at all
-                if (distance > 30 && !horizon.visible(plant.x, plant.y + plant.scale, plant.z)) {
+                if (distance > HIDE_FROM && !horizon.visible(plant.x, plant.y + plant.scale, plant.z)) {
                     hidden++
                     continue
                 }
                 if (distance < fullEnd)
                     near[index].push(plant.x, plant.y, plant.z, plant.scale, plant.rotation)
-                else if (distance < this.near + BAND)
+                else if (distance < this.near + BAND + overlap)
                     mid[index].push(plant.x, plant.y, plant.z, plant.scale, plant.rotation)
-                if (distance > this.near)
+                if (distance > this.near - overlap)
                     far.push(plant.x, plant.y, plant.z, plant.scale, plant.rotation, index)
             }
         }
@@ -527,10 +550,13 @@ export default class Trees {
         const fill = (instances: Instances, values: number[], stride: number) => {
             const count = values.length / stride
             const a = instances.instance.array as Float32Array, b = instances.extra.array as Float32Array
-            for (let i = 0; i < count; i++) {
-                a.set(values.slice(i * stride, i * stride + 4), i * 4)
-                b[i * 2] = values[i * stride + 4]
-                b[i * 2 + 1] = stride > 5 ? values[i * stride + 5] : 0
+            for (let i = 0, j = 0; i < count; i++, j += stride) {
+                a[i * 4] = values[j]
+                a[i * 4 + 1] = values[j + 1]
+                a[i * 4 + 2] = values[j + 2]
+                a[i * 4 + 3] = values[j + 3]
+                b[i * 2] = values[j + 4]
+                b[i * 2 + 1] = stride > 5 ? values[j + 5] : 0
             }
             instances.instance.needsUpdate = true
             instances.extra.needsUpdate = true
@@ -553,8 +579,6 @@ export default class Trees {
             variant.leavesMid.geometry.instanceCount = midCount
             this.counts.mid += midCount
         })
-        // the thinning is measured from where the bands were split (the player then)
-        this.uniforms.uLodCenter.value.set(p[0], p[1], p[2])
         const farCount = far.length / 6
         this.impostor.instances = this.reserve(this.impostor.instances, farCount, [this.impostor.mesh.geometry])
         fill(this.impostor.instances, far, 6)
@@ -562,6 +586,7 @@ export default class Trees {
         this.counts.far = farCount
 
         this.counts.hidden = hidden
+        this.updateStumps(stumps)
         this.version = this.state.vegetation.version
         this.horizonVersion = horizon.version
         this.builtAt.set(p[0], p[2])
@@ -614,7 +639,16 @@ export default class Trees {
         const radius = this.trunkRadius(plant, cut)
         plant.felled = true
         plant.stump = cut
-        // the stump: bark below the cut, the cut's fresh wood on top; the cut end of the trunk
+        // the stump; the cut end of the trunk
+        const stump = this.stump(plant, cut, radius)
+        const end = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.97, 14), this.stumpMaterials.wood)
+        this.scene.add(stump, end)
+        this.view.audio?.play('treeFall', new THREE.Vector3(plant.x, plant.y + 2, plant.z), 1.4)
+        this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false, cut, drop: 0, radius, stump, end })
+    }
+
+    /** A stump: bark below the cut, the cut's fresh wood on top. */
+    private stump(plant: Plant, cut: number, radius: number) {
         const stump = new THREE.Group()
         const side = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 1.12, cut + 0.15, 14, 1, true), this.stumpBark(plant, cut))
         side.position.y = (cut - 0.15) / 2
@@ -623,10 +657,36 @@ export default class Trees {
         top.position.y = cut
         stump.add(side, top)
         stump.position.set(plant.x, plant.y, plant.z)
-        const end = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.97, 14), this.stumpMaterials.wood)
-        this.scene.add(stump, end)
-        this.view.audio?.play('treeFall', new THREE.Vector3(plant.x, plant.y + 2, plant.z), 1.4)
-        this.felled.push({ plant, angle: 0.07, speed: 0.22, direction, rest, landed: false, cut, drop: 0, radius, stump, end })
+        return stump
+    }
+
+    private disposeStump(stump: THREE.Group) {
+        this.scene.remove(stump)
+        stump.traverse((object) => {
+            const mesh = object as THREE.Mesh
+            if (!mesh.isMesh) return
+            mesh.geometry.dispose()
+            if (mesh.material !== this.stumpMaterials.wood) (mesh.material as THREE.MeshStandardMaterial).dispose()
+        })
+    }
+
+    /**
+     * The stumps of trees felled before (their logs cleared away, or on an earlier visit),
+     * near the player: made as they come near, let go far behind.
+     */
+    private updateStumps(felled: Plant[]) {
+        const keep = new Set(felled)
+        for (const plant of felled)
+            if (!this.stumps.has(plant) && plant.stump !== undefined) {
+                const stump = this.stump(plant, plant.stump, this.trunkRadius(plant, plant.stump))
+                this.scene.add(stump)
+                this.stumps.set(plant, stump)
+            }
+        for (const [plant, stump] of this.stumps)
+            if (!keep.has(plant)) {
+                this.disposeStump(stump)
+                this.stumps.delete(plant)
+            }
     }
 
     /** The stump's bark: the tree's own bark texture, wrapped round it. */
@@ -640,16 +700,12 @@ export default class Trees {
         return new THREE.MeshStandardMaterial({ map, roughness: 0.95, color: '#b9b0a4' })
     }
 
+    /** A felled tree's log cleared away (far behind, or a newer one felled): its stump stays. */
     private clearFelled(tree: Felled) {
-        this.scene.remove(tree.stump, tree.end)
-        tree.stump.traverse((object) => {
-            const mesh = object as THREE.Mesh
-            if (!mesh.isMesh) return
-            mesh.geometry.dispose()
-            if (mesh.material !== this.stumpMaterials.wood) (mesh.material as THREE.MeshStandardMaterial).dispose()
-        })
+        this.disposeStump(tree.stump)
+        this.scene.remove(tree.end)
         tree.end.geometry.dispose()
-        this.state.vegetation.remove(tree.plant)
+        this.state.vegetation.keepStump(tree.plant)
     }
 
     private updateFelled(dt: number) {
@@ -769,8 +825,11 @@ export default class Trees {
         this.updateFelled(Math.min(this.state.time.delta, 0.05))
         this.updateThicket(Math.min(this.state.time.delta, 0.05))
         const p = this.state.player.position.current
-        if (this.version !== this.state.vegetation.version || this.horizonVersion !== this.view.horizon.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > 6)
+        if (this.version !== this.state.vegetation.version || this.horizonVersion !== this.view.horizon.version || Math.hypot(p[0] - this.builtAt.x, p[2] - this.builtAt.y) > REBUILD
+            || Math.abs(Math.hypot(this.view.camera.instance.position.x - p[0], this.view.camera.instance.position.z - p[2]) - this.cameraOffset) > 2)
             this.rebuild()
+        // the crowns thin by the player's distance now (smoothly as they walk)
+        this.uniforms.uLodCenter.value.set(p[0], p[1], p[2])
         const sun = this.state.sun.position
         this.uniforms.uTime.value = this.state.time.elapsed
         for (const material of this.materials.values())

@@ -5,6 +5,7 @@
 uniform vec3 uSunPosition;
 uniform sampler2D uMap;
 uniform sampler2D uNormalMap;
+uniform vec3 uLodFade;          // the hand-over between the two levels: start, end (m from the camera), this level (0 near, 1 far)
 
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -14,6 +15,9 @@ varying float vTint;
 varying vec3 vHaze;
 varying float vHazeAmount;
 varying float vSunVisibility;
+varying float vEyeDistance;
+
+float dither(vec2 pixel) { return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715)))); }
 
 #include ../partials/getTerrainLight.glsl
 #include ../partials/toLinear.glsl
@@ -23,10 +27,18 @@ varying float vSunVisibility;
 
 void main()
 {
+    // the near scan and its simplified copy cross-fade (dithered) over the hand-over; their
+    // shadows hand over at its middle
+    float fade = smoothstep(uLodFade.x, uLodFade.y, vEyeDistance);
     #ifdef SHADOW
+        if (uLodFade.z < 0.5 ? fade > 0.5 : fade <= 0.5)
+            discard;
         gl_FragColor = vec4(1.0);       // depth only (Shadows.ts)
         return;
     #endif
+    float pick = dither(gl_FragCoord.xy);
+    if (uLodFade.z < 0.5 ? pick < fade : pick >= fade)
+        discard;
 
     vec3 sunDirection = normalize(uSunPosition);
     vec3 toEye = normalize(cameraPosition - vWorldPosition);

@@ -10,6 +10,7 @@ import Settings, { Quality } from '../Settings'
 // 2: only the terrain, far out, for the mountains' shadows.
 type Preset = { sizes: [number, number, number], splits: [number, number, number], intervals: [number, number, number] }
 const CASCADES: Record<Quality, Preset | null> = {
+    lowest: null,
     low: null,
     medium: { sizes: [1024, 1024, 1024], splits: [22, 100, 2200], intervals: [1, 2, 4] },
     high: { sizes: [2048, 1536, 1536], splits: [30, 150, 2600], intervals: [1, 2, 4] },
@@ -101,9 +102,16 @@ export default class Shadows {
             return
         }
         this.splits = preset.splits
+        const renderer = this.view.renderer.instance
         for (let i = 0; i < 3; i++) {
             const size = preset.sizes[i]
             const target = this.createTarget(size)
+            // cleared at once: a shadow map not yet drawn into isn't set up for comparison, and
+            // WebGL (Firefox) refuses every draw that samples it; at night none is drawn (the sun
+            // is down), so a game begun at night drew no ground, plants or character at all
+            renderer.setRenderTarget(target)
+            renderer.clear(false, true, false)
+            renderer.setRenderTarget(null)
             this.cascades.push({
                 target,
                 camera: new THREE.OrthographicCamera(),

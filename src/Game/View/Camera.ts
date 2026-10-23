@@ -47,9 +47,5 @@ export default class Camera {
             this.instance.fov = fov
             this.instance.updateProjectionMatrix()
         }
-        // this.instance.updateMatrixGame() // To be used in projection
-    }
-
-    destroy() {
     }
 }

@@ -1,5 +1,7 @@
 import Game from './Game/Game'
 
+console.info(`[game] build ${__BUILD__}`)
+
 /** The game couldn't start (no WebGL: hardware acceleration off, a blocked or old graphics driver): say so, not a black page. */
 function startFailed(error: unknown) {
     console.error('[game] could not start', error)

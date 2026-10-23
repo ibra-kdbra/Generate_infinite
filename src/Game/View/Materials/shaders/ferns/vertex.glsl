@@ -3,15 +3,18 @@
 
 uniform float uTime;
 uniform sampler2D uNoiseTexture;
+uniform vec3 uCenter;            // the player now (the fades are measured from there)
 
 attribute vec4 aInstance;        // x, y, z, scale
-attribute vec2 aInstanceExtra;   // rotation, tint
+attribute vec2 aInstanceExtra;   // rotation, tint + 2 × role (0 always drawn, 1 fading out past the swap to a lighter scan, 2 that lighter scan fading in)
 
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 varying float vHeight;           // 0 at the root .. 1 at the top of the plant
 varying float vTint;
+varying float vRole;
+varying float vDistance;         // from the player, on the ground
 
 void main()
 {
@@ -34,5 +37,7 @@ void main()
     vNormal = n;
     vWorldPosition = world;
     vHeight = height;
-    vTint = aInstanceExtra.y;
+    vRole = floor(aInstanceExtra.y / 2.0);
+    vTint = aInstanceExtra.y - vRole * 2.0;
+    vDistance = distance(uCenter.xz, aInstance.xz);
 }

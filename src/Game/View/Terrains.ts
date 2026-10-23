@@ -15,6 +15,7 @@ import Settings, { Quality } from '../Settings'
 
 // Photo-scanned ground detail per quality: fade start / end (m), second scale against tiling
 const GROUND_DETAIL: Record<Quality, [number, number, number]> = {
+    lowest: [0, 0, 0],
     low: [0, 0, 0],
     medium: [40, 120, 0],
     high: [70, 210, 1],
@@ -63,7 +64,33 @@ export default class Terrains {
         const applyDetail = (quality: Quality) => this.material.uniforms.uGroundDetail.value.set(...GROUND_DETAIL[quality])
         applyDetail(settings.get('quality'))
         settings.events.on('change:quality', applyDetail)
-        const textureSize = ['high', 'ultra'].includes(settings.get('quality')) ? 2048 : 1024     // applies after a reload
+        // the photo-scanned ground: not at all on the lowest quality (not even in memory), and
+        // loaded the moment another is picked
+        if (settings.get('quality') === 'lowest')
+            settings.events.on('change:quality', (quality: Quality) => { if (quality !== 'lowest') this.loadGround() })
+        else
+            this.loadGround()
+        this.material.uniforms.uGrassDistance.value = this.state.chunks.minSize
+        this.material.uniforms.uTextureSize.value = this.state.terrains.segments
+        this.material.uniforms.uWaterLevel.value = WATER_LEVEL
+        // cloud shadows: the sky's cloud layer
+        // the atmosphere's light and the cloud shadows
+        for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
+            this.material.uniforms[name] = this.sky.uniforms[name]
+        for (const name of SHADOW_UNIFORMS)
+            this.material.uniforms[name] = this.view.shadows.uniforms[name]
+        // aerial haze colours from the per-frame sky texture
+        this.material.uniforms.uSkyLut.value = this.view.skyLut.texture
+    }
+
+    groundLoading = false          // the photo-scanned ground asked for (not on the lowest quality)
+
+    private loadGround() {
+        if (this.groundLoading)
+            return
+        this.groundLoading = true
+        const settings = Settings.getInstance()
+        const textureSize = ['high', 'ultra'].includes(settings.get('quality')) ? 2048 : 1024     // the quality it's first loaded at
         const renderer = this.view.renderer.instance
         const compress = settings.get('textureCompression') && renderer.extensions.has('WEBGL_compressed_texture_s3tc')
         const started = performance.now()
@@ -79,19 +106,7 @@ export default class Terrains {
                 uniforms.uGroundReady.value = 1
             })
             .catch((error) => console.warn('[terrain] ground textures unavailable', error))
-        this.material.uniforms.uGrassDistance.value = this.state.chunks.minSize
-        this.material.uniforms.uTextureSize.value = this.state.terrains.segments
-        this.material.uniforms.uWaterLevel.value = WATER_LEVEL
-        // cloud shadows: the sky's cloud layer
-        // the atmosphere's light and the cloud shadows
-        for (const name of [...LIGHT_UNIFORMS, ...CLOUD_UNIFORMS])
-            this.material.uniforms[name] = this.sky.uniforms[name]
-        for (const name of SHADOW_UNIFORMS)
-            this.material.uniforms[name] = this.view.shadows.uniforms[name]
-        // aerial haze colours from the per-frame sky texture
-        this.material.uniforms.uSkyLut.value = this.view.skyLut.texture
     }
-
 
     update() {
         const playerState = this.state.player
@@ -113,8 +128,5 @@ export default class Terrains {
     setGrass(dryness: number, radius: number) {
         this.material.uniforms.uGrassDryness.value = dryness
         this.material.uniforms.uGrassDistance.value = Math.max(radius * 2, 1e-3)
-    }
-
-    resize() {
     }
 }

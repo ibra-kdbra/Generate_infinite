@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 
+import { GRIP_CENTRE } from './HandGrip'
+
 /** A hand's target in the character's own space (x left, y up, z forward, from the feet). */
 export type HandTarget = { position: THREE.Vector3 | null, quaternion: THREE.Quaternion | null, pole?: THREE.Vector3, weight?: number }   // pole: where the elbow points (character space); weight: this hand's share of the tool pose's
 
@@ -33,6 +35,7 @@ export type PoseInput = {
     mantle: number           // 0 .. 1 pulling up over an edge (0 when not)
     dt: number               // seconds since the last pose
     stride?: number          // radians: the hips turned toward a side-step, the chest kept ahead
+    steady?: number          // 0 .. 1: the shoulders held square to the way the body faces (aiming), the gait's swing taken out
     leanPitch?: number       // radians: the whole body leaning forward (+) from the ankles
     leanBank?: number        // radians: leaning into a turn (+ toward the right)
     look?: THREE.Vector3 | null      // world: where the eyes go (a tool in hand: where the camera looks); else ahead
@@ -43,15 +46,15 @@ const BONES = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 
     'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r']
 
 // where a tool's grip sits in the hand (hand bone space: y toward the fingers, z the thumb
-// side, the palm facing -x on the right hand, +x on the left)
-export const GRIP_RIGHT = new THREE.Vector3(- 0.012, 0.082, 0.018)
-export const GRIP_LEFT = new THREE.Vector3(0.012, 0.082, 0.018)
+// side, the palm facing -x on the right hand, +x on the left): through the closed fist (HandGrip)
+export const GRIP_RIGHT = GRIP_CENTRE.r
+export const GRIP_LEFT = GRIP_CENTRE.l
 
 const up = new THREE.Vector3(0, 1, 0)
 
 // hand space from a held tool's space: the handle through the fist toward the thumb (hand
 // +z), the edge in line with the knuckles (hand +y); the same both ways (Tools.ts too)
-export const HAND_IN_TOOL = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+const HAND_IN_TOOL = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
     new THREE.Vector3(- 1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)))
 
 /**
@@ -365,6 +368,20 @@ export default class CharacterPose {
             const stride = input.stride ?? 0
             if (bones.spine_01) this.rotateWorld(bones.spine_01, new THREE.Quaternion().setFromAxisAngle(bodyUp, - stride * 0.6))
             if (bones.spine_02) this.rotateWorld(bones.spine_02, new THREE.Quaternion().setFromAxisAngle(bodyUp, - stride * 0.4))
+        }
+
+        // aiming: the walk swings the shoulders about the spine with each step; take that out
+        // (the archer's turn side-on comes after, from the tool) so the aim doesn't sway
+        const steady = input.steady ?? 0
+        if (steady > 1e-3 && bones.upperarm_l && bones.upperarm_r && bones.spine_02 && bones.spine_03) {
+            const across = bones.upperarm_l.getWorldPosition(this.v[0]).sub(bones.upperarm_r.getWorldPosition(this.v[1]))
+            across.addScaledVector(bodyUp, - across.dot(bodyUp))
+            const swing = Math.atan2(across.dot(forward), across.dot(left))      // + the left shoulder ahead
+            if (Math.abs(swing) > 1e-3) {
+                const turn = swing * steady          // about the up axis, + takes the left shoulder back
+                this.rotateWorld(bones.spine_02, new THREE.Quaternion().setFromAxisAngle(bodyUp, turn * 0.5))
+                this.rotateWorld(bones.spine_03, new THREE.Quaternion().setFromAxisAngle(bodyUp, turn * 0.5))
+            }
         }
 
         // where the clip put the feet, before the body lowers

@@ -1,0 +1,18 @@
+{
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "Content-Security-Policy",
+                    "value": "default-src 'self'; script-src 'self' https://vercel.live; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://vercel.live; img-src 'self' data: blob: https://vercel.live https://vercel.com; font-src 'self' data: https://vercel.live https://assets.vercel.com; connect-src 'self' data: blob: https://vercel.live wss://ws-us3.pusher.com; frame-src https://vercel.live; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+                },
+                { "key": "X-Content-Type-Options", "value": "nosniff" },
+                { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+                { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()" },
+                { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+                { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" }
+            ]
+        }
+    ]
+}

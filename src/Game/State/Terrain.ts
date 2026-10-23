@@ -10,6 +10,7 @@ export default class Terrain {
     precision: number
     halfSize: number
     ready: boolean
+    visible = false              // drawn (State/Chunks: not while a coarser one covers the land)
     renderInstance: any
     events: EventEmitter
     positions!: Float32Array
@@ -47,11 +48,16 @@ export default class Terrain {
         this.events.emit('ready')
     }
 
-    getElevationForPosition(x: number, z: number) {
-        if (!this.ready) {
-            // console.warn('terrain not ready')
+    setVisible(visible: boolean) {
+        if (visible === this.visible)
             return
-        }
+        this.visible = visible
+        this.events.emit('visibility', visible)
+    }
+
+    getElevationForPosition(x: number, z: number) {
+        if (!this.ready)
+            return
 
         // this chunk's own resolution (it may predate a quality change): its data texture is
         // segments x segments x 4

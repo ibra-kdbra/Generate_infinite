@@ -10,6 +10,7 @@ import { WATER_LEVEL } from '../Workers/TerrainShape'
 import { SHADOW_UNIFORMS } from './Shadows'
 import sunShadowShader from './Materials/shaders/partials/getSunShadow.glsl'
 import CharacterPose from './CharacterPose'
+import HandGrip from './HandGrip'
 
 // the packs' hair is a neutral grey meant to be tinted: each character's colour
 const HAIR_COLORS: Record<CharacterName, string> = {
@@ -23,7 +24,7 @@ const ZERO = new THREE.Vector3()
 
 const LOCOMOTION = ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop'] as const
 // performed on top of the gait (Tools): holding and using a tool, from the animation libraries
-export const PERFORMANCES = ['Sword_Idle', 'Sword_Attack', 'Idle_Torch_Loop', 'Sword_Regular_A', 'Sword_Regular_A_Rec', 'Sword_Regular_B',
+const PERFORMANCES = ['Sword_Idle', 'Sword_Attack', 'Idle_Torch_Loop', 'Sword_Regular_A', 'Sword_Regular_A_Rec', 'Sword_Regular_B',
     'Sword_Regular_B_Rec', 'Sword_Regular_C', 'Sword_Regular_Combo', 'Sword_Heavy_Combo', 'Sword_Dash', 'Sword_Block', 'TreeChopping_Loop',
     'Farm_Harvest', 'Farm_PlantSeed', 'Farm_Watering', 'Idle_Lantern_Loop', 'ClimbUp_1m'] as const
 export type PerformanceName = typeof PERFORMANCES[number]
@@ -83,6 +84,8 @@ export default class Player {
     private slideAmount = 0
     private strideDirection = 1                 // 1 walking forward, -1 backing away
     private strideYaw = 0                       // radians: the hips turned toward a side-step
+    private grip: HandGrip | null = null
+    private steadyAmount = 0                    // 0 .. 1: the shoulders held square while aiming
     private leanPitch = 0                       // radians forward into the acceleration
     private leanBank = 0                        // radians into a turn
     private lookDirection = new THREE.Vector3()
@@ -120,9 +123,10 @@ export default class Player {
         // the Ranger's hood: G, or the menu
         this.settings.events.on('change:hood', () => this.applyHood())
         const controls = this.state.controls
+        // (raised or lowered with the hands: Tools.requestHood)
         controls.events.on('hoodDown', () => {
             if (!controls.keys.down.hood && this.settings.get('character').includes('ranger'))      // not on key repeat
-                this.settings.set('hood', !this.settings.get('hood'))
+                this.view.tools?.requestHood(!this.settings.get('hood'))
         })
     }
 
@@ -157,8 +161,6 @@ export default class Player {
         if (id !== this.loadId)
             return      // another character was picked meanwhile
 
-        this.disposeModel()
-
         const model = gltf.scene
         model.traverse((child) => {
             const mesh = child as THREE.Mesh
@@ -172,9 +174,17 @@ export default class Player {
             material.onBeforeCompile = (shader) => this.addUnderwaterTint(shader)
             this.view.shadows.addCaster(mesh, this.depthMaterial)
         })
+        // its shaders compiled before it's shown: the old character stays until then, instead of
+        // the game stalling on the new one's first frame
+        await this.view.renderer.precompile(model).catch(() => {})
+        if (id !== this.loadId)
+            return
+
+        this.disposeModel()
         this.group.add(model)
         this.model = model
         this.pose = new CharacterPose(model)
+        this.grip = new HandGrip(model)          // measured on the bind pose, before any clip plays
         this.pose.onPlant = (limb, at, gear) => this.view.tools?.climbPlant(limb, at, gear)
         this.boneCache.clear()
         // each bone's turn in the bind pose, relative to the body: gear hung on a bone is placed
@@ -544,6 +554,7 @@ export default class Player {
         if (direction !== this.strideDirection && speed > 0.4)
             this.strideDirection = direction
         this.strideYaw += (yaw - this.strideYaw) * (1 - Math.exp(- dt * 9))
+        this.steadyAmount += ((player.stance ? 1 : 0) - this.steadyAmount) * (1 - Math.exp(- dt * 8))
     }
 
     private updateAnimation(dt: number) {
@@ -676,12 +687,19 @@ export default class Player {
             mantle,
             dt,
             stride: - this.strideYaw * this.footIK,
+            steady: this.steadyAmount * this.footIK,
             leanPitch: this.leanPitch,
             leanBank: this.leanBank,
             // a tool in hand: the eyes on where the camera looks; otherwise ahead, kept level
             look: player.stance || this.view.tools?.aiming ? this.gaze() : null,
             tool: this.view.tools?.pose
         })
+        // the hands closed on what they hold
+        const fist = this.view.tools?.fist
+        if (fist && this.grip) {
+            this.grip.apply('r', fist.r)
+            this.grip.apply('l', fist.l)
+        }
     }
 
     update() {

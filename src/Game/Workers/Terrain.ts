@@ -19,14 +19,12 @@ onmessage = function (event) {
     const iterations = event.data.iterations
     const iterationsOffsets = event.data.iterationsOffsets
     const shape = event.data.shape || defaultTerrainShape
+    const skirt = event.data.skirt ?? 15        // how far the edges hang down (State/Terrains.ts)
 
     const segments = subdivisions + 1
     
-    // Alea-like seed based random for Simplex
-    // Since we don't have Alea here, we can use a simple hash or just use seedrandom if it was available.
-    // But SimplexNoise uses buildPermutationTable(random).
-    // The previous version used 'alea(seed)'.
-    // I will use a simple pseudo-random generator based on the seed string.
+    // a small seeded generator (a string hash, then a 32-bit mix) for the noises' permutation
+    // tables: the same seed always builds the same world
     const createRandom = (seed: string) => {
         let h = 0;
         for (let i = 0; i < seed.length; i++) h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
@@ -178,7 +176,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal
@@ -220,7 +218,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal
@@ -262,7 +260,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal
@@ -303,7 +301,7 @@ onmessage = function (event) {
 
         // Position
         positions[skirtIndex * 3] = positions[iPositionStride + 0]
-        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - 15
+        positions[skirtIndex * 3 + 1] = positions[iPositionStride + 1] - skirt
         positions[skirtIndex * 3 + 2] = positions[iPositionStride + 2]
 
         // Normal

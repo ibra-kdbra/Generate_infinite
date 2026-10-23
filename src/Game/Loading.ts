@@ -1,4 +1,3 @@
-import * as THREE from 'three'
 
 import Game from './Game'
 
@@ -46,7 +45,8 @@ export default class Loading {
         const p = state.player.position.current
         const chunk = state.chunks.getDeepestChunkForPosition(p[0], p[2])
         const underfoot = !!(chunk && chunk.terrain && chunk.terrain.ready)
-        const textures = view.terrains.material.uniforms.uGroundReady.value === 1
+        // (on the lowest quality there's none to wait for)
+        const textures = view.terrains.material.uniforms.uGroundReady.value === 1 || !view.terrains.groundLoading
         const character = view.player.model !== null
         const trees = view.trees.ready
         const parts = [land >= 0.97 && underfoot, textures, character, trees]
@@ -75,9 +75,7 @@ export default class Loading {
                 }
                 this.phase = 'shaders'
                 this.status.textContent = 'Preparing the light…'
-                const renderer = view.renderer.instance as THREE.WebGLRenderer & { compileAsync?: (scene: THREE.Object3D, camera: THREE.Camera) => Promise<unknown> }
-                const compile = renderer.compileAsync ? renderer.compileAsync(view.scene, view.camera.instance) : Promise.resolve()
-                compile.catch(() => {}).finally(() => { this.phase = 'settle' })
+                view.renderer.precompile(view.scene).catch(() => {}).finally(() => { this.phase = 'settle' })
             }
         }
         else if (this.phase === 'settle') {

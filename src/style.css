@@ -672,6 +672,258 @@ body
     text-underline-offset: 3px;
 }
 
+.ui .readout-faint
+{
+    color: var(--text-faint);
+}
+
+/* ── Changelog page (Changelog.ts) ── */
+
+.ui .changelog
+{
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    background: #0f1310;
+    color: var(--text);
+    pointer-events: auto;
+    user-select: text;
+}
+
+.ui .changelog[hidden]
+{
+    display: none;
+}
+
+.ui .changelog-bar
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex: none;
+    height: 56px;
+    padding: 0 var(--gutter);
+    border-bottom: 1px solid var(--line);
+}
+
+.ui .changelog-back
+{
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 12px 7px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-small);
+    background: var(--surface-raised);
+    color: var(--text);
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.ui .changelog-back:hover
+{
+    background: var(--surface-hover);
+}
+
+.ui .changelog-back svg
+{
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.ui .changelog-build
+{
+    color: var(--text-faint);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ui .changelog-scroll
+{
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.ui .changelog-page
+{
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 44px 24px 96px;
+}
+
+.ui .changelog-head
+{
+    padding-bottom: 28px;
+}
+
+.ui .changelog-head h1
+{
+    margin: 0;
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: -0.005em;
+}
+
+.ui .changelog-intro
+{
+    margin: 8px 0 0;
+    color: var(--text-soft);
+    font-size: 14px;
+}
+
+.ui .release
+{
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 24px;
+    padding: 28px 0;
+    border-top: 1px solid var(--line);
+}
+
+.ui .release-meta
+{
+    position: sticky;
+    top: 24px;
+    align-self: start;
+}
+
+.ui .release-meta h2
+{
+    margin: 0;
+    font-size: 16px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.ui .release.is-pending .release-meta h2
+{
+    color: var(--accent);
+}
+
+.ui .release-meta time
+{
+    display: block;
+    margin-top: 4px;
+    color: var(--text-faint);
+    font-size: 12.5px;
+}
+
+.ui .release-summary
+{
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.55;
+}
+
+.ui .release-summary.is-quiet
+{
+    color: var(--text-soft);
+    font-size: 13px;
+}
+
+.ui .release-body h3
+{
+    margin: 20px 0 6px;
+    color: var(--text-soft);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.ui .release-body > h3:first-child
+{
+    margin-top: 2px;
+}
+
+.ui .release-body ul
+{
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ui .release-body li
+{
+    position: relative;
+    padding: 3px 0 3px 16px;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.ui .release-body li::before
+{
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: calc(3px + 0.72em);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-faint);
+}
+
+.ui .release-body code,
+.ui .release-hash
+{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+}
+
+.ui .release-body code
+{
+    white-space: nowrap;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--surface-raised);
+}
+
+.ui .release-hash
+{
+    margin-left: 4px;
+    color: var(--text-faint);
+    font-size: 11.5px;
+}
+
+@media (max-width: 640px)
+{
+    .ui .changelog-page
+    {
+        padding: 28px var(--gutter) 72px;
+    }
+
+    .ui .release
+    {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 22px 0;
+    }
+
+    .ui .release-meta
+    {
+        position: static;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+    }
+
+    .ui .release-meta time
+    {
+        margin: 0;
+    }
+}
+
 /* ── Hotbar (Tools.ts) ── */
 
 .ui .hotbar

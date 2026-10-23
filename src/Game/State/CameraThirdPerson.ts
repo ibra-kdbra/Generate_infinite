@@ -37,6 +37,10 @@ export default class CameraThirdPerson {
     aim = 0                       // 0 .. 1 over the shoulder (the bow sets it while drawing)
 
     private aimAmount = 0
+    // the mouse's turn not yet applied: each movement is spread over about 20 ms, so uneven
+    // frames don't show as jerks in the view
+    private pendingTheta = 0
+    private pendingPhi = 0
     private trauma = 0
 
     private anchor = vec3.create()
@@ -97,11 +101,18 @@ export default class CameraThirdPerson {
 
         // ── orbit input ──
         if (this.controls.pointer.down || this.viewport.pointerLock.active) {
-            const normalisedPointer = this.viewport.normalise(this.controls.pointer.delta)
-            this.phi -= normalisedPointer.y * 2
-            this.theta -= normalisedPointer.x * 2
-            this.phi = Math.min(this.phiLimits.max + this.aimAmount * Math.PI * 0.12, Math.max(this.phiLimits.min, this.phi))
+            // finer while aiming the bow (the view narrowed over the shoulder)
+            const look = this.viewport.look(this.controls.pointer.delta)
+            const fine = 1 - 0.4 * this.aimAmount
+            this.pendingPhi -= look.y * fine
+            this.pendingTheta -= look.x * fine
         }
+        const share = 1 - Math.exp(- dt * 50)
+        this.theta += this.pendingTheta * share
+        this.phi += this.pendingPhi * share
+        this.pendingTheta *= 1 - share
+        this.pendingPhi *= 1 - share
+        this.phi = Math.min(this.phiLimits.max + this.aimAmount * Math.PI * 0.12, Math.max(this.phiLimits.min, this.phi))
         this.aimAmount += (this.aim - this.aimAmount) * (1 - Math.exp(- dt * 9))
         const aim = this.aimAmount * this.aimAmount * (3 - 2 * this.aimAmount)
 

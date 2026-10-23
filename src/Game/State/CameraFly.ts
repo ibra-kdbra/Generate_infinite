@@ -139,9 +139,9 @@ export default class CameraFly {
 
         // Rotation X and Y
         if (this.controls.pointer.down || this.viewport.pointerLock.active) {
-            const normalisedPointer = this.viewport.normalise(this.controls.pointer.delta)
-            this.rotateX -= normalisedPointer.y * 2
-            this.rotateY -= normalisedPointer.x * 2
+            const look = this.viewport.look(this.controls.pointer.delta)
+            this.rotateX -= look.y
+            this.rotateY -= look.x
             this.rotateX = Math.min(this.rotateXLimits.max, Math.max(this.rotateXLimits.min, this.rotateX))
         }
 

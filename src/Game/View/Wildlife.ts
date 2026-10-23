@@ -28,6 +28,8 @@ type Animal = {
     health: number
     fade: number
     tilt: THREE.Quaternion
+    pending: number                  // seconds of animation not yet played (far deer update less often)
+    frame: number                    // its own count, staggering when it updates
 }
 type Herd = { center: THREE.Vector3, animals: Animal[], fleeing: number }
 
@@ -56,6 +58,9 @@ export default class Wildlife {
     private sources: Partial<Record<Kind, { scene: THREE.Object3D, clips: THREE.AnimationClip[] }>> = {}
     private spawnTimer = 1
     private depthMaterial = new THREE.MeshDepthMaterial()
+    // deer let go, kept to be used again: making one (its model, skeleton and every clip's
+    // action) took up to 50 ms, a hitch each time a herd appeared
+    private pool: Record<Kind, Animal[]> = { deer: [], stag: [] }
 
     constructor() {
         this.view = View.getInstance()
@@ -161,6 +166,22 @@ export default class Wildlife {
     }
 
     private create(kind: Kind, herd: Herd, position: THREE.Vector3): Animal {
+        const reused = this.pool[kind].pop()
+        if (reused) {
+            position.y = this.ground(position.x, position.z)
+            Object.assign(reused, {
+                herd, current: '', mood: 'graze', timer: Math.random() * 6, position, heading: Math.random() * Math.PI * 2,
+                speed: 0, target: position.clone(), health: 2, fade: 0, pending: 0
+            })
+            reused.tilt.identity()
+            reused.model.scale.setScalar(SCALE[kind] * (0.9 + Math.random() * 0.2))
+            reused.root.position.copy(position)
+            this.view.scene.add(reused.root)
+            herd.animals.push(reused)
+            this.play(reused, 'Eating', 0)
+            reused.mixer.setTime(Math.random() * 3)
+            return reused
+        }
         const source = this.sources[kind]!
         const model = SkeletonUtils.clone(source.scene)
         model.scale.setScalar(SCALE[kind] * (0.9 + Math.random() * 0.2))
@@ -188,7 +209,7 @@ export default class Wildlife {
         const animal: Animal = {
             kind, herd, root, model, mixer, actions, current: '', mood: 'graze', timer: Math.random() * 6,
             position, heading: Math.random() * Math.PI * 2, speed: 0, target: position.clone(), health: 2, fade: 0,
-            tilt: new THREE.Quaternion()
+            tilt: new THREE.Quaternion(), pending: 0, frame: Math.floor(Math.random() * 4)
         }
         herd.animals.push(animal)
         this.play(animal, 'Eating', 0)
@@ -199,6 +220,7 @@ export default class Wildlife {
     private remove(animal: Animal) {
         this.view.scene.remove(animal.root)
         animal.mixer.stopAllAction()
+        this.pool[animal.kind].push(animal)
         this.animals.splice(this.animals.indexOf(animal), 1)
         animal.herd.animals.splice(animal.herd.animals.indexOf(animal), 1)
         if (animal.herd.animals.length === 0)
@@ -454,10 +476,19 @@ export default class Wildlife {
             animal.root.position.copy(animal.position)
         animal.root.quaternion.copy(animal.tilt).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), animal.heading))
 
-        // animate only near the player (far ones hold still: a dot at that distance)
+        // animate only near the player (far ones hold still: a dot at that distance), and the
+        // farther ones less often (every 2nd frame past 40 m, every 4th past 90), each catching
+        // up on the time it skipped
         animal.root.visible = distance < 260
-        if (distance < 160)
-            animal.mixer.update(dt)
+        if (distance < 160) {
+            animal.pending += dt
+            animal.frame++
+            const every = distance < 40 ? 1 : distance < 90 ? 2 : 4
+            if (animal.frame % every === 0) {
+                animal.mixer.update(animal.pending)
+                animal.pending = 0
+            }
+        }
     }
 
     /** What a calm deer does next: graze, look about, or walk a little after the herd. */

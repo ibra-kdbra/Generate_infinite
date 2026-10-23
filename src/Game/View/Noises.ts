@@ -14,10 +14,6 @@ export default class Noises {
     }
     material!: NoisesMaterial
     plane!: THREE.Mesh
-    helper!: {
-        geometry: THREE.PlaneGeometry
-        material: THREE.MeshBasicMaterial
-    }
 
     constructor() {
         this.view = View.getInstance()
@@ -27,9 +23,6 @@ export default class Noises {
         this.setCustomRender()
         this.setMaterial()
         this.setPlane()
-        // this.setHelper()
-
-        // const texture = this.createNoise(128, 128)
     }
 
     setCustomRender() {
@@ -50,52 +43,6 @@ export default class Noises {
         )
         this.plane.frustumCulled = false
         this.customRender.scene.add(this.plane)
-    }
-
-    setHelper() {
-        this.helper = {
-            geometry: new THREE.PlaneGeometry(1, 1),
-            material: new THREE.MeshBasicMaterial()
-        }
-
-        const meshA = new THREE.Mesh(
-            this.helper.geometry,
-            this.helper.material
-        )
-        meshA.position.y = 5 + 1
-        meshA.position.x = - 1
-        meshA.scale.set(2, 2, 2)
-
-        const meshB = new THREE.Mesh(
-            this.helper.geometry,
-            this.helper.material
-        )
-        meshB.position.y = 5 + 1
-        meshB.position.x = 1
-        meshB.scale.set(2, 2, 2)
-
-        const meshC = new THREE.Mesh(
-            this.helper.geometry,
-            this.helper.material
-        )
-        meshC.position.y = 5 - 1
-        meshC.position.x = - 1
-        meshC.scale.set(2, 2, 2)
-
-        const meshD = new THREE.Mesh(
-            this.helper.geometry,
-            this.helper.material
-        )
-        meshD.position.y = 5 - 1
-        meshD.position.x = 1
-        meshD.scale.set(2, 2, 2)
-
-        window.requestAnimationFrame(() => {
-            this.scene.add(meshA)
-            // this.scene.add(meshB)
-            // this.scene.add(meshC)
-            // this.scene.add(meshD)
-        })
     }
 
     private sharedTexture: THREE.Texture | null = null
@@ -134,13 +81,6 @@ export default class Noises {
         this.renderer.instance.render(this.customRender.scene, this.customRender.camera)
         this.renderer.instance.setRenderTarget(null)
 
-        const texture = renderTarget.texture
-        // texture.wrapS = THREE.RepeatWrapping
-        // texture.wrapT = THREE.RepeatWrapping
-
-        if (this.helper)
-            this.helper.material.map = texture
-
-        return texture
+        return renderTarget.texture
     }
 }
